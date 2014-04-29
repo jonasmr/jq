@@ -278,6 +278,18 @@ void HandleEvent(SDL_Event* pEvt)
 
 }
 
+
+#define JQ_IMPL
+#include "../jq.h"
+void JqTest()
+{
+	JqStart();
+
+	JqStop();
+}
+
+
+
 void MicroProfileQueryInitGL();
 void MicroProfileDrawInit();
 void MicroProfileBeginDraw(uint32_t nWidth, uint32_t nHeight, float* prj);
@@ -294,6 +306,7 @@ int main(int argc, char* argv[])
 	}
 
 
+	JqTest();
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    	    8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,  	    8);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,   	    8);
