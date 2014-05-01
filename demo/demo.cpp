@@ -25,6 +25,7 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <future>
 
 
 #include "microprofile.h"
@@ -281,11 +282,26 @@ void HandleEvent(SDL_Event* pEvt)
 
 #define JQ_IMPL
 #include "../jq.h"
+
+void Worker(void* pFoo, int nIndex)
+{
+	sleep(rand()%3);
+	printf("worker %p, index %d\n", pFoo, nIndex);
+}
 void JqTest()
 {
-	JqStart();
+	JqStart(4);
+	//sleep(2);
+	JqAdd( [](void* arg, int idx)
+	{
+		printf("job %d\n", idx);
+		usleep(100);
+		//printf("sleepdone %d\n", idx);
+	}, nullptr, 0, 10);
+	usleep(1000);
 
 	JqStop();
+	//__builtin_trap();
 }
 
 
@@ -307,6 +323,8 @@ int main(int argc, char* argv[])
 
 
 	JqTest();
+		JqStart(4);
+
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    	    8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,  	    8);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,   	    8);
@@ -341,7 +359,7 @@ int main(int argc, char* argv[])
 	MicroProfileDrawInit();
 	MP_ASSERT(glGetError() == 0);
 #endif
-#define FAKE_WORK 1
+#define FAKE_WORK 0
 #if FAKE_WORK
 	std::thread t0(WorkerThread, 0);
 	std::thread t1(WorkerThread, 1);
@@ -419,7 +437,55 @@ int main(int argc, char* argv[])
 
 		MICROPROFILE_SCOPEI("MAIN", "Flip", 0xffee00);
 		SDL_GL_SwapWindow(pWindow);
+
+		{
+			MICROPROFILE_SCOPEI("JQ", "JQ_TEST", 0xff00ff);
+			uint64_t nJob = JqAdd( [](void* arg, int idx)
+			{
+				MICROPROFILE_SCOPEI("JQ", "JobLow", 0x0000ff);
+				//printf("job %d\n", idx);
+				usleep(200);
+				//printf("sleepdone %d\n", idx);
+			}, nullptr, 7, 100);
+			{
+				MICROPROFILE_SCOPEI("JQ", "Sleep add1", 0x33ff33);
+				usleep(500);
+			}
+			uint64_t nJobMedium = JqAdd( [](void* arg, int idx)
+			{
+				MICROPROFILE_SCOPEI("JQ", "JobMedium", 0xff5555);
+				//printf("job %d\n", idx);
+				usleep(2000);
+				//printf("sleepdone %d\n", idx);
+			}, nullptr, 3, 10);
+
+			{
+				MICROPROFILE_SCOPEI("JQ", "Sleep add1", 0x33ff33);
+				usleep(500);
+			}
+
+			uint64_t nJobHigh = JqAdd( [](void* arg, int idx)
+			{
+				MICROPROFILE_SCOPEI("JQ", "JobHigh", 0x5555ff);
+				//printf("job %d\n", idx);
+				usleep(200);
+				//printf("sleepdone %d\n", idx);
+			}, nullptr, 0, 100);
+
+
+			uint32_t nValue = 0;
+			auto lala = std::async(std::launch::async, [&]
+			{
+				usleep(200);
+				printf("the value is %d\n", nValue);
+			});
+			nValue = 42;
+			MICROPROFILE_SCOPEI("JQ", "JqWait", 0xff0000);
+			JqWait(nJob);
+		}
+
 	}
+	JqStop();
 
 	#if FAKE_WORK
 	t0.join();
