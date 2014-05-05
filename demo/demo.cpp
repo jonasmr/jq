@@ -77,142 +77,19 @@ uint32_t g_MouseDown1 = 0;
 int g_MouseDelta = 0;
 
 
-MICROPROFILE_DECLARE(ThreadSafeMain);
-MICROPROFILE_DECLARE(ThreadSafeInner0);
-MICROPROFILE_DECLARE(ThreadSafeInner1);
-MICROPROFILE_DECLARE(ThreadSafeInner2);
-MICROPROFILE_DECLARE(ThreadSafeInner3);
-MICROPROFILE_DECLARE(ThreadSafeInner4);
-MICROPROFILE_DEFINE(ThreadSafeInner4,"ThreadSafe", "Inner4", 0xff00ff00);
-MICROPROFILE_DEFINE(ThreadSafeInner3,"ThreadSafe", "Inner3", 0xff773744);
-MICROPROFILE_DEFINE(ThreadSafeInner2,"ThreadSafe", "Inner2", 0xff990055);
-MICROPROFILE_DEFINE(ThreadSafeInner1,"ThreadSafe", "Inner1", 0xffaa00aa);
-MICROPROFILE_DEFINE(ThreadSafeInner0,"ThreadSafe", "Inner0", 0xff00bbee);
-MICROPROFILE_DEFINE(ThreadSafeMain,"ThreadSafe", "Main", 0xffdd3355);
+// MICROPROFILE_DECLARE(ThreadSafeMain);
+// MICROPROFILE_DECLARE(ThreadSafeInner0);
+// MICROPROFILE_DECLARE(ThreadSafeInner1);
+// MICROPROFILE_DECLARE(ThreadSafeInner2);
+// MICROPROFILE_DECLARE(ThreadSafeInner3);
+// MICROPROFILE_DECLARE(ThreadSafeInner4);
+// MICROPROFILE_DEFINE(ThreadSafeInner4,"ThreadSafe", "Inner4", 0xff00ff00);
+// MICROPROFILE_DEFINE(ThreadSafeInner3,"ThreadSafe", "Inner3", 0xff773744);
+// MICROPROFILE_DEFINE(ThreadSafeInner2,"ThreadSafe", "Inner2", 0xff990055);
+// MICROPROFILE_DEFINE(ThreadSafeInner1,"ThreadSafe", "Inner1", 0xffaa00aa);
+// MICROPROFILE_DEFINE(ThreadSafeInner0,"ThreadSafe", "Inner0", 0xff00bbee);
+// MICROPROFILE_DEFINE(ThreadSafeMain,"ThreadSafe", "Main", 0xffdd3355);
 MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
-
-void WorkerThread(int threadId)
-{
-	char name[100];
-	snprintf(name, 99, "Worker%d", threadId);
-	MicroProfileOnThreadCreate(&name[0]);
-	uint32_t c0 = 0xff3399ff;
-	uint32_t c1 = 0xffff99ff;
-	uint32_t c2 = 0xff33ff00;
-	uint32_t c3 = 0xff3399ff;
-	uint32_t c4 = 0xff33ff33;
-
-	while(!g_nQuit)
-	{
-		switch(threadId)
-		{
-		case 0:
-		{
-			usleep(100);
-			{
-				MICROPROFILE_SCOPEI("Thread0", "Work Thread0", c4); 
-				MICROPROFILE_META_CPU("Sleep",1);
-				usleep(200);
-				{
-					MICROPROFILE_SCOPEI("Thread0", "Work Thread1", c3); 
-					usleep(200);
-					{
-						MICROPROFILE_SCOPEI("Thread0", "Work Thread2", c2); 
-						MICROPROFILE_META_CPU("DrawCalls", 1);
-						usleep(200);
-						{
-							MICROPROFILE_SCOPEI("Thread0", "Work Thread3", c1); 
-							MICROPROFILE_META_CPU("DrawCalls", 4);
-							MICROPROFILE_META_CPU("Triangles",1000);
-							usleep(200);
-						}
-					}
-				}
-			}
-		}
-		break;
-		
-		case 1:
-			{
-				usleep(100);
-				MICROPROFILE_SCOPEI("Thread1", "Work Thread 1", c1);
-				usleep(2000);
-			}
-			break;
-
-		case 2:
-			{
-				usleep(1000);
-				{
-					MICROPROFILE_SCOPEI("Thread2", "Worker2", c0); 
-					usleep(200);
-					{
-						MICROPROFILE_SCOPEI("Thread2", "InnerWork0", c1); 
-						usleep(100);
-						{
-							MICROPROFILE_SCOPEI("Thread2", "InnerWork1", c2); 
-							usleep(100);
-							{
-								MICROPROFILE_SCOPEI("Thread2", "InnerWork2", c3); 
-								usleep(100);
-								{
-									MICROPROFILE_SCOPEI("Thread2", "InnerWork3", c4); 
-									usleep(100);
-								}
-							}
-						}
-					}
-				}
-			}
-			break;
-		case 3:
-			{
-				MICROPROFILE_SCOPEI("ThreadWork", "MAIN", c0);
-				usleep(1000);;
-				for(uint32_t i = 0; i < 10; ++i)
-				{
-					MICROPROFILE_SCOPEI("ThreadWork", "Inner0", c1);
-					usleep(100);
-					for(uint32_t j = 0; j < 4; ++j)
-					{
-						MICROPROFILE_SCOPEI("ThreadWork", "Inner1", c4);
-						usleep(50);
-						MICROPROFILE_SCOPEI("ThreadWork", "Inner2", c2);
-						usleep(50);
-						MICROPROFILE_SCOPEI("ThreadWork", "Inner3", c3);
-						usleep(50);
-						MICROPROFILE_SCOPEI("ThreadWork", "Inner4", c3);
-						usleep(50);
-					}
-				}
-
-
-			}
-			break;
-		default:
-			
-			MICROPROFILE_SCOPE(ThreadSafeMain);
-			usleep(1000);;
-			for(uint32_t i = 0; i < 5; ++i)
-			{
-				MICROPROFILE_SCOPE(ThreadSafeInner0);
-				usleep(1000);
-				for(uint32_t j = 0; j < 4; ++j)
-				{
-					MICROPROFILE_SCOPE(ThreadSafeInner1);
-					usleep(500);
-					MICROPROFILE_SCOPE(ThreadSafeInner2);
-					usleep(150);
-					MICROPROFILE_SCOPE(ThreadSafeInner3);
-					usleep(150);
-					MICROPROFILE_SCOPE(ThreadSafeInner4);
-					usleep(150);
-				}
-			}
-			break;
-		}
-	}
-}
 
 
 void HandleEvent(SDL_Event* pEvt)
@@ -288,20 +165,68 @@ void Worker(void* pFoo, int nIndex)
 	sleep(rand()%3);
 	printf("worker %p, index %d\n", pFoo, nIndex);
 }
+void JobTree0(void* pArg, int nIndex)
+{
+	MICROPROFILE_SCOPEI("JQ", "JobTree0", 0x00ff00);
+	usleep(1000);
+	((int*)pArg)[nIndex] = 1;
+
+}
+
+void JobTree(void* pArg, int nIndex)
+{
+	MICROPROFILE_SCOPEI("JQ", "JobTree", 0xff5555);
+	usleep(1000);
+	int lala[3]={0,0,0};
+	uint64_t nJobTree0 = JqAdd(JobTree0, &lala[0], 0, 3);
+	//uint64_t nJobTree1 = JqAdd(JobTree0, nullptr, 0, 1);
+	MICROPROFILE_SCOPEI("JQ", "JobTreeWWAIT", 0xff5555);
+	JqWait(nJobTree0);
+	uprintf("result %d%d%d\n", lala[0], lala[1], lala[2]);
+	//JqWait(nJobTree1);
+
+}
+
 void JqTest()
 {
-	JqStart(4);
-	//sleep(2);
-	JqAdd( [](void* arg, int idx)
 	{
-		printf("job %d\n", idx);
-		usleep(100);
-		//printf("sleepdone %d\n", idx);
-	}, nullptr, 0, 10);
-	usleep(1000);
+		MICROPROFILE_SCOPEI("JQ", "JQ_TEST_WAIT_ALL", 0xff00ff);
+		JqWaitAll();
+	}
+	MICROPROFILE_SCOPEI("JQ", "JQ_TEST", 0xff00ff);
 
-	JqStop();
-	//__builtin_trap();
+	#if 0
+	uint64_t nJob = JqAdd( [](void* arg, int idx)
+	{
+		MICROPROFILE_SCOPEI("JQ", "JobLow", 0x0000ff);
+		usleep(200);
+	}, nullptr, 7, 200);
+	#endif
+	{
+		MICROPROFILE_SCOPEI("JQ", "Sleep add1", 0x33ff33);
+		usleep(500);
+	}
+
+	uint64_t nJobMedium = JqAdd(JobTree, nullptr, 3, 1);
+
+
+	{
+		MICROPROFILE_SCOPEI("JQ", "Sleep add1", 0x33ff33);
+		usleep(500);
+	}
+
+#if 0
+	uint64_t nJobHigh = JqAdd( [](void* arg, int idx)
+	{
+		MICROPROFILE_SCOPEI("JQ", "JobHigh", 0x5555ff);
+		//printf("job %d\n", idx);
+		usleep(200);
+		//printf("sleepdone %d\n", idx);
+	}, nullptr, 0, 100);
+	#endif
+
+	MICROPROFILE_SCOPEI("JQ", "JqWait", 0xff0000);
+	JqWait(nJobMedium);
 }
 
 
@@ -322,8 +247,8 @@ int main(int argc, char* argv[])
 	}
 
 
-	JqTest();
-		JqStart(4);
+	//JqTest();
+	JqStart(1);
 
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    	    8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,  	    8);
@@ -385,22 +310,6 @@ int main(int argc, char* argv[])
 		glViewport(0, 0, WIDTH, HEIGHT);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-#if 1||FAKE_WORK
-		{
-			MICROPROFILE_SCOPEI("Main", "Dummy", 0xff3399ff);
-			for(uint32_t i = 0; i < 14; ++i)
-			{
-				MICROPROFILE_SCOPEI("Main", "1ms", 0xff3399ff);
-				MICROPROFILE_META_CPU("Sleep",1);
-
-				usleep(1000);
-			}
-		}
-#endif
-
-
-
-
 		MicroProfileMouseButton(g_MouseDown0, g_MouseDown1);
 		MicroProfileMousePosition(g_MouseX, g_MouseY, g_MouseDelta);
 		g_MouseDelta = 0;
@@ -439,52 +348,11 @@ int main(int argc, char* argv[])
 		SDL_GL_SwapWindow(pWindow);
 
 		{
-			MICROPROFILE_SCOPEI("JQ", "JQ_TEST", 0xff00ff);
-			uint64_t nJob = JqAdd( [](void* arg, int idx)
-			{
-				MICROPROFILE_SCOPEI("JQ", "JobLow", 0x0000ff);
-				//printf("job %d\n", idx);
-				usleep(200);
-				//printf("sleepdone %d\n", idx);
-			}, nullptr, 7, 100);
-			{
-				MICROPROFILE_SCOPEI("JQ", "Sleep add1", 0x33ff33);
-				usleep(500);
-			}
-			uint64_t nJobMedium = JqAdd( [](void* arg, int idx)
-			{
-				MICROPROFILE_SCOPEI("JQ", "JobMedium", 0xff5555);
-				//printf("job %d\n", idx);
-				usleep(2000);
-				//printf("sleepdone %d\n", idx);
-			}, nullptr, 3, 10);
-
-			{
-				MICROPROFILE_SCOPEI("JQ", "Sleep add1", 0x33ff33);
-				usleep(500);
-			}
-
-			uint64_t nJobHigh = JqAdd( [](void* arg, int idx)
-			{
-				MICROPROFILE_SCOPEI("JQ", "JobHigh", 0x5555ff);
-				//printf("job %d\n", idx);
-				usleep(200);
-				//printf("sleepdone %d\n", idx);
-			}, nullptr, 0, 100);
-
-
-			uint32_t nValue = 0;
-			auto lala = std::async(std::launch::async, [&]
-			{
-				usleep(200);
-				printf("the value is %d\n", nValue);
-			});
-			nValue = 42;
-			MICROPROFILE_SCOPEI("JQ", "JqWait", 0xff0000);
-			JqWait(nJob);
+			JqTest();
 		}
 
 	}
+//	__builtin_trap();
 	JqStop();
 
 	#if FAKE_WORK
