@@ -69,6 +69,8 @@ void usleep(__int64 usec)
 #define WIDTH 1024
 #define HEIGHT 600
 
+
+uint32_t g_nNumWorkers = 0;
 uint32_t g_nQuit = 0;
 uint32_t g_MouseX = 0;
 uint32_t g_MouseY = 0;
@@ -76,19 +78,6 @@ uint32_t g_MouseDown0 = 0;
 uint32_t g_MouseDown1 = 0;
 int g_MouseDelta = 0;
 
-
-// MICROPROFILE_DECLARE(ThreadSafeMain);
-// MICROPROFILE_DECLARE(ThreadSafeInner0);
-// MICROPROFILE_DECLARE(ThreadSafeInner1);
-// MICROPROFILE_DECLARE(ThreadSafeInner2);
-// MICROPROFILE_DECLARE(ThreadSafeInner3);
-// MICROPROFILE_DECLARE(ThreadSafeInner4);
-// MICROPROFILE_DEFINE(ThreadSafeInner4,"ThreadSafe", "Inner4", 0xff00ff00);
-// MICROPROFILE_DEFINE(ThreadSafeInner3,"ThreadSafe", "Inner3", 0xff773744);
-// MICROPROFILE_DEFINE(ThreadSafeInner2,"ThreadSafe", "Inner2", 0xff990055);
-// MICROPROFILE_DEFINE(ThreadSafeInner1,"ThreadSafe", "Inner1", 0xffaa00aa);
-// MICROPROFILE_DEFINE(ThreadSafeInner0,"ThreadSafe", "Inner0", 0xff00bbee);
-// MICROPROFILE_DEFINE(ThreadSafeMain,"ThreadSafe", "Main", 0xffdd3355);
 MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 
 
@@ -104,6 +93,12 @@ void HandleEvent(SDL_Event* pEvt)
 		{
 			g_nQuit = 1;
 		}
+		if(pEvt->key.keysym.scancode == SDL_SCANCODE_SPACE)
+		{
+			g_nNumWorkers ++;
+		}
+
+
 		if(pEvt->key.keysym.sym == 'z')
 		{
 			MicroProfileToggleDisplayMode();
@@ -158,6 +153,7 @@ void HandleEvent(SDL_Event* pEvt)
 
 
 #define JQ_IMPL
+#define JQ_MICROPROFILE
 #include "../jq.h"
 
 void Worker(void* pFoo, int nIndex)
@@ -165,67 +161,82 @@ void Worker(void* pFoo, int nIndex)
 	sleep(rand()%3);
 	printf("worker %p, index %d\n", pFoo, nIndex);
 }
+
+void JobTree2(void* pArg, int nIndex)
+{
+	MICROPROFILE_SCOPEI("JQDEMO", "JobTree2", 0xff);
+	MICROPROFILE_SCOPEI("JQDEMO", "JobTree2INNER", 0xffffff);
+	usleep(5+ rand() % 100);
+}
+
+
+
+void JobTree1(void* pArg, int nIndex)
+{
+	MICROPROFILE_SCOPEI("JQDEMO", "JobTree1", 0xff0000);
+	JqAdd(JobTree2, nullptr, 2, 10);
+	usleep(50 + rand() % 100);
+}
+
 void JobTree0(void* pArg, int nIndex)
 {
-	MICROPROFILE_SCOPEI("JQ", "JobTree0", 0x00ff00);
-	usleep(1000);
+	MICROPROFILE_SCOPEI("JQDEMO", "JobTree0", 0x00ff00);
+	JqAdd(JobTree1, nullptr, 2, 5);
+	usleep(50 + rand() % 100);
 	((int*)pArg)[nIndex] = 1;
-
 }
 
 void JobTree(void* pArg, int nIndex)
 {
-	MICROPROFILE_SCOPEI("JQ", "JobTree", 0xff5555);
-	usleep(1000);
+	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
+	usleep(100);
 	int lala[3]={0,0,0};
-	uint64_t nJobTree0 = JqAdd(JobTree0, &lala[0], 0, 3);
-	//uint64_t nJobTree1 = JqAdd(JobTree0, nullptr, 0, 1);
-	MICROPROFILE_SCOPEI("JQ", "JobTreeWWAIT", 0xff5555);
+	uint64_t nJobTree0 = JqAdd(JobTree0, &lala[0], 2, 3);
+
+	MICROPROFILE_SCOPEI("JQDEMO", "JobTreeWWAIT", 0xff5555);
 	JqWait(nJobTree0);
-	uprintf("result %d%d%d\n", lala[0], lala[1], lala[2]);
-	//JqWait(nJobTree1);
 
 }
 
 void JqTest()
 {
 	{
-		MICROPROFILE_SCOPEI("JQ", "JQ_TEST_WAIT_ALL", 0xff00ff);
+		MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST_WAIT_ALL", 0xff00ff);
 		JqWaitAll();
 	}
-	MICROPROFILE_SCOPEI("JQ", "JQ_TEST", 0xff00ff);
+	MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST", 0xff00ff);
 
 	#if 0
 	uint64_t nJob = JqAdd( [](void* arg, int idx)
 	{
-		MICROPROFILE_SCOPEI("JQ", "JobLow", 0x0000ff);
+		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
 		usleep(200);
 	}, nullptr, 7, 200);
 	#endif
 	{
-		MICROPROFILE_SCOPEI("JQ", "Sleep add1", 0x33ff33);
+		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		usleep(500);
 	}
 
-	uint64_t nJobMedium = JqAdd(JobTree, nullptr, 3, 1);
+	uint64_t nJobMedium = JqAdd(JobTree, nullptr, 0, 2);
 
 
 	{
-		MICROPROFILE_SCOPEI("JQ", "Sleep add1", 0x33ff33);
+		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		usleep(500);
 	}
 
 #if 0
 	uint64_t nJobHigh = JqAdd( [](void* arg, int idx)
 	{
-		MICROPROFILE_SCOPEI("JQ", "JobHigh", 0x5555ff);
+		MICROPROFILE_SCOPEI("JQDEMO", "JobHigh", 0x5555ff);
 		//printf("job %d\n", idx);
 		usleep(200);
 		//printf("sleepdone %d\n", idx);
 	}, nullptr, 0, 100);
 	#endif
 
-	MICROPROFILE_SCOPEI("JQ", "JqWait", 0xff0000);
+	MICROPROFILE_SCOPEI("JQDEMO", "JqWait", 0xff0000);
 	JqWait(nJobMedium);
 }
 
@@ -248,7 +259,8 @@ int main(int argc, char* argv[])
 
 
 	//JqTest();
-	JqStart(1);
+	static uint32_t nNumWorkers = g_nNumWorkers;
+	JqStart(nNumWorkers);
 
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    	    8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,  	    8);
@@ -295,6 +307,7 @@ int main(int argc, char* argv[])
 	std::thread t44(WorkerThread, 44);
 	std::thread t45(WorkerThread, 45);
 #endif
+	std::mutex test;
 
 	while(!g_nQuit)
 	{
@@ -305,6 +318,14 @@ int main(int argc, char* argv[])
 		{
 			HandleEvent(&Evt);
 		}
+		if(g_nNumWorkers != nNumWorkers)
+		{
+			nNumWorkers = g_nNumWorkers;
+			printf("NumWorkers %d\n", nNumWorkers % 5);
+			JqStop();
+			JqStart(nNumWorkers % 5);
+		}
+
 
 		glClearColor(0.3f,0.4f,0.6f,0.f);
 		glViewport(0, 0, WIDTH, HEIGHT);
@@ -346,6 +367,16 @@ int main(int argc, char* argv[])
 
 		MICROPROFILE_SCOPEI("MAIN", "Flip", 0xffee00);
 		SDL_GL_SwapWindow(pWindow);
+
+		int lala = 0;
+		{MICROPROFILE_SCOPEI("MUTEX_TEST", "MUTEX", -1);
+		for(int i = 0; i < 10000; ++i)
+		{
+			test.lock();
+			lala += 1;
+			test.unlock();	
+		}
+		}
 
 		{
 			JqTest();

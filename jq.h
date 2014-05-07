@@ -76,6 +76,11 @@ typedef uint32_t ThreadIdType;
 #define JQ_NUM_JOBS (JQ_WORK_BUFFER_SIZE-1)
 
 
+#ifdef JQ_MICROPROFILE
+#define JQ_MICROPROFILE_SCOPE(a,c) MICROPROFILE_SCOPEI("JQ",a,c)
+#endif
+
+
 void JqStart(int nNumWorkers);
 void JqStop();
 void JqCheckFinished(uint64_t nWorkHandle);
@@ -95,7 +100,7 @@ void JqPriorityListRemove(uint32_t nIndex);
 JQ_THREAD_LOCAL uint64_t JqSelfStack[JQ_MAX_JOB_STACK] = {0};
 JQ_THREAD_LOCAL uint32_t JqSelfPos = 0;
 
-#if 0
+#if 1
 #define uprintf(...) do{}while(0)
 #else
 #define uprintf printf
@@ -155,6 +160,22 @@ struct JqState_t
 } JqState;
 
 
+template<typename T>
+struct JqMutexLock
+{
+	T& Mutex;
+	JqMutexLock(T& Mutex)
+	:Mutex(Mutex)
+	{
+		JQ_MICROPROFILE_SCOPE("MutexLock", 0x992233);
+		Mutex.lock();
+	}
+	~JqMutexLock()
+	{
+		JQ_MICROPROFILE_SCOPE("MutexUnlock", 0x992233);
+		Mutex.unlock();
+	}
+};
 
 
 void JqStart(int nNumWorkers)
@@ -179,7 +200,7 @@ void JqStop()
 	JqState.nStop = 1;
 	uprintf("notify exit\n");
 	{
-		std::lock_guard<std::mutex> lock(JqState.Mutex);
+		JqMutexLock<std::mutex> lock(JqState.Mutex);
 		JqState.CondReleaseCount += JqState.nNumWorkers;
 	}
 	JqState.Cond.notify_all();
@@ -225,7 +246,9 @@ uint32_t JqIncrementStarted(uint64_t nWorkHandle)
 }
 void JqIncrementFinished(uint64_t nWorkHandle)
 {
-	std::lock_guard<std::mutex> lock(JqState.Mutex);
+	JQ_MICROPROFILE_SCOPE("Finished Start", 0xffff);
+	JqMutexLock<std::mutex> lock(JqState.Mutex);
+	JQ_MICROPROFILE_SCOPE("Finished Tail", 0x703e);
 	uint32_t nWork = nWorkHandle % JQ_WORK_BUFFER_SIZE; 
 	JqState.Work[nWork].nNumFinished++;
 	JqCheckFinished(nWorkHandle);
@@ -301,6 +324,7 @@ uint64_t JqDetachChild(uint64_t nChild)
 
 void JqExecuteJob(uint64_t nWorkHandle, uint16_t nSubJob)
 {
+	JQ_MICROPROFILE_SCOPE("ExecuteJob", 0xff);
 	JQ_ASSERT_NOT_LOCKED();
 	JQ_ASSERT(JqSelfPos < JQ_MAX_JOB_STACK);
 	JqSelfStack[JqSelfPos++] = nWorkHandle;
@@ -388,14 +412,18 @@ void JqLoopChildren(uint16_t nRoot)
 }
 uint32_t JqTakeChildJob(uint64_t nJob, uint16_t* pIndexOut)
 {
+	JQ_MICROPROFILE_SCOPE("TakeChildJob", 0xff);
 	JQ_ASSERT_LOCKED();
-	for(int i = 0; i < JQ_WORK_BUFFER_SIZE; ++i)
+	if(0)
 	{
-		JqState.Work[i].nTag = 0;
+		JQ_MICROPROFILE_SCOPE("DEBUG_LOOP", 0x770077);
+		for(int i = 0; i < JQ_WORK_BUFFER_SIZE; ++i)
+		{
+			JqState.Work[i].nTag = 0;
+		}
+		JqTagChildren(nJob%JQ_WORK_BUFFER_SIZE);
+		JqLoopChildren(nJob%JQ_WORK_BUFFER_SIZE);
 	}
-	JqTagChildren(nJob%JQ_WORK_BUFFER_SIZE);
-	JqLoopChildren(nJob%JQ_WORK_BUFFER_SIZE);
-
 
 	int16_t nRoot = nJob % JQ_WORK_BUFFER_SIZE;
 	int16_t nWork = 0;
@@ -504,7 +532,7 @@ void JqWorker(int nThreadId)
 			uprintf("worker %d executing %d,%d\n", nThreadId, nWork, nSubIndex);
 			JqExecuteJob(JqState.Work[nWork].nStartedHandle, nSubIndex);
 			
-			std::unique_lock<std::mutex> lock(JqState.Mutex);
+			JqMutexLock<std::mutex> lock(JqState.Mutex);
 			nWork = JqTakeJob(&nSubIndex);
 		}
 	}
@@ -526,7 +554,7 @@ uint64_t JqAdd(JqFunction JobFunc, void* pArg, uint8_t nPrio, int nNumJobs)
 	JQ_ASSERT(!JqState.nStop);
 	uint64_t nNextHandle = 0;
 	{
-		std::lock_guard<std::mutex> lock(JqState.Mutex);
+		JqMutexLock<std::mutex> lock(JqState.Mutex);
 		JQ_ASSERT(JqState.nFreeJobs != 0);
 		nNextHandle = JqState.nNextHandle;
 		uint64_t nHandleIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
@@ -568,7 +596,7 @@ uint64_t JqAdd(JqFunction JobFunc, void* pArg, uint8_t nPrio, int nNumJobs)
 	{
 		uprintf("notifying %d\n", nNumJobs);
 		{
-			std::lock_guard<std::mutex> lock(JqState.Mutex);
+			JqMutexLock<std::mutex> lock(JqState.Mutex);
 			JqState.CondReleaseCount += nNumJobs;
 		}
 		for(int i = 0; i < nNumJobs; ++i)
@@ -580,7 +608,7 @@ uint64_t JqAdd(JqFunction JobFunc, void* pArg, uint8_t nPrio, int nNumJobs)
 	{
 		uprintf("notifying all\n");
 		{
-			std::lock_guard<std::mutex> lock(JqState.Mutex);
+			JqMutexLock<std::mutex> lock(JqState.Mutex);
 			JqState.CondReleaseCount += JqState.nNumWorkers;
 		}
 		JqState.Cond.notify_all();
@@ -609,7 +637,7 @@ void JqWaitAll()
 		uint32_t nWork = 0;
 		uint16_t nSubWork = 0;
 		{
-			std::lock_guard<std::mutex> lock(JqState.Mutex);
+			JqMutexLock<std::mutex> lock(JqState.Mutex);
 			nWork = JqTakeJob(&nSubWork);
 		}
 		if(nWork)
@@ -633,12 +661,14 @@ void JqWait(uint64_t nJob, int nWaitFlag)
 		if(nWaitFlag & JQ_WAITFLAG_EXECUTE_SUCCESSORS)
 		{
 			//todo
-			std::lock_guard<std::mutex> lock(JqState.Mutex);
+			JQ_MICROPROFILE_SCOPE("WaitTakeChild Head", 0xff0066);
+			JqMutexLock<std::mutex> lock(JqState.Mutex);
+			JQ_MICROPROFILE_SCOPE("WaitTakeChild Tail", 0x99ff00);
 			nWork = JqTakeChildJob(nJob, &nSubWork);
 		}
 		else if(nWaitFlag & JQ_WAITFLAG_EXECUTE_ANY)
 		{
-			std::lock_guard<std::mutex> lock(JqState.Mutex);
+			JqMutexLock<std::mutex> lock(JqState.Mutex);
 			nWork = JqTakeJob(&nSubWork);
 		}
 		if(!nWork)
