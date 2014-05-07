@@ -154,7 +154,7 @@ void HandleEvent(SDL_Event* pEvt)
 
 #define JQ_IMPL
 #define JQ_MICROPROFILE
-//#define JQ_MICROPROFILE_VERBOSE
+#define JQ_MICROPROFILE_VERBOSE
 #include "../jq.h"
 
 #include <atomic>
@@ -248,6 +248,9 @@ void JqTest()
 	JqWait(nJobMedium);
 	JqWait(nJob);
 	JQ_ASSERT(g_nJobCount == JOB_COUNT);
+	JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
+	JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+	JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 	JQ_ASSERT(g_nLowCount == JOB_COUNT_LOW);
 	
 
@@ -305,22 +308,11 @@ int main(int argc, char* argv[])
 		
 
 
-#if MICROPROFILE_ENABLED
 	MicroProfileQueryInitGL();
 	MicroProfileDrawInit();
 	MP_ASSERT(glGetError() == 0);
-#endif
-#define FAKE_WORK 0
-#if FAKE_WORK
-	std::thread t0(WorkerThread, 0);
-	std::thread t1(WorkerThread, 1);
-	std::thread t2(WorkerThread, 2);
-	std::thread t3(WorkerThread, 3);
-	std::thread t42(WorkerThread, 42);
-	std::thread t43(WorkerThread, 43);
-	std::thread t44(WorkerThread, 44);
-	std::thread t45(WorkerThread, 45);
-#endif
+
+
 	std::mutex test;
 
 	while(!g_nQuit)
@@ -335,9 +327,9 @@ int main(int argc, char* argv[])
 		if(g_nNumWorkers != nNumWorkers)
 		{
 			nNumWorkers = g_nNumWorkers;
-			printf("NumWorkers %d\n", nNumWorkers % 5);
+			printf("NumWorkers %d\n", nNumWorkers % 8);
 			JqStop();
-			JqStart(nNumWorkers % 5);
+			JqStart(nNumWorkers % 8);
 		}
 
 
@@ -379,17 +371,20 @@ int main(int argc, char* argv[])
 			glDisable(GL_BLEND);
 		}
 
-		MICROPROFILE_SCOPEI("MAIN", "Flip", 0xffee00);
-		SDL_GL_SwapWindow(pWindow);
+		{
+			MICROPROFILE_SCOPEI("MAIN", "Flip", 0xffee00);
+			SDL_GL_SwapWindow(pWindow);
+		}
 
 		int lala = 0;
-		{MICROPROFILE_SCOPEI("MUTEX_TEST", "MUTEX", -1);
-		for(int i = 0; i < 10000; ++i)
 		{
-			test.lock();
-			lala += 1;
-			test.unlock();	
-		}
+			MICROPROFILE_SCOPEI("MUTEX_TEST", "MUTEX", -1);
+			for(int i = 0; i < 10000; ++i)
+			{
+				test.lock();
+				lala += 1;
+				test.unlock();	
+			}
 		}
 
 		{
@@ -397,19 +392,8 @@ int main(int argc, char* argv[])
 		}
 
 	}
-//	__builtin_trap();
 	JqStop();
 
-	#if FAKE_WORK
-	t0.join();
-	t1.join();
-	t2.join();
-	t3.join();
-	t42.join();
-	t43.join();
-	t44.join();
-	t45.join();
-	#endif
 	MicroProfileShutdown();
 
   	SDL_GL_DeleteContext(glcontext);  
