@@ -9,7 +9,9 @@
 //
 // -child find algorithm
 // -yield on wait
-//
+// -index vs handle
+// -job vs work
+
 #ifndef JQ_WORK_BUFFER_SIZE
 #define JQ_WORK_BUFFER_SIZE 1024
 #endif
@@ -46,15 +48,8 @@ uint64_t JqAdd(JqFunction JobFunc, void* pArg, uint8_t nPrio, int nNumJobs);
 void JqWait(uint64_t nJob, int nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_YIELD);
 bool JqIsDone(uint64_t nJob);
 uint64_t JqSelf();
-
-
-
 void JqStart(int nNumWorkers);
 void JqStop();
-
-
-
-
 
 #ifdef JQ_IMPL
 #if defined(__APPLE__)
@@ -78,6 +73,14 @@ typedef uint32_t ThreadIdType;
 
 #ifdef JQ_MICROPROFILE
 #define JQ_MICROPROFILE_SCOPE(a,c) MICROPROFILE_SCOPEI("JQ",a,c)
+#else
+#define JQ_MICROPROFILE_SCOPE(a,c) do{}while(0)
+#endif
+
+#ifdef JQ_MICROPROFILE_VERBOSE
+#define JQ_MICROPROFILE_VERBOSE_SCOPE(a,c) MICROPROFILE_SCOPEI("JQ",a,c)
+#else
+#define JQ_MICROPROFILE_VERBOSE_SCOPE(a,c) do{}while(0)
 #endif
 
 
@@ -115,9 +118,6 @@ struct JqWorkEntry
 	uint16_t nNumJobs;
 	uint16_t nNumStarted;
 	uint16_t nNumFinished;
-
-
-	// uint64_t nParentJob;
 	
 	JqFunction Function;
 	void* pArg;
@@ -167,12 +167,12 @@ struct JqMutexLock
 	JqMutexLock(T& Mutex)
 	:Mutex(Mutex)
 	{
-		JQ_MICROPROFILE_SCOPE("MutexLock", 0x992233);
+		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
 		Mutex.lock();
 	}
 	~JqMutexLock()
 	{
-		JQ_MICROPROFILE_SCOPE("MutexUnlock", 0x992233);
+		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
 		Mutex.unlock();
 	}
 };
@@ -246,9 +246,8 @@ uint32_t JqIncrementStarted(uint64_t nWorkHandle)
 }
 void JqIncrementFinished(uint64_t nWorkHandle)
 {
-	JQ_MICROPROFILE_SCOPE("Finished Start", 0xffff);
+	JQ_MICROPROFILE_VERBOSE_SCOPE("Increment Finished", 0xffff);
 	JqMutexLock<std::mutex> lock(JqState.Mutex);
-	JQ_MICROPROFILE_SCOPE("Finished Tail", 0x703e);
 	uint32_t nWork = nWorkHandle % JQ_WORK_BUFFER_SIZE; 
 	JqState.Work[nWork].nNumFinished++;
 	JqCheckFinished(nWorkHandle);
@@ -412,11 +411,10 @@ void JqLoopChildren(uint16_t nRoot)
 }
 uint32_t JqTakeChildJob(uint64_t nJob, uint16_t* pIndexOut)
 {
-	JQ_MICROPROFILE_SCOPE("TakeChildJob", 0xff);
+	JQ_MICROPROFILE_VERBOSE_SCOPE("JqTakeChildJob", 0xff);
 	JQ_ASSERT_LOCKED();
-	if(0)
+	if(0) //sanity check
 	{
-		JQ_MICROPROFILE_SCOPE("DEBUG_LOOP", 0x770077);
 		for(int i = 0; i < JQ_WORK_BUFFER_SIZE; ++i)
 		{
 			JqState.Work[i].nTag = 0;
@@ -439,8 +437,6 @@ uint32_t JqTakeChildJob(uint64_t nJob, uint16_t* pIndexOut)
 			nWork = nNext;
 			break;
 		}
-		// JQ_ASSERT(JqState.Work[nNext].nTag == 1);
-		// JqState.Work[nNext].nTag = 0;
 		if(JqState.Work[nNext].nSibling)
 			nNext = JqState.Work[nNext].nSibling;
 		else
@@ -454,8 +450,7 @@ uint32_t JqTakeChildJob(uint64_t nJob, uint16_t* pIndexOut)
 					nWork = nNext;
 					break;
 				}
-				// JQ_ASSERT(JqState.Work[nNext].nTag == 1);
-				// JqState.Work[nNext].nTag = 0;
+
 				if(JqState.Work[nNext].nSibling)
 				{
 					nNext = JqState.Work[nNext].nSibling;
@@ -484,27 +479,6 @@ uint32_t JqTakeChildJob(uint64_t nJob, uint16_t* pIndexOut)
 	{
 		return 0;
 	}
-
-	// JQ_ASSERT(JqState.Work[nRoot].nTag == 1);
-	// JqState.Work[nRoot].nTag = 0;
-
-	// //HER
-	// uint16_t nChildIndex = nJob % JQ_WORK_BUFFER_SIZE;
-	// if(nChildIndex)
-	// {		
-	// 	JQ_ASSERT(JqState.Work[nChildIndex].nNumFinished != JqState.Work[nChildIndex].nNumStarted);
-	// 	JQ_ASSERT(JqState.Work[nChildIndex].nNumFinished != JqState.Work[nChildIndex].nNumJobs);
-	// 	while(JqState.Work[nChildIndex].nFirstChild)
-	// 	{
-	// 		nChildIndex = JqState.Work[nChildIndex].nFirstChild;
-	// 		JQ_ASSERT(JqState.Work[nChildIndex].nNumFinished != JqState.Work[nChildIndex].nNumStarted);
-	// 		JQ_ASSERT(JqState.Work[nChildIndex].nNumFinished != JqState.Work[nChildIndex].nNumJobs);			
-	// 	}
-	// 	*pIndexOut = JqIncrementStarted(JqState.Work[nChildIndex].nStartedHandle);
-	// 	return nChildIndex;
-	// }
-	// *pIndexOut = JqIncrementStarted(nJob);
-	// return nJob % JQ_WORK_BUFFER_SIZE;
 }
 
 void JqWorker(int nThreadId)
@@ -660,13 +634,11 @@ void JqWait(uint64_t nJob, int nWaitFlag)
 		uint16_t nSubWork = 0;
 		if(nWaitFlag & JQ_WAITFLAG_EXECUTE_SUCCESSORS)
 		{
-			//todo
-			JQ_MICROPROFILE_SCOPE("WaitTakeChild Head", 0xff0066);
 			JqMutexLock<std::mutex> lock(JqState.Mutex);
-			JQ_MICROPROFILE_SCOPE("WaitTakeChild Tail", 0x99ff00);
 			nWork = JqTakeChildJob(nJob, &nSubWork);
 		}
-		else if(nWaitFlag & JQ_WAITFLAG_EXECUTE_ANY)
+		
+		if(0 == nWork && 0 != (nWaitFlag & JQ_WAITFLAG_EXECUTE_ANY))
 		{
 			JqMutexLock<std::mutex> lock(JqState.Mutex);
 			nWork = JqTakeJob(&nSubWork);
@@ -700,7 +672,6 @@ uint64_t JqSelf()
 {
 	return JqSelfPos ? JqSelfStack[JqSelfPos-1] : 0;
 }
-
 
 
 void JqPriorityListAdd(uint32_t nIndex)
