@@ -1,13 +1,9 @@
 #pragma once
 
-//
-// - jobs are added, and executed
 // - as soon as a job is added, it can be executed
+// - if a job is added from inside a job it becomes a child job
 // - When waiting for a job you also wait for all children
-// - child jobs should only be added from the running job
 //
-//
-// -child find algorithm
 // -yield on wait
 // -index vs handle
 // -job vs work
@@ -24,6 +20,11 @@
 #define JQ_MAX_JOB_STACK 8
 #endif
 
+#ifndef JQ_DEFAULT_WAIT_TIME_US
+#define JQ_DEFAULT_WAIT_TIME_US 100
+#endif
+
+
 
 
 #include <functional>
@@ -33,19 +34,21 @@
 typedef std::function<void (void*,int) > JqFunction;
 
 #define JQ_INVALID_PARENT 0 
+
 //which jobs to execute when waiting
 #define JQ_WAITFLAG_EXECUTE_SUCCESSORS 0x1
 #define JQ_WAITFLAG_EXECUTE_ANY 0x2
 #define JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS 0x3
+
 //what to do when out of jobs
 #define JQ_WAITFLAG_SPIN 0x4
-#define JQ_WAITFLAG_YIELD 0x8
+#define JQ_WAITFLAG_SLEEP 0x8
 
 
 
 
 uint64_t JqAdd(JqFunction JobFunc, void* pArg, uint8_t nPrio, int nNumJobs);
-void JqWait(uint64_t nJob, int nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_YIELD);
+void JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SLEEP, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 bool JqIsDone(uint64_t nJob);
 uint64_t JqSelf();
 void JqStart(int nNumWorkers);
@@ -57,12 +60,60 @@ void JqStop();
 #define JQ_THREAD_LOCAL __thread
 #define JQ_STRCASECMP strcasecmp
 typedef uint64_t ThreadIdType;
-#define JQ_SLEEP(us) usleep(us);
+#define JQ_USLEEP(us) usleep(us);
+int64_t JqTicksPerSecond()
+{
+	static int64_t nTicksPerSecond = 0;	
+	if(nTicksPerSecond == 0) 
+	{
+		mach_timebase_info_data_t sTimebaseInfo;	
+		mach_timebase_info(&sTimebaseInfo);
+		nTicksPerSecond = 1000000000ll * sTimebaseInfo.denom / sTimebaseInfo.numer;
+	}
+	return nTicksPerSecond;
+}
+int64_t JqTick()
+{
+	return mach_absolute_time();
+}
 #elif defined(_WIN32)
 #define JQ_BREAK() __debugbreak()
 #define JQ_THREAD_LOCAL __declspec(thread)
 #define JQ_STRCASECMP _stricmp
 typedef uint32_t ThreadIdType;
+#define JQ_USLEEP(us) JqUsleep(us);
+int64_t JqTicksPerSecond()
+{
+	static int64_t nTicksPerSecond = 0;	
+	if(nTicksPerSecond == 0) 
+	{
+		QueryPerformanceFrequency((LARGE_INTEGER*)&nTicksPerSecond);
+	}
+	return nTicksPerSecond;
+}
+int64_t JqTick()
+{
+	int64_t ticks;
+	QueryPerformanceCounter((LARGE_INTEGER*)&ticks);
+	return ticks;
+}
+void JqUsleep(__int64 usec) 
+{ 
+	if(usec > 20000)
+	{
+		Sleep((DWORD)(usec/1000));
+	}
+	else if(usec >= 1000)
+	{
+		timeBeginPeriod(1);
+		Sleep((DWORD)(usec/1000));
+		timeEndPeriod(1);
+	}
+	else
+	{
+		Sleep(0);
+	}
+}
 #endif
 
 #define JQ_ASSERT(a) do{if(!(a)){JQ_BREAK();} }while(0)
@@ -253,24 +304,6 @@ void JqIncrementFinished(uint64_t nWorkHandle)
 	JqCheckFinished(nWorkHandle);
 }
 
-#if 0
-void JqIncrementRefCount(uint64_t nWorkHandle)
-{
-	uint32_t nWork = nWorkHandle % JQ_WORK_BUFFER_SIZE; 
-	JQ_ASSERT(JqState.Work[nWork].nFinishedHandle != nWorkHandle);
-	JQ_ASSERT(JqState.Work[nWork].nStartedHandle == nWorkHandle);
-	JqState.Work[nWork].nRefCount++;
-}
-
-void JqDecrementRefCount(uint64_t nWorkHandle)
-{
-	uint32_t nWork = nWorkHandle % JQ_WORK_BUFFER_SIZE; 
-	JQ_ASSERT(JqState.Work[nWork].nFinishedHandle != nWorkHandle);
-	JQ_ASSERT(JqState.Work[nWork].nStartedHandle == nWorkHandle);
-	JqState.Work[nWork].nRefCount--;
-	JqCheckFinished(nWorkHandle);
-}
-#endif
 
 void JqAttachChild(uint64_t nParent, uint64_t nChild)
 {
@@ -621,12 +654,13 @@ void JqWaitAll()
 		}
 		else
 		{
-			JQ_SLEEP(1000);
+			JQ_USLEEP(1000);
 		}	
 
 	}
 }
-void JqWait(uint64_t nJob, int nWaitFlag)
+JQ_THREAD_LOCAL int JqSpinloop = 0; //prevent optimizer from removing spin loop
+void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 {
 	while(!JqIsDone(nJob))
 	{
@@ -645,20 +679,29 @@ void JqWait(uint64_t nJob, int nWaitFlag)
 		}
 		if(!nWork)
 		{
-			JQ_SLEEP(50);
-			#if 0
-			JQ_ASSERT(0 != (nWaitFlag& (JQ_WAITFLAG_YIELD|JQ_WAITFLAG_SPIN)));
+			JQ_ASSERT(0 != (nWaitFlag& (JQ_WAITFLAG_SLEEP|JQ_WAITFLAG_SPIN)));
 			if(nWaitFlag & JQ_WAITFLAG_SPIN)
 			{
-				///spin
-				for(int i = 0; i < 1000; ++i);
+				uint64_t nTick = JqTick();
+				uint64_t nTickEnd = nTick;
+				uint64_t nTicksPerSecond = JqTicksPerSecond();
+				do
+				{
+					int result = 0;
+					for(int i = 0; i < 1000; ++i)
+					{
+						result |= i << (i^7); //do something.. whatever
+					}
+					JqSpinloop |= result; //write it somewhere so the optimizer can't remote it
+				}while( (1000000ull*(JqTick()-nTick)) / nTicksPerSecond < nUsWaitTime);
+
+				//printf("Spinned for %llds, was %d loop count %d\n", 1000000ull*(JqTick()-nTick) / nTicksPerSecond, nUsWaitTime, nCount);
+
 			}
 			else
 			{
-				//yield or something
-				JQ_BREAK();
+				JQ_USLEEP(nUsWaitTime);
 			}
-			#endif
 		}
 		else
 		{
