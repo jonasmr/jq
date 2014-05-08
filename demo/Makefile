@@ -2,7 +2,7 @@
 LDFLAGS=-framework OpenGL `sdl2-config --static-libs` -lpthread
 
 CFLAGS=`sdl2-config --cflags` -I.. -Iglew -DGLEW_STATIC -Wno-c++11-extensions
-CFLAGS+=-g -O4 -Wno-invalid-offsetof
+CFLAGS+=-g -O3 -Wno-invalid-offsetof
 
 CPPFLAGS=$(CFLAGS)
 CPPFLAGS+=-stdlib=libc++ -std=c++11

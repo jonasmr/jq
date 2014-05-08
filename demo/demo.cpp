@@ -40,29 +40,29 @@
 #undef far
 #define snprintf _snprintf
 #include <windows.h>
-void usleep(__int64 usec) 
-{ 
-	if(usec > 20000)
-	{
-		Sleep((DWORD)(usec/1000));
-	}
-	else if(usec >= 1000)
-	{
-		timeBeginPeriod(1);
-		Sleep((DWORD)(usec/1000));
-		timeEndPeriod(1);
-	}
-	else
-	{
-		__int64 time1 = 0, time2 = 0, freq = 0;
-		QueryPerformanceCounter((LARGE_INTEGER *) &time1);
-		QueryPerformanceFrequency((LARGE_INTEGER *)&freq);
+// void JQ_USLEEP(__int64 usec) 
+// { 
+// 	if(usec > 20000)
+// 	{
+// 		Sleep((DWORD)(usec/1000));
+// 	}
+// 	else if(usec >= 1000)
+// 	{
+// 		timeBeginPeriod(1);
+// 		Sleep((DWORD)(usec/1000));
+// 		timeEndPeriod(1);
+// 	}
+// 	else
+// 	{
+// 		__int64 time1 = 0, time2 = 0, freq = 0;
+// 		QueryPerformanceCounter((LARGE_INTEGER *) &time1);
+// 		QueryPerformanceFrequency((LARGE_INTEGER *)&freq);
 
-		do {
-			QueryPerformanceCounter((LARGE_INTEGER *) &time2);
-		} while((time2-time1)*1000000ll/freq < usec);
-	}
-}
+// 		do {
+// 			QueryPerformanceCounter((LARGE_INTEGER *) &time2);
+// 		} while((time2-time1)*1000000ll/freq < usec);
+// 	}
+// }
 #endif
 
 
@@ -70,7 +70,7 @@ void usleep(__int64 usec)
 #define HEIGHT 600
 
 
-uint32_t g_nNumWorkers = 0;
+uint32_t g_nNumWorkers = 1;
 uint32_t g_nQuit = 0;
 uint32_t g_MouseX = 0;
 uint32_t g_MouseY = 0;
@@ -173,7 +173,7 @@ std::atomic<int> g_nLowCount;
 void JobTree2(void* pArg, int nIndex)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree2", 0xff);
-	usleep(5+ rand() % 100);
+	JQ_USLEEP(5+ rand() % 100);
 	g_nJobCount2++;
 }
 
@@ -183,7 +183,7 @@ void JobTree1(void* pArg, int nIndex)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree1", 0xff0000);
 	JqAdd(JobTree2, nullptr, 2, JOB_COUNT_2);
-	usleep(50 + rand() % 100);
+	JQ_USLEEP(50 + rand() % 100);
 	g_nJobCount1++;
 }
 
@@ -191,7 +191,7 @@ void JobTree0(void* pArg, int nIndex)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree0", 0x00ff00);
 	JqAdd(JobTree1, nullptr, 2, JOB_COUNT_1);
-	usleep(50 + rand() % 100);
+	JQ_USLEEP(50 + rand() % 100);
 	((int*)pArg)[nIndex] = 1;
 	g_nJobCount0++;
 }
@@ -199,7 +199,7 @@ void JobTree0(void* pArg, int nIndex)
 void JobTree(void* pArg, int nIndex)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
-	usleep(100);
+	JQ_USLEEP(100);
 	int lala[3]={0,0,0};
 	uint64_t nJobTree0 = JqAdd(JobTree0, &lala[0], 2, 3);
 
@@ -227,12 +227,12 @@ void JqTest()
 	uint64_t nJob = JqAdd( [](void* arg, int idx)
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
-		usleep(200);
+		JQ_USLEEP(200);
 		g_nLowCount++;
 	}, nullptr, 7, JOB_COUNT_LOW);
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
-		usleep(500);
+		JQ_USLEEP(500);
 	}
 
 
@@ -241,12 +241,17 @@ void JqTest()
 
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
-		usleep(500);
+		JQ_USLEEP(500);
 	}
 
-	MICROPROFILE_SCOPEI("JQDEMO", "JqWait", 0xff0000);
-	JqWait(nJobMedium);
-	JqWait(nJob);
+	{
+		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitSpin", 0xff0000);
+		JqWait(nJob, JQ_WAITFLAG_SPIN);
+	}
+	{
+		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
+		JqWait(nJobMedium);
+	}
 	JQ_ASSERT(g_nJobCount == JOB_COUNT);
 	JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
 	JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
