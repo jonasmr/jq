@@ -4,12 +4,12 @@
 // - if a job is added from inside a job it becomes a child job
 // - When waiting for a job you also wait for all children
 //
-// -yield on wait
 // -index vs handle
 // -job vs work
+// c++ range stuff
 
 #ifndef JQ_WORK_BUFFER_SIZE
-#define JQ_WORK_BUFFER_SIZE 1024
+#define JQ_WORK_BUFFER_SIZE (1024)
 #endif
 
 #ifndef JQ_PRIORITY_MAX
@@ -22,6 +22,10 @@
 
 #ifndef JQ_DEFAULT_WAIT_TIME_US
 #define JQ_DEFAULT_WAIT_TIME_US 100
+#endif
+
+#ifndef JQ_BUFFER_FULL_USLEEP
+#define JQ_BUFFER_FULL_WAIT_TIME_US 100
 #endif
 
 
@@ -562,13 +566,35 @@ uint64_t JqAdd(JqFunction JobFunc, void* pArg, uint8_t nPrio, int nNumJobs)
 	uint64_t nNextHandle = 0;
 	{
 		JqMutexLock<std::mutex> lock(JqState.Mutex);
+		while(!JqState.nFreeJobs)
+		{
+			if(JqSelfPos < JQ_MAX_JOB_STACK)
+			{
+				JQ_MICROPROFILE_SCOPE("JqAdd Executing Job", 0xff0000); // if this starts happening the job queue size should be increased..
+				uint16_t nSubIndex = 0;
+				uint32_t nWork = JqTakeJob(&nSubIndex);
+				if(nWork)
+				{
+					JqState.Mutex.unlock();
+					uprintf("JqAdd: job queue full. executing %d,%d\n", nWork, nSubIndex);
+					JqExecuteJob(JqState.Work[nWork].nStartedHandle, nSubIndex);
+					JqState.Mutex.lock();
+				}
+			}
+			else
+			{
+				JQ_BREAK(); //out of job queue space. increase JQ_WORK_BUFFER_SIZE or create fewer jobs
+			}
+		}
 		JQ_ASSERT(JqState.nFreeJobs != 0);
 		nNextHandle = JqState.nNextHandle;
 		uint64_t nHandleIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
+		uint32_t nCount = 0;
 		while(!JqIsDone(nNextHandle))
 		{
 			nNextHandle = JqNextHandle(nNextHandle);
 			nHandleIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
+			JQ_ASSERT(nCount++ < JQ_WORK_BUFFER_SIZE);
 		}
 		JqState.nNextHandle = JqNextHandle(nNextHandle);
 		JqState.nFreeJobs--;
@@ -694,8 +720,6 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 					}
 					JqSpinloop |= result; //write it somewhere so the optimizer can't remote it
 				}while( (1000000ull*(JqTick()-nTick)) / nTicksPerSecond < nUsWaitTime);
-
-				//printf("Spinned for %llds, was %d loop count %d\n", 1000000ull*(JqTick()-nTick) / nTicksPerSecond, nUsWaitTime, nCount);
 
 			}
 			else
