@@ -239,19 +239,47 @@ void JqTest()
 	uint64_t nJobMedium = JqAdd(JobTree, nullptr, 0, JOB_COUNT);
 
 
+	uint64_t nBatch = 0;
+#if 1
+	//test running out of job queue space.
+	nBatch = JqAdd( [](void* arg, int idx)
+	{
+		for(int i = 0; i < 1200; ++i)
+		{
+			JqAdd( [](void* arg, int idx)
+			{
+				MICROPROFILE_SCOPEI("JQDEMO", "JobBulk", 0x00ff00);
+				JQ_USLEEP(2);
+			}, nullptr, 7, 1);
+		}
+	}, nullptr, 0, 1);
+#endif
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		JQ_USLEEP(500);
 	}
 
+
 	{
-		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitSpin", 0xff0000);
-		JqWait(nJob, JQ_WAITFLAG_SPIN);
+		if(0)
+		{
+			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitSpin", 0xff0000);
+			JqWait(nJob, JQ_WAITFLAG_SPIN);
+		}
+		else
+		{
+			JqWait(nJob);
+		}
 	}
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
 		JqWait(nJobMedium);
 	}
+	{
+		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitBatch", 0xff0000);
+		JqWait(nBatch);
+	}
+
 	JQ_ASSERT(g_nJobCount == JOB_COUNT);
 	JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
 	JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
@@ -332,9 +360,9 @@ int main(int argc, char* argv[])
 		if(g_nNumWorkers != nNumWorkers)
 		{
 			nNumWorkers = g_nNumWorkers;
-			printf("NumWorkers %d\n", nNumWorkers % 8);
+			printf("NumWorkers %d\n", 1 + nNumWorkers % 8);
 			JqStop();
-			JqStart(nNumWorkers % 8);
+			JqStart(1 + nNumWorkers % 8);
 		}
 
 
