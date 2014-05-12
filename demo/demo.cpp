@@ -40,29 +40,6 @@
 #undef far
 #define snprintf _snprintf
 #include <windows.h>
-// void JQ_USLEEP(__int64 usec) 
-// { 
-// 	if(usec > 20000)
-// 	{
-// 		Sleep((DWORD)(usec/1000));
-// 	}
-// 	else if(usec >= 1000)
-// 	{
-// 		timeBeginPeriod(1);
-// 		Sleep((DWORD)(usec/1000));
-// 		timeEndPeriod(1);
-// 	}
-// 	else
-// 	{
-// 		__int64 time1 = 0, time2 = 0, freq = 0;
-// 		QueryPerformanceCounter((LARGE_INTEGER *) &time1);
-// 		QueryPerformanceFrequency((LARGE_INTEGER *)&freq);
-
-// 		do {
-// 			QueryPerformanceCounter((LARGE_INTEGER *) &time2);
-// 		} while((time2-time1)*1000000ll/freq < usec);
-// 	}
-// }
 #endif
 
 
@@ -170,7 +147,7 @@ std::atomic<int> g_nLowCount;
 #define JOB_COUNT_2 10
 #define JOB_COUNT_LOW 200
 
-void JobTree2(void* pArg, int nIndex)
+void JobTree2(int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree2", 0xff);
 	JQ_USLEEP(5+ rand() % 100);
@@ -179,36 +156,50 @@ void JobTree2(void* pArg, int nIndex)
 
 
 
-void JobTree1(void* pArg, int nIndex)
+void JobTree1(int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree1", 0xff0000);
-	JqAdd(JobTree2, nullptr, 2, JOB_COUNT_2);
+	JqAdd(JobTree2, 2, JOB_COUNT_2);
 	JQ_USLEEP(50 + rand() % 100);
 	g_nJobCount1++;
 }
 
-void JobTree0(void* pArg, int nIndex)
+void JobTree0(void* pArg, int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree0", 0x00ff00);
-	JqAdd(JobTree1, nullptr, 2, JOB_COUNT_1);
+	JqAdd(JobTree1, 2, JOB_COUNT_1);
 	JQ_USLEEP(50 + rand() % 100);
-	((int*)pArg)[nIndex] = 1;
+	((int*)pArg)[nStart] = 1;
 	g_nJobCount0++;
 }
 
-void JobTree(void* pArg, int nIndex)
+void JobTree(int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
 	JQ_USLEEP(100);
 	int lala[3]={0,0,0};
-	uint64_t nJobTree0 = JqAdd(JobTree0, &lala[0], 2, 3);
+	uint64_t nJobTree0 = JqAdd(
+		[&](int s, int e)
+		{
+			JobTree0((void*)&lala[0],s,e);
+		}, 2, 3);
 
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree Wait", 0xff5555);
 	JqWait(nJobTree0);
+	JQ_ASSERT(lala[0] == 1);
+	JQ_ASSERT(lala[1] == 1);
+	JQ_ASSERT(lala[2] == 1);
+
 	g_nJobCount++;
 
 }
 
+
+void JqRangeTest(int* pArray, int nBegin, int nEnd)
+{
+	for(int i = nBegin; i < nEnd; ++i)
+		pArray[i] = 1;
+}
 void JqTest()
 {
 	{
@@ -224,36 +215,35 @@ void JqTest()
 	g_nJobCount2 = 0;
 
 
-	uint64_t nJob = JqAdd( [](void* arg, int idx)
+	uint64_t nJob = JqAdd( [](int begin, int end)
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
 		JQ_USLEEP(200);
 		g_nLowCount++;
-	}, nullptr, 7, JOB_COUNT_LOW);
+	}, 7, JOB_COUNT_LOW);
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		JQ_USLEEP(500);
 	}
 
 
-	uint64_t nJobMedium = JqAdd(JobTree, nullptr, 0, JOB_COUNT);
+	uint64_t nJobMedium = JqAdd(JobTree, 0, JOB_COUNT);
 
 
 	uint64_t nBatch = 0;
-#if 1
 	//test running out of job queue space.
-	nBatch = JqAdd( [](void* arg, int idx)
+	nBatch = JqAdd( [](int start, int end)
 	{
 		for(int i = 0; i < 1200; ++i)
 		{
-			JqAdd( [](void* arg, int idx)
+			JqAdd( [](int begin, int end)
 			{
 				MICROPROFILE_SCOPEI("JQDEMO", "JobBulk", 0x00ff00);
 				JQ_USLEEP(2);
-			}, nullptr, 7, 1);
+			}, 7, 1);
 		}
-	}, nullptr, 0, 1);
-#endif
+	}, 0, 1);
+
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		JQ_USLEEP(500);
@@ -286,8 +276,43 @@ void JqTest()
 	JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 	JQ_ASSERT(g_nLowCount == JOB_COUNT_LOW);
 	
+	static int nNumJobs = 1;
+	static int nRange = (4<<10)-5;
 
+	int nData[4<<10] = {0};
+	{
+		MICROPROFILE_SCOPEI("JQDEMO", "RangeTest", 0xff00ff);
 
+		nNumJobs = (nNumJobs+1) % 21;
+		if(nNumJobs == 0)
+		{
+			nNumJobs = 1;
+			//printf("range test range %d\n", nRange);
+			nRange = (nRange+1) % (4<<10);
+		}
+		for(int i = 0; i < nRange; ++i)
+		{
+			if(nData[i] != 0)
+				JQ_BREAK();
+		}
+
+		uint64_t nRangeTest = JqAdd(
+			[&](int nBegin, int nEnd)
+		{
+			for(int i = nBegin; i < nEnd; ++i)
+			{
+				nData[i] = 1;
+			}
+		}, 3, nNumJobs, nRange);
+
+		JqWait(nRangeTest);
+
+		for(int i = 0; i < nRange; ++i)
+		{
+			if(nData[i] != 1)
+				JQ_BREAK();
+		}
+	}
 }
 
 
@@ -332,17 +357,17 @@ std::function<int(int)> Getfunc(int a)
 	return f;
 }
 __thread uint32_t g_nDump = 0;
-void* operator new (size_t size)
-{
-	//JQ_BREAK();
-	if(g_nDump)
-		printf("***** alloc %zu\n", size);
-	void *p=malloc(size); 
+// void* operator new (size_t size)
+// {
+// 	//JQ_BREAK();
+// 	if(g_nDump)
+// 		printf("***** alloc %zu\n", size);
+// 	void *p=malloc(size); 
 
-	return p;
-}
+// 	return p;
+// }
 
-int JqGetRangeStart(int nIndex, int nNumJobs, int nNumElements)
+int JqGetRangeStart22(int nIndex, int nNumJobs, int nNumElements)
 {
 	int nFraction = nNumElements / nNumJobs;
 	int nRemainder = nNumElements - nFraction * nNumJobs;
@@ -360,8 +385,8 @@ int JqGetRangeStart(int nIndex, int nNumJobs, int nNumElements)
 
 void JqGetRange(int& nStart, int& nEnd, int nIndex, int nNumJobs, int nNumElements)
 {
-	nStart = JqGetRangeStart(nIndex, nNumJobs, nNumElements);
-	nEnd = JqGetRangeStart(nIndex+1, nNumJobs, nNumElements);
+	nStart = JqGetRangeStart22(nIndex, nNumJobs, nNumElements);
+	nEnd = JqGetRangeStart22(nIndex+1, nNumJobs, nNumElements);
 }
 
 int main(int argc, char* argv[])
@@ -393,7 +418,7 @@ int main(int argc, char* argv[])
 	CallTest([](int x){ return x+112; });
 	g_nDump = 1;
 	CallTest([](int x,int y){ return x+y; });
-
+	std::function<int(int)> lalalala = [=](int x){ return x+hest; };
 	CallTest_cap([=](int x){ return x+hest; });
 	int a[7];
 	CallTest_cap([=](int x){ return a[x]; });
@@ -406,7 +431,7 @@ int main(int argc, char* argv[])
 	CallTest_cap(f2);
 
 	printf("size is %lu\n", sizeof(f1));
-	JQ_BREAK();
+//	JQ_BREAK();
 	printf("press 'z' to toggle microprofile drawing\n");
 	printf("press 'right shift' to pause microprofile update\n");
 	MicroProfileOnThreadCreate("Main");
