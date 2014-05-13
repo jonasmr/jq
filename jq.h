@@ -8,8 +8,6 @@
 // -job vs work
 // lock assertions
 // microprofile thread shit
-// test for non-function
-// 
 
 #ifndef JQ_WORK_BUFFER_SIZE
 #define JQ_WORK_BUFFER_SIZE (1024)
@@ -132,12 +130,20 @@ void JqUsleep(__int64 usec)
 
 #ifdef JQ_NO_ASSERT
 #define JQ_ASSERT(a) do{}while(0)
-#define JQ_ASSERT(a) do{}while(0)
-#define JQ_ASSERT_NOT_LOCKED() do{}while(0)
 #else
 #define JQ_ASSERT(a) do{if(!(a)){JQ_BREAK();} }while(0)
-#define JQ_ASSERT_NOT_LOCKED() do{}while(0)
+#endif
+
+#ifdef JQ_ASSERT_LOCKS
+#define JQ_ASSERT_LOCKED() do{if(0 == JqHasLock){JQ_BREAK();}}while(0)
+#define JQ_ASSERT_NOT_LOCKED()  do{if(0 != JqHasLock){JQ_BREAK();}}while(0)
+#define JQ_ASSERT_LOCK_ENTER() do{JqHasLock++;}while(0)
+#define JQ_ASSERT_LOCK_LEAVE()  do{JqHasLock--;}while(0)
+#else
 #define JQ_ASSERT_LOCKED() do{}while(0)
+#define JQ_ASSERT_NOT_LOCKED()  do{}while(0)
+#define JQ_ASSERT_LOCK_ENTER() do{}while(0)
+#define JQ_ASSERT_LOCK_LEAVE()  do{}while(0)
 #endif
 
 #define JQ_NUM_JOBS (JQ_WORK_BUFFER_SIZE-1)
@@ -172,6 +178,7 @@ void JqPriorityListRemove(uint32_t nIndex);
 
 JQ_THREAD_LOCAL uint64_t JqSelfStack[JQ_MAX_JOB_STACK] = {0};
 JQ_THREAD_LOCAL uint32_t JqSelfPos = 0;
+JQ_THREAD_LOCAL uint32_t JqHasLock = 0;
 
 #if 1
 #define uprintf(...) do{}while(0)
@@ -243,18 +250,30 @@ struct JqMutexLock
 	:Mutex(Mutex)
 	{
 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
-		Mutex.lock();
+		Lock();
 	}
 	~JqMutexLock()
 	{
 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
+		Unlock();
+	}
+	void Lock()
+	{
+		Mutex.lock();
+		JQ_ASSERT_LOCK_ENTER();
+	}
+	void Unlock()
+	{
+		JQ_ASSERT_LOCK_LEAVE();
 		Mutex.unlock();
+
 	}
 };
 
 
 void JqStart(int nNumWorkers)
 {
+	JQ_ASSERT_NOT_LOCKED();
 	JQ_ASSERT(JqState.nNumWorkers == 0);
 	JqState.pWorkerThreads = new std::thread[nNumWorkers];
 	JqState.nNumWorkers = nNumWorkers;
@@ -332,6 +351,7 @@ void JqIncrementFinished(uint64_t nWorkHandle)
 
 void JqAttachChild(uint64_t nParent, uint64_t nChild)
 {
+	JQ_ASSERT_LOCKED();
 	uint16_t nParentIndex = nParent % JQ_WORK_BUFFER_SIZE;
 	uint16_t nChildIndex = nChild % JQ_WORK_BUFFER_SIZE;
 	uprintf("attach %d to %d\n", nChildIndex, nParentIndex);
@@ -575,11 +595,13 @@ void JqWorker(int nThreadId)
 			{
 				JqState.Cond.wait(lock);
 			}
+			JQ_ASSERT_LOCK_ENTER();
 			JqState.nReleaseCount--;
+
 			uprintf("worker woke up %d\n", nThreadId);
 			nSubIndex = 0;
 			nWork = JqTakeJob(&nSubIndex);
-
+			JQ_ASSERT_LOCK_LEAVE();
 		}
 		while(nWork)
 		{
@@ -627,10 +649,10 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 				uint32_t nWork = JqTakeJob(&nSubIndex);
 				if(nWork)
 				{
-					JqState.Mutex.unlock();
+					lock.Unlock();
 					uprintf("JqAdd: job queue full. executing %d,%d\n", nWork, nSubIndex);
 					JqExecuteJob(JqState.Work[nWork].nStartedHandle, nSubIndex);
-					JqState.Mutex.lock();
+					lock.Lock();
 				}
 			}
 			else
