@@ -123,15 +123,14 @@ void HandleEvent(SDL_Event* pEvt)
 			g_MouseDelta -= pEvt->wheel.y;
 		break;
 	}
-
-
-
 }
 
 
 #define JQ_IMPL
 #define JQ_MICROPROFILE
 #define JQ_MICROPROFILE_VERBOSE
+//#define JQ_NO_STD_FUNCTION
+
 #include "../jq.h"
 
 #include <atomic>
@@ -147,19 +146,26 @@ std::atomic<int> g_nLowCount;
 #define JOB_COUNT_2 10
 #define JOB_COUNT_LOW 200
 
-void JobTree2(int nStart, int nEnd)
+//Helper macros to let the tests run with both interfaces.
+#ifdef JQ_NO_STD_FUNCTION
+#define VOID_ARG void* pArg,
+#define VOID_PARAM nullptr, 
+#else
+#define VOID_ARG
+#define VOID_PARAM 
+#endif
+
+void JobTree2(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree2", 0xff);
 	JQ_USLEEP(5+ rand() % 100);
 	g_nJobCount2++;
 }
 
-
-
-void JobTree1(int nStart, int nEnd)
+void JobTree1(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree1", 0xff0000);
-	JqAdd(JobTree2, 2, JOB_COUNT_2);
+	JqAdd(JobTree2, 2, VOID_PARAM JOB_COUNT_2);
 	JQ_USLEEP(50 + rand() % 100);
 	g_nJobCount1++;
 }
@@ -167,23 +173,26 @@ void JobTree1(int nStart, int nEnd)
 void JobTree0(void* pArg, int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree0", 0x00ff00);
-	JqAdd(JobTree1, 2, JOB_COUNT_1);
+	JqAdd(JobTree1, 2, VOID_PARAM JOB_COUNT_1);
 	JQ_USLEEP(50 + rand() % 100);
 	((int*)pArg)[nStart] = 1;
 	g_nJobCount0++;
 }
 
-void JobTree(int nStart, int nEnd)
+void JobTree(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
 	JQ_USLEEP(100);
 	int lala[3]={0,0,0};
+	#ifdef JQ_NO_STD_FUNCTION
+	uint64_t nJobTree0 = JqAdd(JobTree0, 2, (void*)&lala[0], 3);
+	#else
 	uint64_t nJobTree0 = JqAdd(
 		[&](int s, int e)
 		{
 			JobTree0((void*)&lala[0],s,e);
 		}, 2, 3);
-
+	#endif
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree Wait", 0xff5555);
 	JqWait(nJobTree0);
 	JQ_ASSERT(lala[0] == 1);
@@ -195,10 +204,11 @@ void JobTree(int nStart, int nEnd)
 }
 
 
-void JqRangeTest(int* pArray, int nBegin, int nEnd)
+void JqRangeTest(void* pArray, int nBegin, int nEnd)
 {
+	int* pIntArray = (int*)pArray;
 	for(int i = nBegin; i < nEnd; ++i)
-		pArray[i] = 1;
+		pIntArray[i] = 1;
 }
 void JqTest()
 {
@@ -215,34 +225,34 @@ void JqTest()
 	g_nJobCount2 = 0;
 
 
-	uint64_t nJob = JqAdd( [](int begin, int end)
+	uint64_t nJob = JqAdd( [](VOID_ARG int begin, int end)
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
 		JQ_USLEEP(200);
 		g_nLowCount++;
-	}, 7, JOB_COUNT_LOW);
+	}, 7, VOID_PARAM JOB_COUNT_LOW);
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		JQ_USLEEP(500);
 	}
 
 
-	uint64_t nJobMedium = JqAdd(JobTree, 0, JOB_COUNT);
+	uint64_t nJobMedium = JqAdd(JobTree, 0, VOID_PARAM JOB_COUNT);
 
 
 	uint64_t nBatch = 0;
 	//test running out of job queue space.
-	nBatch = JqAdd( [](int start, int end)
+	nBatch = JqAdd( [](VOID_ARG int start, int end)
 	{
 		for(int i = 0; i < 1200; ++i)
 		{
-			JqAdd( [](int begin, int end)
+			JqAdd( [](VOID_ARG int begin, int end)
 			{
 				MICROPROFILE_SCOPEI("JQDEMO", "JobBulk", 0x00ff00);
 				JQ_USLEEP(2);
-			}, 7, 1);
+			}, 7,VOID_PARAM 1);
 		}
-	}, 0, 1);
+	}, 0, VOID_PARAM 1);
 
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
@@ -295,7 +305,7 @@ void JqTest()
 			if(nData[i] != 0)
 				JQ_BREAK();
 		}
-
+#ifndef JQ_NO_STD_FUNCTION
 		uint64_t nRangeTest = JqAdd(
 			[&](int nBegin, int nEnd)
 		{
@@ -304,6 +314,17 @@ void JqTest()
 				nData[i] = 1;
 			}
 		}, 3, nNumJobs, nRange);
+#else
+		uint64_t nRangeTest = JqAdd(
+			[](void* pArray, int nBegin, int nEnd)
+		{
+			int* iArray = (int*)pArray;
+			for(int i = nBegin; i < nEnd; ++i)
+			{
+				iArray[i] = 1;
+			}
+		}, 3, &nData[0], nNumJobs, nRange);
+#endif
 
 		JqWait(nRangeTest);
 

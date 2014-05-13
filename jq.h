@@ -405,7 +405,7 @@ void JqExecuteJob(uint64_t nWorkHandle, uint16_t nSubJob)
 	int nStart = JqGetRangeStart(nSubJob, nNumJobs, nRange);
 	int nEnd = JqGetRangeStart(nSubJob+1, nNumJobs, nRange);
 #ifdef JQ_NO_STD_FUNCTION
-	JqState.Work[nWorkIndex].Function(JqState.Work[nWorkIndex].pArg, nSubJob);
+	JqState.Work[nWorkIndex].Function(JqState.Work[nWorkIndex].pArg, nStart, nEnd);
 #else
 	JqState.Work[nWorkIndex].Function(nStart, nEnd);
 #endif
