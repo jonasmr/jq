@@ -129,7 +129,8 @@ void HandleEvent(SDL_Event* pEvt)
 #define JQ_IMPL
 #define JQ_MICROPROFILE
 #define JQ_MICROPROFILE_VERBOSE
-//#define JQ_NO_STD_FUNCTION
+#define JQ_ASSERT_LOCKS
+#define JQ_NO_STD_FUNCTION
 
 #include "../jq.h"
 
@@ -344,115 +345,9 @@ void MicroProfileBeginDraw(uint32_t nWidth, uint32_t nHeight, float* prj);
 void MicroProfileEndDraw();
 
 
-//typedef 
-void CallTest(int (*foo)(int))
-{
-	printf("lala %d\n", (*foo)(32));
-}
-
-void CallTest(int (*foo)(int,int))
-{
-	printf("lala %d\n", (*foo)(5,5));
-}
-
-void CallTest_cap(std::function<int(int)> la)
-{
-	printf("capture %d\n", la(32));
-}
-
-
-int lala(int a)
-{
-	return 42;
-}
-std::function<int(int)> Getfunc(int a)
-{
-	int test = 1 + a;
-	auto f = [=] (int foo)
-	{
-		printf("Getfunc lambda test %d foo %d\n", test, foo);
-		return test * foo;
-	};
-	test += 1;
-	printf("Getfunc::test variable %d\n", test);
-	return f;
-}
-__thread uint32_t g_nDump = 0;
-// void* operator new (size_t size)
-// {
-// 	//JQ_BREAK();
-// 	if(g_nDump)
-// 		printf("***** alloc %zu\n", size);
-// 	void *p=malloc(size); 
-
-// 	return p;
-// }
-
-int JqGetRangeStart22(int nIndex, int nNumJobs, int nNumElements)
-{
-	int nFraction = nNumElements / nNumJobs;
-	int nRemainder = nNumElements - nFraction * nNumJobs;
-	int nStart = 0;
-	if(nIndex > 0)
-	{
-		nStart = nIndex * nFraction;
-		if(nRemainder <= nIndex)
-			nStart += nRemainder;
-		else
-			nStart += nIndex;
-	}
-	return nStart;
-}
-
-void JqGetRange(int& nStart, int& nEnd, int nIndex, int nNumJobs, int nNumElements)
-{
-	nStart = JqGetRangeStart22(nIndex, nNumJobs, nNumElements);
-	nEnd = JqGetRangeStart22(nIndex+1, nNumJobs, nNumElements);
-}
 
 int main(int argc, char* argv[])
 {
-	for(int i = 1; i < 148; ++i)
-	{
-		const int nNumJobs = i;
-		for(int j = 0; j < 1024; ++j)
-		{
-			const int nRange = j;
-			printf("testing %d jobs range %d\n", nNumJobs, nRange);
-			int nCount = 0;
-			int nLast = 0;
-			for(int k = 0; k < nNumJobs; ++k)
-			{
-				int nStart, nEnd;
-				JqGetRange(nStart, nEnd, k, nNumJobs, nRange);
-				//printf("range %d :: %d:%d\n", nNumJobs, nStart, nEnd);
-				JQ_ASSERT(nStart == nLast || nStart == nEnd);
-				JQ_ASSERT(nStart <= nEnd);
-				nCount += nEnd - nStart;
-				nLast = nEnd;
-			}
-			JQ_ASSERT(nCount == nRange);
-		}
-	}
-	int hest = 100;
-	CallTest(lala);
-	CallTest([](int x){ return x+112; });
-	g_nDump = 1;
-	CallTest([](int x,int y){ return x+y; });
-	std::function<int(int)> lalalala = [=](int x){ return x+hest; };
-	CallTest_cap([=](int x){ return x+hest; });
-	int a[7];
-	CallTest_cap([=](int x){ return a[x]; });
-
-
-	auto f1 = Getfunc(1);
-	auto f2 = Getfunc(2);
-
-	CallTest_cap(f1);
-	CallTest_cap(f2);
-
-	printf("size is %lu\n", sizeof(f1));
-//	JQ_BREAK();
 	printf("press 'z' to toggle microprofile drawing\n");
 	printf("press 'right shift' to pause microprofile update\n");
 	MicroProfileOnThreadCreate("Main");
