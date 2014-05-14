@@ -1779,7 +1779,7 @@ void MicroProfileDebugDumpRange()
 #ifdef _WIN32
 			OutputDebugString(buffer);
 #else
-			printf(buffer);
+			printf("%s", buffer);
 #endif
 			pStart++;
 		}
@@ -1793,49 +1793,6 @@ void MicroProfileDebugDumpRange()
 #endif
 
 #define MICROPROFILE_HOVER_DIST 0.5f
-static int lala = 0;
-uint32_t MicroProfileHighlightColor(uint32_t nColor)
-{
-	lala++;
-	lala = lala % 64;
-	float r = 0xff&(nColor>>16);
-	float g = 0xff&(nColor>>8);
-	float b = 0xff&(nColor);
-	// r += lala-32;
-	// g += lala-32;
-	// b += lala-32;
-	// r = r > 255 ? 255 : r;
-	// g = g > 255 ? 255 : g;
-	// b = b > 255 ? 255 : b;
-	// r = r < 0 ? 0 : r;
-	// g = g < 0 ? 0 : g;
-	// b = b < 0 ? 0 : b;
-	// uint32_t nEnd = (r<<16)|(g<<8)|b;
-	// printf("color start lala %d %08x :: end %08x\n", lala, nColor, nEnd);
-
-#define  Pr  .299
-#define  Pg  .587
-#define  Pb  .114
-	float fChange = (lala / 64.f) * 1.5 + 0.25f;
-	float P=sqrtf((r)*(r)*Pr+(g)*(g)*Pg+(b)*(b)*Pb ) ;
-
-	r=P+((r)-P)*fChange;
-	g=P+((g)-P)*fChange;
-	b=P+((b)-P)*fChange; 
-	r = r < 0 ? 0 : r;
-	r = r > 255 ? 255 : r;
-	g = g < 0 ? 0 : g;
-	g = g > 255 ? 255 : g;
-	b = b < 0 ? 0 : b;
-	b = b > 255 ? 255 : b;
-
-	uint8_t ur = r;
-	uint8_t ug = g;
-	uint8_t ub = b;
-	return ((int)ur<<16)|((int)ug<<8)|(int)ub;
-	//nColor = nColor + ((lala<<16) | (lala<8) | lala);
-	//return nColor;
-}
 
 void MicroProfileDrawDetailedContextSwitchBars(uint32_t nY, uint32_t nThreadId, uint32_t nContextSwitchStart, uint32_t nContextSwitchEnd, int64_t nBaseTicks, uint32_t nBaseY)
 {
@@ -1888,7 +1845,7 @@ void MicroProfileDrawDetailedContextSwitchBars(uint32_t nY, uint32_t nThreadId, 
 						S.nContextSwitchHoverThreadBefore = nThreadBefore;
 						S.nContextSwitchHoverThreadAfter = CS.nThreadIn;
 						S.nContextSwitchHoverCpuNext = CS.nCpu;
-						nColor = MicroProfileHighlightColor(nColor);
+						nColor = S.nHoverColor;
 					}
 					if(CS.nCpu == S.nContextSwitchHoverCpu)
 					{
@@ -2150,7 +2107,7 @@ void MicroProfileDrawDetailedBars(uint32_t nWidth, uint32_t nHeight, int nBaseY,
 						{
 							if(pEntry == pMouseOver)
 							{
-								nColor = MicroProfileHighlightColor(nColor);
+								nColor = S.nHoverColor;
 								if(bGpu)
 								{
 									S.nRangeBeginGpu = *pEntryEnter;
