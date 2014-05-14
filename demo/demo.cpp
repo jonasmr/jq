@@ -130,7 +130,7 @@ void HandleEvent(SDL_Event* pEvt)
 #define JQ_MICROPROFILE
 #define JQ_MICROPROFILE_VERBOSE
 #define JQ_ASSERT_LOCKS
-#define JQ_NO_STD_FUNCTION
+//#define JQ_NO_STD_FUNCTION
 
 #include "../jq.h"
 
@@ -439,18 +439,7 @@ int main(int argc, char* argv[])
 			MICROPROFILE_SCOPEI("MAIN", "Flip", 0xffee00);
 			SDL_GL_SwapWindow(pWindow);
 		}
-
-		int lala = 0;
-		{
-			MICROPROFILE_SCOPEI("MUTEX_TEST", "MUTEX", -1);
-			for(int i = 0; i < 10000; ++i)
-			{
-				test.lock();
-				lala += 1;
-				test.unlock();	
-			}
-		}
-
+		
 		{
 			JqTest();
 		}

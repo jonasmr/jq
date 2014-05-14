@@ -1,19 +1,60 @@
 #pragma once
-
+// This is free and unencumbered software released into the public domain.
+// Anyone is free to copy, modify, publish, use, compile, sell, or
+// distribute this software, either in source code form or as a compiled
+// binary, for any purpose, commercial or non-commercial, and by any
+// means.
+// In jurisdictions that recognize copyright laws, the author or authors
+// of this software dedicate any and all copyright interest in the
+// software to the public domain. We make this dedication for the benefit
+// of the public at large and to the detriment of our heirs and
+// successors. We intend this dedication to be an overt act of
+// relinquishment in perpetuity of all present and future rights to this
+// software under copyright law.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+// IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+// OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+// OTHER DEALINGS IN THE SOFTWARE.
+// For more information, please refer to <http://unlicense.org/>
+//
+// ***********************************************************************
+//
+//
+// Simple JobQueue with priorities & child jobs
 // - as soon as a job is added, it can be executed
 // - if a job is added from inside a job it becomes a child job
 // - When waiting for a job you also wait for all children
+// - Implemented using c++11 thread/mutex/condition_variable
+// - _not_ using jobstealing & per thread queues, so unsuitable for lots of very small jobs w. high contention
+// - Optional use of std::function. use JQ_NO_STD_FUNCTION to disable.
+//   use std::function if you want to capture variables, but be aware that it might allocate
+// - Built in support for splitting ranges between jobs
 //
-// -index vs handle
-// -job vs work
-// microprofile thread shit
+//   example usage
+//	
+//		JqStart(2); //startup Jq with 2 worker threads
+//		uint64_t nJobHandle = JqAdd( [](int start, int end) {} ), PRIORITY, NUM_JOBS, RANGE);
+//		JqWait(nJobHandle);
+//		JqStop(); //shutdown Jq
+//
+//		PRIORITY: 				[0-JQ_PRIORITY_MAX], lower priority gets executed earlier
+//		NUM_JOBS(optional): 	number of times to spawn job
+//		RANGE(optional): 		range to split between jobs
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////
+/// Configuration
 
 #ifndef JQ_WORK_BUFFER_SIZE
 #define JQ_WORK_BUFFER_SIZE (1024)
 #endif
 
 #ifndef JQ_PRIORITY_MAX
-#define JQ_PRIORITY_MAX 8
+#define JQ_PRIORITY_MAX 7
 #endif
 
 #ifndef JQ_MAX_JOB_STACK
@@ -40,16 +81,17 @@ typedef std::function<void (int,int) > JqFunction;
 #include <stdint.h>
 
 
-//which jobs to execute when waiting
+///////////////////////////////////////////////////////////////////////////////////////////
+/// Interface
+
+
+//  what to execute while wailing
 #define JQ_WAITFLAG_EXECUTE_SUCCESSORS 0x1
 #define JQ_WAITFLAG_EXECUTE_ANY 0x2
 #define JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS 0x3
-
-//what to do when out of jobs
+//  what to do when out of jobs
 #define JQ_WAITFLAG_SPIN 0x4
 #define JQ_WAITFLAG_SLEEP 0x8
-
-
 
 #ifdef JQ_NO_STD_FUNCTION
 uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs = 1, int nRange = -1);
@@ -60,6 +102,11 @@ void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS
 bool 		JqIsDone(uint64_t nJob);
 void 		JqStart(int nNumWorkers);
 void 		JqStop();
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////
+/// Implementation
 
 #ifdef JQ_IMPL
 #if defined(__APPLE__)
@@ -89,6 +136,7 @@ int64_t JqTick()
 #define JQ_STRCASECMP _stricmp
 typedef uint32_t ThreadIdType;
 #define JQ_USLEEP(us) JqUsleep(us);
+##define snprintf _snprintf
 int64_t JqTicksPerSecond()
 {
 	static int64_t nTicksPerSecond = 0;	
@@ -155,6 +203,8 @@ void JqUsleep(__int64 usec)
 #define JQ_MICROPROFILE_VERBOSE_SCOPE(a,c) do{}while(0)
 #endif
 
+#define JQ_PRIORITY_SIZE (JQ_PRIORITY_MAX+1)
+
 
 void 		JqStart(int nNumWorkers);
 void 		JqStartop();
@@ -178,6 +228,7 @@ JQ_THREAD_LOCAL uint64_t JqSelfStack[JQ_MAX_JOB_STACK] = {0};
 JQ_THREAD_LOCAL uint32_t JqSelfPos = 0;
 JQ_THREAD_LOCAL uint32_t JqHasLock = 0;
 
+//debug trace
 #if 1
 #define uprintf(...) do{}while(0)
 #else
@@ -230,8 +281,8 @@ struct JqState_t
 	uint32_t nFreeJobs;
 
 	JqWorkEntry Work[JQ_WORK_BUFFER_SIZE];
-	uint16_t nPrioListHead[JQ_PRIORITY_MAX];
-	uint16_t nPrioListTail[JQ_PRIORITY_MAX];
+	uint16_t nPrioListHead[JQ_PRIORITY_SIZE];
+	uint16_t nPrioListTail[JQ_PRIORITY_SIZE];
 
 	JqState_t()
 	:nNumWorkers(0)
@@ -431,7 +482,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 uint16_t JqTakeJob(uint16_t* pSubIndex)
 {
 	JQ_ASSERT_LOCKED();
-	for(int i = 0; i < JQ_PRIORITY_MAX; ++i)
+	for(int i = 0; i < JQ_PRIORITY_SIZE; ++i)
 	{
 		uint16_t nIndex = JqState.nPrioListHead[i];
 		if(nIndex)
@@ -577,6 +628,11 @@ uint16_t JqTakeChildJob(uint64_t nJob, uint16_t* pSubIndexOut)
 
 void JqWorker(int nThreadId)
 {
+#ifdef JQ_MICROPROFILE
+	char sWorker[32];
+	snprintf(sWorker, sizeof(sWorker)-1, "JqWorker %d", nThreadId);
+	MicroProfileOnThreadCreate(&sWorker[0]);
+#endif
 	uprintf("start JQ worker %d\n", nThreadId);
 	while(0 == JqState.nStop)
 	{
@@ -607,6 +663,9 @@ void JqWorker(int nThreadId)
 		}
 	}
 	uprintf("stop JQ worker %d\n", nThreadId);
+#ifdef JQ_MICROPROFILE
+	MicroProfileOnThreadExit();
+#endif
 }
 uint64_t JqNextHandle(uint64_t nJob)
 {
@@ -625,7 +684,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs, int 
 uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 #endif
 {
-	JQ_ASSERT(nPrio < JQ_PRIORITY_MAX);
+	JQ_ASSERT(nPrio < JQ_PRIORITY_SIZE);
 	JQ_ASSERT(nNumJobs);
 	if(nRange < 0)
 	{
