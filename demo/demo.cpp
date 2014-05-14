@@ -241,20 +241,6 @@ void JqTest()
 	uint64_t nJobMedium = JqAdd(JobTree, 0, VOID_PARAM JOB_COUNT);
 
 
-	uint64_t nBatch = 0;
-	//test running out of job queue space.
-	nBatch = JqAdd( [](VOID_ARG int start, int end)
-	{
-		for(int i = 0; i < 1200; ++i)
-		{
-			JqAdd( [](VOID_ARG int begin, int end)
-			{
-				MICROPROFILE_SCOPEI("JQDEMO", "JobBulk", 0x00ff00);
-				JQ_USLEEP(2);
-			}, 7,VOID_PARAM 1);
-		}
-	}, 0, VOID_PARAM 1);
-
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		JQ_USLEEP(500);
@@ -275,10 +261,6 @@ void JqTest()
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
 		JqWait(nJobMedium);
-	}
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitBatch", 0xff0000);
-		JqWait(nBatch);
 	}
 
 	JQ_ASSERT(g_nJobCount == JOB_COUNT);
