@@ -23,9 +23,6 @@
 #include <stdarg.h>
 #include <SDL.h>
 #include <string>
-#include <thread>
-#include <atomic>
-#include <future>
 
 
 #include "microprofile.h"
@@ -156,10 +153,27 @@ std::atomic<int> g_nLowCount;
 #define VOID_PARAM 
 #endif
 
+int JobSpinWork(uint32_t nUs)
+{
+	int result = 0;
+	uint64_t nTick = JqTick();
+	uint64_t nTickEnd = nTick;
+	uint64_t nTicksPerSecond = JqTicksPerSecond();
+	do
+	{	
+		for(int i = 0; i < 1000; ++i)
+		{
+			result |= i << (i^7); //do something.. whatever
+		}	
+	}while( (1000000ull*(JqTick()-nTick)) / nTicksPerSecond < nUs);
+	return result;
+
+}
+
 void JobTree2(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree2", 0xff);
-	JQ_USLEEP(5+ rand() % 100);
+	JobSpinWork(5+ rand() % 100);
 	g_nJobCount2++;
 }
 
@@ -167,7 +181,7 @@ void JobTree1(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree1", 0xff0000);
 	JqAdd(JobTree2, 2, VOID_PARAM JOB_COUNT_2);
-	JQ_USLEEP(50 + rand() % 100);
+	JobSpinWork(50 + rand() % 100);
 	g_nJobCount1++;
 }
 
@@ -175,7 +189,7 @@ void JobTree0(void* pArg, int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree0", 0x00ff00);
 	JqAdd(JobTree1, 2, VOID_PARAM JOB_COUNT_1);
-	JQ_USLEEP(50 + rand() % 100);
+	JobSpinWork(50 + rand() % 100);
 	((int*)pArg)[nStart] = 1;
 	g_nJobCount0++;
 }
@@ -183,7 +197,7 @@ void JobTree0(void* pArg, int nStart, int nEnd)
 void JobTree(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
-	JQ_USLEEP(100);
+	JobSpinWork(100);
 	int lala[3]={0,0,0};
 	#ifdef JQ_NO_STD_FUNCTION
 	uint64_t nJobTree0 = JqAdd(JobTree0, 2, (void*)&lala[0], 3);
@@ -229,12 +243,12 @@ void JqTest()
 	uint64_t nJob = JqAdd( [](VOID_ARG int begin, int end)
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
-		JQ_USLEEP(200);
+		JobSpinWork(200);
 		g_nLowCount++;
 	}, 7, VOID_PARAM JOB_COUNT_LOW);
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
-		JQ_USLEEP(500);
+		JobSpinWork(500);
 	}
 
 
@@ -243,7 +257,7 @@ void JqTest()
 
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
-		JQ_USLEEP(500);
+		JobSpinWork(500);
 	}
 
 

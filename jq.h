@@ -80,7 +80,6 @@ typedef std::function<void (int,int) > JqFunction;
 #include <stddef.h>
 #include <stdint.h>
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////
 /// Interface
 
@@ -136,7 +135,7 @@ int64_t JqTick()
 #define JQ_STRCASECMP _stricmp
 typedef uint32_t ThreadIdType;
 #define JQ_USLEEP(us) JqUsleep(us);
-##define snprintf _snprintf
+#define snprintf _snprintf
 int64_t JqTicksPerSecond()
 {
 	static int64_t nTicksPerSecond = 0;	
@@ -170,6 +169,11 @@ void JqUsleep(__int64 usec)
 	}
 }
 #endif
+
+#include <mutex>
+#include <condition_variable>
+#include <thread>
+
 
 #ifdef JQ_NO_ASSERT
 #define JQ_ASSERT(a) do{}while(0)
@@ -715,7 +719,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 		}
 		JQ_ASSERT(JqState.nFreeJobs != 0);
 		nNextHandle = JqState.nNextHandle;
-		uint64_t nIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
+		uint16_t nIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
 		uint16_t nCount = 0;
 		while(!JqIsDone(nNextHandle))
 		{
