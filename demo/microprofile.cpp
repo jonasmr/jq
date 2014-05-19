@@ -124,8 +124,8 @@ void main(void)   \
 {   \
 	vec4 color = texture(tex, TC0.xy); \
 	if(TC0.x > 1.0 ) \
-	{ \
-		Out0.xyz = Color.xyz; \
+	{  float lala = TC0.x < 2.00001 ? 1 : 0;\
+		Out0.xyz = Color.xyz -lala  +vec3(0,0,0); \
 		Out0.w = Color.w;	 \
 	} \
 	else \
@@ -422,23 +422,23 @@ void MicroProfileDrawBox(int nX0, int nY0, int nX1, int nY1, uint32_t nColor, Mi
 		Q0(pVertex, nX, (float)nX0);
 		Q0(pVertex, nY, (float)nY0);
 		Q0(pVertex, nColor, nColor);
-		Q0(pVertex, fU, 2.f);
-		Q0(pVertex, fV, 2.f);
+		Q0(pVertex, fU, 2.5f);
+		Q0(pVertex, fV, 2.5f);
 		Q1(pVertex, nX, (float)nX1);
 		Q1(pVertex, nY, (float)nY0);
 		Q1(pVertex, nColor, nColor);
-		Q1(pVertex, fU, 2.f);
-		Q1(pVertex, fV, 2.f);
+		Q1(pVertex, fU, 2.5f);
+		Q1(pVertex, fV, 2.5f);
 		Q2(pVertex, nX, (float)nX1);
 		Q2(pVertex, nY, (float)nY1);
 		Q2(pVertex, nColor, nColor);
-		Q2(pVertex, fU, 2.f);
-		Q2(pVertex, fV, 2.f);
+		Q2(pVertex, fU, 2.5f);
+		Q2(pVertex, fV, 2.5f);
 		Q3(pVertex, nX, (float)nX0);
 		Q3(pVertex, nY, (float)nY1);
 		Q3(pVertex, nColor, nColor);
-		Q3(pVertex, fU, 2.f);
-		Q3(pVertex, fV, 2.f);
+		Q3(pVertex, fU, 2.5f);
+		Q3(pVertex, fV, 2.5f);
 	}
 	else
 	{
