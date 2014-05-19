@@ -23,7 +23,7 @@
 // ***********************************************************************
 //
 //
-// Simple JobQueue with priorities & child jobs
+// Simple Job Queue with priorities & child jobs
 // - as soon as a job is added, it can be executed
 // - if a job is added from inside a job it becomes a child job
 // - When waiting for a job you also wait for all children
@@ -226,6 +226,7 @@ void 		JqWaitAll();
 void 		JqPriorityListAdd(uint16_t nJobIndex);
 void 		JqPriorityListRemove(uint16_t nJobIndex);
 uint64_t 	JqSelf();
+bool 		JqPendingJobs(uint64_t nJob);
 
 
 JQ_THREAD_LOCAL uint64_t JqSelfStack[JQ_MAX_JOB_STACK] = {0};
@@ -269,11 +270,6 @@ struct JqJob
 #ifdef JQ_ASSERT_SANITY
 	int nTag;
 #endif
-	JqJob()
-	:nStartedHandle(0)
-	,nFinishedHandle(0)
-	{
-	}
 };
 
 struct JqState_t
@@ -340,6 +336,11 @@ void JqStart(int nNumWorkers)
 	{
 		JqState.pWorkerThreads[i] = std::thread(JqWorker, i);
 	}
+	for(int i = 0; i < JQ_WORK_BUFFER_SIZE; ++i)
+	{
+		JqState.Jobs[i].nStartedHandle = 0;
+		JqState.Jobs[i].nFinishedHandle = 0;	
+	}
 	memset(&JqState.nPrioListHead, 0, sizeof(JqState.nPrioListHead));
 	JqState.nFreeJobs = JQ_NUM_JOBS;
 	JqState.nNextHandle = 1;
@@ -380,6 +381,7 @@ void JqCheckFinished(uint64_t nJob)
 			JqCheckFinished(nParentHandle);
 		}
 		JqState.Jobs[nIndex].nFinishedHandle = JqState.Jobs[nIndex].nStartedHandle;
+		JqState.Jobs[nIndex].Function = nullptr;
 		JqState.nFreeJobs++;
 	}
 }
@@ -562,12 +564,16 @@ void JqLoopChildren(uint16_t nRoot)
 	JqState.Jobs[nRoot].nTag = 0;
 }
 #endif
+
+//this code is O(n) where n is the no. of child nodes.
+//I wish this could be written in a simpler way
 uint16_t JqTakeChildJob(uint64_t nJob, uint16_t* pSubIndexOut)
 {
 	JQ_MICROPROFILE_VERBOSE_SCOPE("JqTakeChildJob", 0xff);
 	JQ_ASSERT_LOCKED();
 	#if JQ_ASSERT_SANITY
 	{
+		//verify that the child iteration is sane
 		for(int i = 0; i < JQ_WORK_BUFFER_SIZE; ++i)
 		{
 			JqState.Jobs[i].nTag = 0;
@@ -726,7 +732,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 		nNextHandle = JqState.nNextHandle;
 		uint16_t nIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
 		uint16_t nCount = 0;
-		while(!JqIsDone(nNextHandle))
+		while(JqPendingJobs(nNextHandle))
 		{
 			nNextHandle = JqNextHandle(nNextHandle);
 			nIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
@@ -784,7 +790,15 @@ bool JqIsDone(uint64_t nJob)
 {
 	uint64_t nIndex = nJob % JQ_WORK_BUFFER_SIZE;
 	JQ_ASSERT(JqState.Jobs[nIndex].nFinishedHandle <= JqState.Jobs[nIndex].nStartedHandle);
-	return JqState.Jobs[nIndex].nFinishedHandle == JqState.Jobs[nIndex].nStartedHandle;
+	int64_t nDiff = (int64_t)(JqState.Jobs[nIndex].nFinishedHandle - nJob);
+	return nDiff >= 0;
+}
+
+bool JqPendingJobs(uint64_t nJob)
+{
+	uint64_t nIndex = nJob % JQ_WORK_BUFFER_SIZE;
+	JQ_ASSERT(JqState.Jobs[nIndex].nFinishedHandle <= JqState.Jobs[nIndex].nStartedHandle);
+	return JqState.Jobs[nIndex].nFinishedHandle != JqState.Jobs[nIndex].nStartedHandle;
 }
 
 
