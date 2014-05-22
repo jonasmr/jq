@@ -180,7 +180,10 @@ void JobTree2(VOID_ARG int nStart, int nEnd)
 void JobTree1(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree1", 0xff0000);
-	JqAdd(JobTree2, 2, VOID_PARAM JOB_COUNT_2);
+	for(int i = 0; i < JOB_COUNT_2; ++i)
+	{
+		JqAdd(JobTree2, 2, VOID_PARAM 1);
+	}
 	JobSpinWork(50 + rand() % 100);
 	g_nJobCount1++;
 }
@@ -188,7 +191,10 @@ void JobTree1(VOID_ARG int nStart, int nEnd)
 void JobTree0(void* pArg, int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree0", 0x00ff00);
-	JqAdd(JobTree1, 2, VOID_PARAM JOB_COUNT_1);
+	for(int i = 0; i < JOB_COUNT_1; ++i)
+	{
+		JqAdd(JobTree1, 2, VOID_PARAM 1);
+	}
 	JobSpinWork(50 + rand() % 100);
 	((int*)pArg)[nStart] = 1;
 	g_nJobCount0++;
@@ -254,6 +260,15 @@ void JqTest()
 
 	uint64_t nJobMedium = JqAdd(JobTree, 0, VOID_PARAM JOB_COUNT);
 
+	{
+		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
+		JqWait(nJobMedium);
+	}
+
+	JQ_ASSERT(g_nJobCount == JOB_COUNT);
+	JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
+	JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+	JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
@@ -272,17 +287,10 @@ void JqTest()
 			JqWait(nJob);
 		}
 	}
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
-		JqWait(nJobMedium);
-	}
 
-	JQ_ASSERT(g_nJobCount == JOB_COUNT);
-	JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
-	JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
-	JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 	JQ_ASSERT(g_nLowCount == JOB_COUNT_LOW);
-	
+
+
 	static int nNumJobs = 1;
 	static int nRange = (4<<10)-5;
 

@@ -76,7 +76,7 @@ typedef void (*JqFunction)(void*, int, int);
 typedef std::function<void (int,int) > JqFunction;
 #endif
 
-
+#define JQ_ASSERT_SANITY 1
 #include <stddef.h>
 #include <stdint.h>
 
@@ -233,13 +233,6 @@ JQ_THREAD_LOCAL uint64_t JqSelfStack[JQ_MAX_JOB_STACK] = {0};
 JQ_THREAD_LOCAL uint32_t JqSelfPos = 0;
 JQ_THREAD_LOCAL uint32_t JqHasLock = 0;
 
-//debug trace
-#if 1
-#define uprintf(...) do{}while(0)
-#else
-#define uprintf printf
-#endif
-
 
 struct JqJob
 {
@@ -350,7 +343,6 @@ void JqStop()
 {
 	JqWaitAll();
 	JqState.nStop = 1;
-	uprintf("notify exit\n");
 	{
 		JqMutexLock<std::mutex> lock(JqState.Mutex);
 		JqState.nReleaseCount += JqState.nNumWorkers;
@@ -378,6 +370,7 @@ void JqCheckFinished(uint64_t nJob)
 		if(nParent)
 		{
 			uint64_t nParentHandle = JqDetachChild(nJob);
+			JqState.Jobs[nIndex].nParent = 0;
 			JqCheckFinished(nParentHandle);
 		}
 		JqState.Jobs[nIndex].nFinishedHandle = JqState.Jobs[nIndex].nStartedHandle;
@@ -413,7 +406,6 @@ void JqAttachChild(uint64_t nParentJob, uint64_t nChildJob)
 	JQ_ASSERT_LOCKED();
 	uint16_t nParentIndex = nParentJob % JQ_WORK_BUFFER_SIZE;
 	uint16_t nChildIndex = nChildJob % JQ_WORK_BUFFER_SIZE;
-	uprintf("attach %d to %d\n", nChildIndex, nParentIndex);
 	uint16_t nFirstChild = JqState.Jobs[nParentIndex].nFirstChild;
 	JqState.Jobs[nChildIndex].nParent = nParentIndex;
 	JqState.Jobs[nChildIndex].nSibling = nFirstChild;
@@ -431,10 +423,8 @@ uint64_t JqDetachChild(uint64_t nChildJob)
 	JQ_ASSERT(JqState.Jobs[nChildIndex].nNumFinished == JqState.Jobs[nChildIndex].nNumStarted);
 	if(0 == nParentIndex)
 	{
-		uprintf("not detaching 0 parent\n");
 		return 0;
 	}
-	uprintf("detach %d from %d\n", nChildIndex, nParentIndex);
 
 	JQ_ASSERT(nParentIndex != 0);
 	JQ_ASSERT(JqState.Jobs[nChildIndex].nFirstChild == 0);
@@ -511,7 +501,9 @@ void JqTagChildren(uint16_t nRoot)
 	{
 		JQ_ASSERT(JqState.Jobs[i].nTag == 0);
 		if(nRoot == i)
+		{
 			JqState.Jobs[i].nTag = 1;
+		}
 		else
 		{
 			int nParent = JqState.Jobs[i].nParent;
@@ -526,7 +518,33 @@ void JqTagChildren(uint16_t nRoot)
 			}
 		}
 	}
+
 }
+void JqCheckTagChildren(uint16_t nRoot)
+{
+	for(int i = 1; i < JQ_WORK_BUFFER_SIZE; ++i)
+	{
+		JQ_ASSERT(JqState.Jobs[i].nTag == 0);
+		bool bTagged = false;
+		if(nRoot == i)
+			bTagged = false;
+		else
+		{
+			int nParent = JqState.Jobs[i].nParent;
+			while(nParent)
+			{
+				if(nParent == nRoot)
+				{
+					bTagged = true;
+					break;
+				}
+				nParent = JqState.Jobs[nParent].nParent;
+			}
+		}
+		JQ_ASSERT(bTagged == (1==JqState.Jobs[i].nTag));
+	}
+}
+
 void JqLoopChildren(uint16_t nRoot)
 {
 	int nNext = JqState.Jobs[nRoot].nFirstChild;
@@ -565,6 +583,35 @@ void JqLoopChildren(uint16_t nRoot)
 }
 #endif
 
+
+//Depth first. Once a node is visited all child nodes have been visited
+uint16_t JqTreeIterate(uint64_t nJob, uint16_t nCurrent)
+{
+	JQ_ASSERT(nJob);
+	uint16_t nRoot = nJob % JQ_WORK_BUFFER_SIZE;
+	if(nRoot == nCurrent)
+	{
+		while(JqState.Jobs[nCurrent].nFirstChild)
+			nCurrent = JqState.Jobs[nCurrent].nFirstChild;
+	}
+	else
+	{
+		//once here all child nodes _have_ been processed.
+		if(JqState.Jobs[nCurrent].nSibling)
+		{
+			nCurrent = JqState.Jobs[nCurrent].nSibling;
+			while(JqState.Jobs[nCurrent].nFirstChild) //child nodes first.
+				nCurrent = JqState.Jobs[nCurrent].nFirstChild;
+		}
+		else
+		{
+			nCurrent = JqState.Jobs[nCurrent].nParent;
+		}
+	}
+	return nCurrent;
+}
+
+
 //this code is O(n) where n is the no. of child nodes.
 //I wish this could be written in a simpler way
 uint16_t JqTakeChildJob(uint64_t nJob, uint16_t* pSubIndexOut)
@@ -579,66 +626,38 @@ uint16_t JqTakeChildJob(uint64_t nJob, uint16_t* pSubIndexOut)
 			JqState.Jobs[i].nTag = 0;
 		}
 		JqTagChildren(nJob%JQ_WORK_BUFFER_SIZE);
-		JqLoopChildren(nJob%JQ_WORK_BUFFER_SIZE);
+		uint16_t nIndex = nJob%JQ_WORK_BUFFER_SIZE;
+		uint16_t nRootIndex = nJob % JQ_WORK_BUFFER_SIZE;
+		do
+		{
+			nIndex = JqTreeIterate(nJob, nIndex);
+			JQ_ASSERT(JqState.Jobs[nIndex].nTag == 1);
+			JqState.Jobs[nIndex].nTag = 0;
+		}while(nIndex != nRootIndex);
+		for(int i = 0; i < JQ_WORK_BUFFER_SIZE; ++i)
+		{
+			JQ_ASSERT(JqState.Jobs[i].nTag == 0);
+		}
 	}
 	#endif
 
-	int16_t nRoot = nJob % JQ_WORK_BUFFER_SIZE;
-	int16_t nWork = 0;
+	uint16_t nRoot = nJob % JQ_WORK_BUFFER_SIZE;
+	uint16_t nIndex = nRoot;
+	uint16_t nWork = 0;
 
-
-	int nNext = JqState.Jobs[nRoot].nFirstChild;
-	while(nNext != nRoot && nNext && nWork == 0)
+	do
 	{
-		while(JqState.Jobs[nNext].nFirstChild)
-			nNext = JqState.Jobs[nNext].nFirstChild;
-		if(JqState.Jobs[nNext].nNumStarted < JqState.Jobs[nNext].nNumJobs)
+		nIndex = JqTreeIterate(nJob, nIndex);
+		JQ_ASSERT(nIndex);
+
+		if(JqState.Jobs[nIndex].nNumStarted < JqState.Jobs[nIndex].nNumJobs)
 		{
-			nWork = nNext;
-			break;
+			*pSubIndexOut = JqIncrementStarted(JqState.Jobs[nIndex].nStartedHandle);
+			return nIndex;
 		}
-		if(JqState.Jobs[nNext].nSibling)
-			nNext = JqState.Jobs[nNext].nSibling;
-		else
-		{
-			//search up
-			nNext = JqState.Jobs[nNext].nParent;
-			while(nNext != nRoot)
-			{
-				if(JqState.Jobs[nNext].nNumStarted < JqState.Jobs[nNext].nNumJobs)
-				{
-					nWork = nNext;
-					break;
-				}
-
-				if(JqState.Jobs[nNext].nSibling)
-				{
-					nNext = JqState.Jobs[nNext].nSibling;
-					break;
-				}
-				else
-				{
-					nNext = JqState.Jobs[nNext].nParent;
-				}
-
-			}
-		}
-	}
-
-	if(0 == nWork && JqState.Jobs[nRoot].nNumStarted < JqState.Jobs[nRoot].nNumJobs)
-	{
-		nWork = nRoot;
-	}
-	JQ_ASSERT(0 == nWork || JqState.Jobs[nWork].nNumStarted < JqState.Jobs[nWork].nNumJobs);
-	if(nWork)
-	{
-		*pSubIndexOut = JqIncrementStarted(JqState.Jobs[nWork].nStartedHandle);
-		return nWork;
-	}
-	else
-	{
-		return 0;
-	}
+	}while(nIndex != nRoot);
+	
+	return 0;
 }
 
 void JqWorker(int nThreadId)
@@ -648,13 +667,12 @@ void JqWorker(int nThreadId)
 	snprintf(sWorker, sizeof(sWorker)-1, "JqWorker %d", nThreadId);
 	MicroProfileOnThreadCreate(&sWorker[0]);
 #endif
-	uprintf("start JQ worker %d\n", nThreadId);
+
 	while(0 == JqState.nStop)
 	{
 		uint16_t nWork = 0;
 		uint16_t nSubIndex = 0;
 		{
-			uprintf("worker waiting for signal %d\n", nThreadId);
 			std::unique_lock<std::mutex> lock(JqState.Mutex);
 			while(!JqState.nReleaseCount)
 			{
@@ -663,21 +681,17 @@ void JqWorker(int nThreadId)
 			JQ_ASSERT_LOCK_ENTER();
 			JqState.nReleaseCount--;
 
-			uprintf("worker woke up %d\n", nThreadId);
 			nSubIndex = 0;
 			nWork = JqTakeJob(&nSubIndex);
 			JQ_ASSERT_LOCK_LEAVE();
 		}
 		while(nWork)
 		{
-			uprintf("worker %d executing %d,%d\n", nThreadId, nWork, nSubIndex);
-			JqExecuteJob(JqState.Jobs[nWork].nStartedHandle, nSubIndex);
-			
+			JqExecuteJob(JqState.Jobs[nWork].nStartedHandle, nSubIndex);			
 			JqMutexLock<std::mutex> lock(JqState.Mutex);
 			nWork = JqTakeJob(&nSubIndex);
 		}
 	}
-	uprintf("stop JQ worker %d\n", nThreadId);
 #ifdef JQ_MICROPROFILE
 	MicroProfileOnThreadExit();
 #endif
@@ -712,13 +726,12 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 		{
 			if(JqSelfPos < JQ_MAX_JOB_STACK)
 			{
-				JQ_MICROPROFILE_SCOPE("JqAdd Executing Job", 0xff0000); // if this starts happening the job queue size should be increased..
+				JQ_MICROPROFILE_SCOPE("AddExecute", 0xff0000); // if this starts happening the job queue size should be increased..
 				uint16_t nSubIndex = 0;
 				uint16_t nIndex = JqTakeJob(&nSubIndex);
 				if(nIndex)
 				{
 					Lock.Unlock();
-					uprintf("JqAdd: job queue full. executing %d,%d\n", nIndex, nSubIndex);
 					JqExecuteJob(JqState.Jobs[nIndex].nStartedHandle, nSubIndex);
 					Lock.Lock();
 				}
@@ -764,7 +777,6 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 
 	if(nNumJobs < JqState.nNumWorkers)
 	{
-		uprintf("notifying %d\n", nNumJobs);
 		{
 			JqMutexLock<std::mutex> lock(JqState.Mutex);
 			JqState.nReleaseCount += nNumJobs;
@@ -776,7 +788,6 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 	}
 	else
 	{
-		uprintf("notifying all\n");
 		{
 			JqMutexLock<std::mutex> lock(JqState.Mutex);
 			JqState.nReleaseCount += JqState.nNumWorkers;
@@ -815,7 +826,6 @@ void JqWaitAll()
 		if(nIndex)
 		{
 			JqExecuteJob(JqState.Jobs[nIndex].nStartedHandle, nSubIndex);
-			uprintf("waitall executed job\n");
 		}
 		else
 		{
