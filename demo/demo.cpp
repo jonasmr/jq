@@ -153,17 +153,17 @@ std::atomic<int> g_nLowCount;
 #define VOID_PARAM 
 #endif
 
-int JobSpinWork(uint32_t nUs)
+
+uint32_t JobSpinWork(uint32_t nUs)
 {
-	int result = 0;
+	uint32_t result = 0;
 	uint64_t nTick = JqTick();
-	uint64_t nTickEnd = nTick;
 	uint64_t nTicksPerSecond = JqTicksPerSecond();
 	do
 	{	
-		for(int i = 0; i < 1000; ++i)
+		for(uint32_t i = 0; i < 1000; ++i)
 		{
-			result |= i << (i^7); //do something.. whatever
+			result |= i << (i&7); //do something.. whatever
 		}	
 	}while( (1000000ull*(JqTick()-nTick)) / nTicksPerSecond < nUs);
 	return result;
@@ -177,6 +177,7 @@ void JobTree2(VOID_ARG int nStart, int nEnd)
 	g_nJobCount2++;
 }
 
+
 void JobTree1(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree1", 0xff0000);
@@ -187,6 +188,7 @@ void JobTree1(VOID_ARG int nStart, int nEnd)
 	JobSpinWork(50 + rand() % 100);
 	g_nJobCount1++;
 }
+
 
 void JobTree0(void* pArg, int nStart, int nEnd)
 {

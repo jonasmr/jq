@@ -643,7 +643,6 @@ uint16_t JqTakeChildJob(uint64_t nJob, uint16_t* pSubIndexOut)
 
 	uint16_t nRoot = nJob % JQ_WORK_BUFFER_SIZE;
 	uint16_t nIndex = nRoot;
-	uint16_t nWork = 0;
 
 	do
 	{
@@ -860,14 +859,13 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 			if(nWaitFlag & JQ_WAITFLAG_SPIN)
 			{
 				uint64_t nTick = JqTick();
-				uint64_t nTickEnd = nTick;
 				uint64_t nTicksPerSecond = JqTicksPerSecond();
 				do
 				{
-					int result = 0;
-					for(int i = 0; i < 1000; ++i)
+					uint32_t result = 0;
+					for(uint32_t i = 0; i < 1000; ++i)
 					{
-						result |= i << (i^7); //do something.. whatever
+						result |= i << (i&7); //do something.. whatever
 					}
 					JqSpinloop |= result; //write it somewhere so the optimizer can't remote it
 				}while( (1000000ull*(JqTick()-nTick)) / nTicksPerSecond < nUsWaitTime);
