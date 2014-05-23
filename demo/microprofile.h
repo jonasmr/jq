@@ -528,9 +528,10 @@ inline MicroProfileLogEntry MicroProfileMakeLogIndex(uint64_t nBegin, MicroProfi
 
 inline int64_t MicroProfileLogTickDifference(MicroProfileLogEntry Start, MicroProfileLogEntry End)
 {
-	int64_t nStart = Start;
-	int64_t nEnd = End;
-	return ((nEnd<<16) - (nStart<<16))>>16;
+	uint64_t nStart = Start;
+	uint64_t nEnd = End;
+	int64_t nDiff = ((nEnd<<16) - (nStart<<16));
+	return nDiff>>16;
 }
 
 inline int64_t MicroProfileLogGetTick(MicroProfileLogEntry e)
