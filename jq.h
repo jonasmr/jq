@@ -65,8 +65,9 @@
 #define JQ_DEFAULT_WAIT_TIME_US 100
 #endif
 
-#ifndef JQ_BUFFER_FULL_USLEEP
-#define JQ_BUFFER_FULL_WAIT_TIME_US 100
+
+#ifndef JQ_API
+#define JQ_API
 #endif
 
 #ifdef JQ_NO_STD_FUNCTION
@@ -93,14 +94,16 @@ typedef std::function<void (int,int) > JqFunction;
 #define JQ_WAITFLAG_SLEEP 0x8
 
 #ifdef JQ_NO_STD_FUNCTION
-uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs = 1, int nRange = -1);
+JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs = 1, int nRange = -1);
 #else
-uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1);
+JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1);
 #endif
-void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SLEEP, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-bool 		JqIsDone(uint64_t nJob);
-void 		JqStart(int nNumWorkers);
-void 		JqStop();
+JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SLEEP, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
+JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SLEEP, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
+JQ_API uint64_t		JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SLEEP, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
+JQ_API bool 		JqIsDone(uint64_t nJob);
+JQ_API void 		JqStart(int nNumWorkers);
+JQ_API void 		JqStop();
 
 
 
@@ -136,6 +139,7 @@ int64_t JqTick()
 typedef uint32_t ThreadIdType;
 #define JQ_USLEEP(us) JqUsleep(us);
 #define snprintf _snprintf
+#include <windows.h>
 int64_t JqTicksPerSecond()
 {
 	static int64_t nTicksPerSecond = 0;	
@@ -714,6 +718,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 {
 	JQ_ASSERT(nPrio < JQ_PRIORITY_SIZE);
 	JQ_ASSERT(nNumJobs);
+	JQ_ASSERT(JqState.nNumWorkers);
 	if(nRange < 0)
 	{
 		nRange = nNumJobs;
@@ -756,7 +761,8 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 		JqJob* pEntry = &JqState.Jobs[nIndex];
 		JQ_ASSERT(pEntry->nFinishedHandle < nNextHandle);
 		pEntry->nStartedHandle = nNextHandle;
-		pEntry->nNumJobs = nNumJobs;
+		JQ_ASSERT(nNumJobs <= 0xffff);
+		pEntry->nNumJobs = (uint16_t)nNumJobs;
 		pEntry->nNumStarted = 0;
 		pEntry->nNumFinished = 0;
 		pEntry->nRange = nRange;
@@ -880,9 +886,28 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 		{
 			JqExecuteJob(JqState.Jobs[nIndex].nStartedHandle, nSubIndex);
 		}
-
 	}
 }
+
+
+void JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint32_t nUsWaitTime)
+{
+	for(uint32_t i = 0; i < nNumJobs; ++i)
+	{
+		if(!JqIsDone(pJobs[i]))
+		{
+			JqWait(pJobs[i], nWaitFlag, nUsWaitTime);
+		}
+	}
+}
+
+uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint32_t nUsWaitTime)
+{
+	JQ_BREAK(); //todo
+	return 0;
+}
+
+
 
 uint64_t JqSelf()
 {
