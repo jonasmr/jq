@@ -341,6 +341,45 @@ void JqTest()
 				JQ_BREAK();
 		}
 	}
+	{
+		MICROPROFILE_SCOPEI("JQDEMO", "GroupTest", 0x66ff33);
+
+		int lala[20] = {0};
+		uint64_t nJobGroup = JqGroupBegin();
+
+#ifndef JQ_NO_STD_FUNCTION
+		for(int i = 0; i < 20; ++i)
+		{
+			JqAdd([i, &lala](int b, int e)
+			{
+				MICROPROFILE_SCOPEI("JQDEMO", "GroupJob", 0x33ff33);
+				JobSpinWork(1000);
+				lala[i] = 1;
+			}, 7, 1);
+		}
+#else
+		for(int i = 0; i < 20; ++i)
+		{
+			JqAdd([](void* p, int b, int e)
+			{
+				MICROPROFILE_SCOPEI("JQDEMO", "GroupJob", 0x33ff00);
+
+				JobSpinWork(1000);
+				((int*)p)[0] = 1;
+			}, &p[i], 7, 1);
+		}
+#endif
+		JqGroupEnd();
+
+		MICROPROFILE_SCOPEI("JQDEMO", "GroupWait", 0x77ff00);
+
+		JqWait(nJobGroup);
+		for(int i = 0; i < 20; ++i)
+		{
+			JQ_ASSERT(lala[i] == 1);
+		}
+
+	}
 }
 
 
