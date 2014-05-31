@@ -41,7 +41,6 @@ void uprintf(const char* fmt, ...)
 #endif
 
 
-
 #define MICRO_PROFILE_IMPL
 #include "microprofile.h"
 #include "glinc.h"
@@ -90,6 +89,7 @@ namespace
 	int 	g_LocTC0In;
 	int 	g_LocTex;
 	int 	g_LocProjectionMatrix;
+	int 	g_LocfRcpFontHeight;
 
 	float g_Projection[16];
 
@@ -116,6 +116,7 @@ namespace
 	const char* g_PixelShaderCode = "\
 #version 150 \n \
 uniform sampler2D tex; \
+uniform float fRcpFontHeight; \
 in vec2 TC0; \
 in vec4 Color; \
 out vec4 Out0; \
@@ -124,20 +125,20 @@ void main(void)   \
 {   \
 	vec4 color = texture(tex, TC0.xy); \
 	if(TC0.x > 1.0 ) \
-	{  float lala = TC0.x < 2.00001 ? 1 : 0;\
-		Out0.xyz = Color.xyz -lala  +vec3(0,0,0); \
+	{ \
+		Out0.xyz = Color.xyz; \
 		Out0.w = Color.w;	 \
 	} \
 	else \
 	{ \
+		vec4 c1 = texture(tex, TC0.xy + vec2(0.0, fRcpFontHeight));\
 		Out0 = color * Color; \
-		if(color.w < 0.5) \
-			discard; \
-			\
+		if(color.w < 0.5){ \
+			Out0 = vec4(0,0,0,c1.w);\
+		}\
 	} \
 } \
 ";
-
 	const char* g_VertexShaderCode = " \
 #version 150 \n \
 uniform mat4 ProjectionMatrix; \
@@ -214,6 +215,9 @@ void main(void)   \
 	}
 }
 
+#define FONT_TEX_X 1024
+#define FONT_TEX_Y 9
+#define UNPACKED_SIZE (FONT_TEX_X*FONT_TEX_Y * 4)
 
 
 void MicroProfileDrawInit()
@@ -238,6 +242,7 @@ void MicroProfileDrawInit()
 
 	g_LocTex = glGetUniformLocation(g_Program, "tex");
 	g_LocProjectionMatrix = glGetUniformLocation(g_Program, "ProjectionMatrix");
+	g_LocfRcpFontHeight = glGetUniformLocation(g_Program, "fRcpFontHeight");
 
 	for(uint32_t i = 0; i < MAX_FONT_CHARS; ++i)
 	{
@@ -271,9 +276,7 @@ void MicroProfileDrawInit()
 	{
 		g_FontDescription.nCharOffsets[i] = (i-'{')*8+721+8;
 	}
-#define FONT_TEX_X 1024
-#define FONT_TEX_Y 9
-#define UNPACKED_SIZE (FONT_TEX_X*FONT_TEX_Y * 4)
+
 	uint32_t* pUnpacked = (uint32_t*)alloca(UNPACKED_SIZE);
 	int idx = 0;
 	int end = FONT_TEX_X * FONT_TEX_Y / 8;
@@ -321,6 +324,7 @@ void MicroProfileFlush()
 
 	glUniform1i(g_LocTex, 0);
 	glUniformMatrix4fv(g_LocProjectionMatrix, 1, 0, g_Projection);
+	glUniform1f(g_LocfRcpFontHeight, 1.0f / FONT_TEX_Y);
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, g_FontTexture);
@@ -364,11 +368,11 @@ void MicroProfileEndDraw()
 
 
 
-void MicroProfileDrawText(int nX, int nY, uint32_t nColor, const char* pText)
+void MicroProfileDrawText(int nX, int nY, uint32_t nColor, const char* pText, uint32_t nLen)
 {
 	MICROPROFILE_SCOPEI("MicroProfile", "TextDraw", 0xff88ee);
 	const float fOffsetU = 5.f / 1024.f;
-	uint32_t nLen = (uint32_t)strlen(pText);
+	MP_ASSERT(nLen <= strlen(pText));
 	float fX = (float)nX;
 	float fY = (float)nY;
 	float fY2 = fY + (MICROPROFILE_TEXT_HEIGHT+1);
@@ -421,23 +425,23 @@ void MicroProfileDrawBox(int nX0, int nY0, int nX1, int nY1, uint32_t nColor, Mi
 		Q0(pVertex, nX, (float)nX0);
 		Q0(pVertex, nY, (float)nY0);
 		Q0(pVertex, nColor, nColor);
-		Q0(pVertex, fU, 2.5f);
-		Q0(pVertex, fV, 2.5f);
+		Q0(pVertex, fU, 2.f);
+		Q0(pVertex, fV, 2.f);
 		Q1(pVertex, nX, (float)nX1);
 		Q1(pVertex, nY, (float)nY0);
 		Q1(pVertex, nColor, nColor);
-		Q1(pVertex, fU, 2.5f);
-		Q1(pVertex, fV, 2.5f);
+		Q1(pVertex, fU, 2.f);
+		Q1(pVertex, fV, 2.f);
 		Q2(pVertex, nX, (float)nX1);
 		Q2(pVertex, nY, (float)nY1);
 		Q2(pVertex, nColor, nColor);
-		Q2(pVertex, fU, 2.5f);
-		Q2(pVertex, fV, 2.5f);
+		Q2(pVertex, fU, 2.f);
+		Q2(pVertex, fV, 2.f);
 		Q3(pVertex, nX, (float)nX0);
 		Q3(pVertex, nY, (float)nY1);
 		Q3(pVertex, nColor, nColor);
-		Q3(pVertex, fU, 2.5f);
-		Q3(pVertex, fV, 2.5f);
+		Q3(pVertex, fU, 2.f);
+		Q3(pVertex, fV, 2.f);
 	}
 	else
 	{
