@@ -1028,6 +1028,8 @@ MicroProfileThreadLog* MicroProfileCreateThreadLog(const char* pName)
 	if(S.nFreeListHead != -1)
 	{
 		pLog = S.Pool[S.nFreeListHead];
+		MP_ASSERT(pLog->nPut.load() == 0);
+		MP_ASSERT(pLog->nGet.load() == 0);
 		S.nFreeListHead = S.Pool[S.nFreeListHead]->nFreeListNext;
 	}
 	else
@@ -1077,6 +1079,8 @@ void MicroProfileOnThreadExit()
 		MP_ASSERT(nLogIndex < MICROPROFILE_MAX_THREADS && nLogIndex > 0);
 		pLog->nFreeListNext = S.nFreeListHead;
 		pLog->nActive = 0;
+		pLog->nPut.store(0);
+		pLog->nGet.store(0);
 		S.nFreeListHead = nLogIndex;
 		for(int i = 0; i < MICROPROFILE_MAX_FRAME_HISTORY; ++i)
 		{
@@ -1374,8 +1378,6 @@ void MicroProfileFlip()
 
 		uint64_t nFrameStartCpu = pFrameCurrent->nFrameStartCpu;
 		uint64_t nFrameEndCpu = pFrameNext->nFrameStartCpu;
-		uint64_t nFrameStartGpu = pFrameCurrent->nFrameStartGpu;
-		uint64_t nFrameEndGpu = pFrameNext->nFrameStartGpu;
 
 		{
 			uint64_t nTick = nFrameEndCpu - nFrameStartCpu;
@@ -1429,21 +1431,13 @@ void MicroProfileFlip()
 					MicroProfileThreadLog* pLog = S.Pool[i];
 					if(!pLog) 
 						continue;
-					
 
 					uint32_t nPut = pFrameNext->nLogStart[i];
 					uint32_t nGet = pFrameCurrent->nLogStart[i];
-					if(!pLog->nActive)
-					{
-						MP_ASSERT(nPut == 0);
-						MP_ASSERT(nGet == 0);
-					}
 					uint32_t nRange[2][2] = { {0, 0}, {0, 0}, };
 					MicroProfileGetRange(nPut, nGet, nRange);
 
 
-					uint64_t nFrameStart = pLog->nGpu ? nFrameStartGpu : nFrameStartCpu;
-					uint64_t nFrameEnd = pLog->nGpu ? nFrameEndGpu : nFrameEndCpu;
 					//fetch gpu results.
 					if(pLog->nGpu)
 					{
@@ -1497,9 +1491,7 @@ void MicroProfileFlip()
 									int64_t nTickStart = pLog->Log[pStack[nStackPos-1]];
 									int64_t nTicks = MicroProfileLogTickDifference(nTickStart, LE);
 									int64_t nChildTicks = pChildTickStack[nStackPos];
-									int nIdx0 = MicroProfileLogTimerIndex(pLog->Log[pStack[nStackPos-1]]);
-									int nIdx1 = MicroProfileLogTimerIndex(LE);
-									MP_ASSERT(nIdx0 == nIdx1);
+									MP_ASSERT(MicroProfileLogTimerIndex(pLog->Log[pStack[nStackPos-1]]) == MicroProfileLogTimerIndex(LE));
 									nStackPos--;
 									pChildTickStack[nStackPos] += nTicks;
 
