@@ -131,9 +131,13 @@ class JqFunction {
 public:
 	template <typename F>
 	JqFunction(F f) {
-		static_assert(std::is_trivial<F>::value, "Only captures of trivial types supported. Use std::function if you think you need non-trivial types");
+		static_assert(std::is_trivially_copyable<F>::value, "Only captures of trivial types supported. Use std::function if you think you need non-trivial types");
 		static_assert(sizeof(F) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
+#ifdef _WIN32
+		static_assert(__alignof(F) <= __alignof(void*), "Alignment requirements too high");
+#else
 		static_assert(alignof(F) <= alignof(void*), "Alignment requirements too high");
+#endif
 		new (Base()) JqCallable<F>(f);
 	}
 	JqFunction(){}
