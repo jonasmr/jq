@@ -29,8 +29,13 @@
 // - When waiting for a job you also wait for all children
 // - Implemented using c++11 thread/mutex/condition_variable
 // - _not_ using jobstealing & per thread queues, so unsuitable for lots of very small jobs w. high contention
-// - Optional use of std::function. use JQ_NO_STD_FUNCTION to disable.
-//   use std::function if you want to capture variables, but be aware that it might allocate
+// - Different ways to store functions entrypoints
+//     default: builtin fixed size (JQ_FUNCTION_SIZE) byte callback object. 
+//              only for trivial types(memcpyable), compilation fails otherwise
+//              never allocates, fails compilation if lambda contains more than JQ_FUNCTION_SIZE bytes.
+//     define JQ_NO_LAMBDAS: raw function pointer with void* argument. Adds extra argument to JqAdd
+//     define JQ_USE_STD_FUNCTION: use std::function. This will do a heap alloc if you capture too much (24b on osx, 16 on win32).
+//     
 // - Built in support for splitting ranges between jobs
 //
 //   example usage
@@ -83,14 +88,66 @@
 #define JQ_API
 #endif
 
-#ifdef JQ_NO_STD_FUNCTION
-typedef void (*JqFunction)(void*, int, int);
-#else
-#include <functional>
-typedef std::function<void (int,int) > JqFunction;
+#ifndef JQ_FUNCTION_SIZE
+#define JQ_FUNCTION_SIZE 64
 #endif
 
 #define JQ_ASSERT_SANITY 0
+
+
+
+#ifdef JQ_NO_LAMBDA
+typedef void (*JqFunction)(void*, int, int);
+#ifdef JQ_USE_STD_FUNCTION
+#error "JQ_NO_LAMBDA and JQ_USE_STD_FUNCTION cannot both be defined"
+#endif
+#else
+#ifdef JQ_USE_STD_FUNCTION
+#include <functional>
+typedef std::function<void (int,int) > JqFunction;
+#else
+#include <type_traits>
+//minimal lambda implementation without support for non-trivial types
+//and fixed memory footprint
+struct JqCallableBase {
+   virtual void operator()(int begin, int end) = 0;
+};
+template <typename F>
+struct JqCallable : JqCallableBase {
+   F functor;
+   JqCallable(F functor) : functor(functor) {}
+   virtual void operator()(int a, int b) { functor(a, b); }
+};
+class JqFunction {
+	union
+	{
+		char buffer[JQ_FUNCTION_SIZE];
+		void* vptr;//alignment helper and a way to clear the vptr
+	};
+	JqCallableBase* Base()
+	{
+		return (JqCallableBase*)&buffer[0];
+	}
+public:
+	template <typename F>
+	JqFunction(F f) {
+		static_assert(std::is_trivial<F>::value, "Only captures of trivial types supported. Use std::function if you think you need non-trivial types");
+		static_assert(sizeof(F) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
+		static_assert(alignof(F) <= alignof(void*), "Alignment requirements too high");
+		new (Base()) JqCallable<F>(f);
+	}
+	JqFunction(){}
+	void Clear(){ vptr = 0;}
+	void operator()(int a, int b) { (*Base())(a, b); }
+};
+#define JQ_CLEAR_FUNCTION(f) do{f.Clear();}while(0)
+#endif
+#endif
+
+#ifndef JQ_CLEAR_FUNCTION
+#define JQ_CLEAR_FUNCTION(f) do{f = nullptr;}while(0)
+#endif
+
 
 
 #include <stddef.h>
@@ -108,7 +165,7 @@ typedef std::function<void (int,int) > JqFunction;
 #define JQ_WAITFLAG_SPIN 0x4
 #define JQ_WAITFLAG_SLEEP 0x8
 
-#ifdef JQ_NO_STD_FUNCTION
+#ifdef JQ_NO_LAMBDA
 JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs = 1, int nRange = -1);
 #else
 JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1);
@@ -264,7 +321,7 @@ JQ_THREAD_LOCAL uint32_t JqHasLock = 0;
 struct JqJob
 {
 	JqFunction Function;
-#ifdef JQ_NO_STD_FUNCTION
+#ifdef JQ_NO_LAMBDA
 	void* pArg;
 #endif
 
@@ -437,7 +494,7 @@ void JqCheckFinished(uint64_t nJob)
 			JqCheckFinished(nParentHandle);
 		}
 		JqState.Jobs[nIndex].nFinishedHandle = JqState.Jobs[nIndex].nStartedHandle;
-		JqState.Jobs[nIndex].Function = nullptr;
+		JQ_CLEAR_FUNCTION(JqState.Jobs[nIndex].Function);
 		JqState.nFreeJobs++;
 	}
 }
@@ -544,7 +601,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 	int nRemainder = nRange - nFraction * nNumJobs;	
 	int nStart = JqGetRangeStart(nSubIndex, nFraction, nRemainder);
 	int nEnd = JqGetRangeStart(nSubIndex+1, nFraction, nRemainder);
-#ifdef JQ_NO_STD_FUNCTION
+#ifdef JQ_NO_LAMBDA
 	JqState.Jobs[nWorkIndex].Function(JqState.Jobs[nWorkIndex].pArg, nStart, nEnd);
 #else
 	JqState.Jobs[nWorkIndex].Function(nStart, nEnd);
@@ -809,7 +866,7 @@ uint64_t JqFindHandle(JqMutexLock<std::mutex>& Lock)
 	return nNextHandle;
 }
 
-#ifdef JQ_NO_STD_FUNCTION
+#ifdef JQ_NO_LAMBDA
 uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs, int nRange)
 #else
 uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
@@ -843,7 +900,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 			JqAttachChild(nParentHandle, nNextHandle);
 		}
 		pEntry->Function = JobFunc;
-		#ifdef JQ_NO_STD_FUNCTION
+		#ifdef JQ_NO_LAMBDA
 		pEntry->pArg = pArg;
 		#endif
 		pEntry->nPrio = nPrio;
@@ -978,8 +1035,8 @@ uint64_t JqGroupBegin()
 	{
 		JqAttachChild(nParentHandle, nNextHandle);
 	}
-	pEntry->Function = nullptr;
-	#ifdef JQ_NO_STD_FUNCTION
+	JQ_CLEAR_FUNCTION(pEntry->Function);
+	#ifdef JQ_NO_LAMBDA
 	pEntry->pArg = 0;
 	#endif
 	pEntry->nPrio = 7;

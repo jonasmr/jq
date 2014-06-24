@@ -127,7 +127,10 @@ void HandleEvent(SDL_Event* pEvt)
 #define JQ_MICROPROFILE
 #define JQ_MICROPROFILE_VERBOSE
 #define JQ_ASSERT_LOCKS
-//#define JQ_NO_STD_FUNCTION
+
+//comment out to test different modes
+//#define JQ_NO_LAMBDA
+//#define JQ_USE_STD_FUNCTION
 
 #include "../jq.h"
 
@@ -145,7 +148,7 @@ std::atomic<int> g_nLowCount;
 #define JOB_COUNT_LOW 200
 
 //Helper macros to let the tests run with both interfaces.
-#ifdef JQ_NO_STD_FUNCTION
+#ifdef JQ_NO_LAMBDA
 #define VOID_ARG void* pArg,
 #define VOID_PARAM nullptr, 
 #else
@@ -207,7 +210,7 @@ void JobTree(VOID_ARG int nStart, int nEnd)
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
 	JobSpinWork(100);
 	int lala[3]={0,0,0};
-	#ifdef JQ_NO_STD_FUNCTION
+	#ifdef JQ_NO_LAMBDA
 	uint64_t nJobTree0 = JqAdd(JobTree0, 2, (void*)&lala[0], 3);
 	#else
 	uint64_t nJobTree0 = JqAdd(
@@ -312,7 +315,7 @@ void JqTest()
 			if(nData[i] != 0)
 				JQ_BREAK();
 		}
-#ifndef JQ_NO_STD_FUNCTION
+#ifndef JQ_NO_LAMBDA
 		uint64_t nRangeTest = JqAdd(
 			[&](int nBegin, int nEnd)
 		{
@@ -347,7 +350,7 @@ void JqTest()
 		int lala[20] = {0};
 		uint64_t nJobGroup = JqGroupBegin();
 
-#ifndef JQ_NO_STD_FUNCTION
+#ifndef JQ_NO_LAMBDA
 		for(int i = 0; i < 20; ++i)
 		{
 			JqAdd([i, &lala](int b, int e)
@@ -366,7 +369,7 @@ void JqTest()
 
 				JobSpinWork(1000);
 				((int*)p)[0] = 1;
-			}, &p[i], 7, 1);
+			}, 7, &lala[i], 1);
 		}
 #endif
 		JqGroupEnd();
@@ -378,7 +381,6 @@ void JqTest()
 		{
 			JQ_ASSERT(lala[i] == 1);
 		}
-
 	}
 }
 
