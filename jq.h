@@ -28,6 +28,7 @@
 // - if a job is added from inside a job it becomes a child job
 // - When waiting for a job you also wait for all children
 // - Implemented using c++11 thread/mutex/condition_variable
+//	   on win32 CRITICAL_SECTION/Semaphore is used instead.
 // - _not_ using jobstealing & per thread queues, so unsuitable for lots of very small jobs w. high contention
 // - Different ways to store functions entrypoints
 //     default: builtin fixed size (JQ_FUNCTION_SIZE) byte callback object. 
@@ -51,8 +52,6 @@
 
 //	Todo:
 //
-//		lock fewer times per op
-//		
 //		Lockless:
 //			Alloc/Free Job
 //			Priority list
@@ -89,7 +88,7 @@
 #endif
 
 #ifndef JQ_FUNCTION_SIZE
-#define JQ_FUNCTION_SIZE 64
+#define JQ_FUNCTION_SIZE 32
 #endif
 
 #define JQ_ASSERT_SANITY 0
@@ -182,6 +181,7 @@ JQ_API void 		JqGroupEnd();
 JQ_API bool 		JqIsDone(uint64_t nJob);
 JQ_API void 		JqStart(int nNumWorkers);
 JQ_API void 		JqStop();
+JQ_API void 		JqConsumeStats(uint32_t* nNumJobsExecuted, uint32_t* nNumTimesLocked);
 
 
 
@@ -291,7 +291,7 @@ void JqUsleep(__int64 usec)
 
 #define JQ_PRIORITY_SIZE (JQ_PRIORITY_MAX+1)
 
-template<typename T>
+
 struct JqMutexLock;
 
 void 		JqStart(int nNumWorkers);
@@ -313,7 +313,7 @@ uint64_t 	JqSelf();
 bool 		JqPendingJobs(uint64_t nJob);
 void 		JqSelfPush(uint64_t nJob);
 void 		JqSelfPop(uint64_t nJob);
-uint64_t 	JqFindHandle(JqMutexLock<std::mutex>& Lock);
+uint64_t 	JqFindHandle(JqMutexLock& Lock);
 
 
 
@@ -353,7 +353,8 @@ struct JqJob
 #endif
 };
 #ifdef _WIN32
-//#define _WIN32_SEMA
+#define _WIN32_SEMA
+#define _WIN32_CRIT_SECT
 #endif
 
 #define JQ_PAD_SIZE(type) (JQ_CACHE_LINE_SIZE - (sizeof(type)%JQ_CACHE_LINE_SIZE))
@@ -379,15 +380,27 @@ struct JqSemaphore
 
 #endif
 	uint32_t nNumThreads;
-
 };
+
+#ifdef _WIN32_CRIT_SECT
+struct JqMutex
+{
+	JqMutex();
+	~JqMutex();
+	void lock();
+	void unlock();
+	CRITICAL_SECTION CriticalSection;
+};
+#else
+typedef std::mutex JqMutex;
+#endif
 
 struct JQ_ALIGN_CACHELINE JqState_t
 {
 	JqSemaphore Semaphore;
 	char pad0[ JQ_PAD_SIZE(JqSemaphore) ]; 
-	std::mutex Mutex;
-	char pad1[ JQ_PAD_SIZE(std::mutex) ]; 
+	JqMutex Mutex;
+	char pad1[ JQ_PAD_SIZE(JqMutex) ]; 
 
 	std::thread* pWorkerThreads;
 
@@ -406,14 +419,16 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	:nNumWorkers(0)
 	{
 	}
+
+	uint32_t nNumFinishedTotal;
+	uint32_t nNumLocks;
 } JqState;
 
 
-template<typename T>
 struct JqMutexLock
 {
-	T& Mutex;
-	JqMutexLock(T& Mutex)
+	JqMutex& Mutex;
+	JqMutexLock(JqMutex& Mutex)
 	:Mutex(Mutex)
 	{
 		Lock();
@@ -426,6 +441,7 @@ struct JqMutexLock
 	{
 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
 		Mutex.lock();
+		JqState.nNumLocks++;
 		JQ_ASSERT_LOCK_ENTER();
 	}
 	void Unlock()
@@ -458,6 +474,8 @@ void JqStart(int nNumWorkers)
 	JqState.nFreeJobs = JQ_NUM_JOBS;
 	JqState.nNextHandle = 1;
 	JqState.Semaphore.nNumThreads = JqState.nNumWorkers;
+	JqState.nNumFinishedTotal = 0;
+	JqState.nNumLocks = 0;
 
 	for(int i = 0; i < nNumWorkers; ++i)
 	{
@@ -481,6 +499,16 @@ void JqStop()
 	JqState.Semaphore.nNumThreads = 0;
 
 }
+
+void JqConsumeStats(uint32_t* nNumJobsExecuted, uint32_t* nNumTimesLocked)
+{
+	JqMutexLock lock(JqState.Mutex);
+	*nNumJobsExecuted = JqState.nNumFinishedTotal;
+	*nNumTimesLocked = JqState.nNumLocks;
+	JqState.nNumFinishedTotal = 0;
+	JqState.nNumLocks = 0;
+}
+
 
 void JqCheckFinished(uint64_t nJob)
 {
@@ -517,10 +545,11 @@ uint16_t JqIncrementStarted(uint64_t nJob)
 }
 void JqIncrementFinished(uint64_t nJob)
 {
+	JQ_ASSERT_LOCKED();
 	JQ_MICROPROFILE_VERBOSE_SCOPE("Increment Finished", 0xffff);
-	JqMutexLock<std::mutex> lock(JqState.Mutex);
 	uint16_t nIndex = nJob % JQ_WORK_BUFFER_SIZE; 
 	JqState.Jobs[nIndex].nNumFinished++;
+	JqState.nNumFinishedTotal++;
 	JqCheckFinished(nJob);
 }
 
@@ -611,7 +640,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 	JqState.Jobs[nWorkIndex].Function(nStart, nEnd);
 #endif
 	JqSelfPop(nJob);
-	JqIncrementFinished(nJob);
+	//JqIncrementFinished(nJob);
 }
 
 
@@ -804,13 +833,16 @@ void JqWorker(int nThreadId)
 
 	while(0 == JqState.nStop)
 	{
-
+		uint16_t nWork = 0;
 		do
 		{
-			uint16_t nWork = 0;
 			uint16_t nSubIndex = 0;
 			{
-				JqMutexLock<std::mutex> lock(JqState.Mutex);
+				JqMutexLock lock(JqState.Mutex);
+				if(nWork)
+				{
+					JqIncrementFinished(JqState.Jobs[nWork].nStartedHandle);
+				}
 				nSubIndex = 0;
 				nWork = JqTakeJob(&nSubIndex);
 			}
@@ -835,7 +867,7 @@ uint64_t JqNextHandle(uint64_t nJob)
 	}
 	return nJob;
 }
-uint64_t JqFindHandle(JqMutexLock<std::mutex>& Lock)
+uint64_t JqFindHandle(JqMutexLock& Lock)
 {
 	JQ_ASSERT_LOCKED();
 	while(!JqState.nFreeJobs)
@@ -850,6 +882,7 @@ uint64_t JqFindHandle(JqMutexLock<std::mutex>& Lock)
 				Lock.Unlock();
 				JqExecuteJob(JqState.Jobs[nIndex].nStartedHandle, nSubIndex);
 				Lock.Lock();
+				JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);
 			}
 		}
 		else
@@ -877,15 +910,18 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 #endif
 {
 	JQ_ASSERT(nPrio < JQ_PRIORITY_SIZE);
-	JQ_ASSERT(nNumJobs);
 	JQ_ASSERT(JqState.nNumWorkers);
 	if(nRange < 0)
 	{
 		nRange = nNumJobs;
 	}
+	if(nNumJobs <= 0)
+	{
+		nNumJobs = JqState.nNumWorkers;
+	}
 	uint64_t nNextHandle = 0;
 	{
-		JqMutexLock<std::mutex> Lock(JqState.Mutex);
+		JqMutexLock Lock(JqState.Mutex);
 		nNextHandle = JqFindHandle(Lock);
 		uint16_t nIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
 		
@@ -933,12 +969,16 @@ bool JqPendingJobs(uint64_t nJob)
 
 void JqWaitAll()
 {
+	uint16_t nIndex = 0;
 	while(JqState.nFreeJobs != JQ_NUM_JOBS)
 	{
-		uint16_t nIndex = 0;
 		uint16_t nSubIndex = 0;
 		{
-			JqMutexLock<std::mutex> lock(JqState.Mutex);
+			JqMutexLock lock(JqState.Mutex);
+			if(nIndex)
+			{
+				JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);		
+			}
 			nIndex = JqTakeJob(&nSubIndex);
 		}
 		if(nIndex)
@@ -949,7 +989,10 @@ void JqWaitAll()
 		{
 			JQ_USLEEP(1000);
 		}	
-
+	}
+	if(nIndex)
+	{
+		JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);		
 	}
 }
 
@@ -957,20 +1000,34 @@ JQ_THREAD_LOCAL int JqSpinloop = 0; //prevent optimizer from removing spin loop
 
 void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 {
+	uint16_t nIndex = 0;
+	if(JqIsDone(nJob))
+		return;
 	while(!JqIsDone(nJob))
 	{
-		uint16_t nIndex = 0;
+		
 		uint16_t nSubIndex = 0;
 		if(nWaitFlag & JQ_WAITFLAG_EXECUTE_SUCCESSORS)
 		{
-			JqMutexLock<std::mutex> lock(JqState.Mutex);
+			JqMutexLock lock(JqState.Mutex);
+			if(nIndex)
+				JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);
+			if(JqIsDone(nJob)) 
+				return;
 			nIndex = JqTakeChildJob(nJob, &nSubIndex);
 		}
-		
-		if(0 == nIndex && 0 != (nWaitFlag & JQ_WAITFLAG_EXECUTE_ANY))
+		else if(0 != (nWaitFlag & JQ_WAITFLAG_EXECUTE_ANY))
 		{
-			JqMutexLock<std::mutex> lock(JqState.Mutex);
+			JqMutexLock lock(JqState.Mutex);
+			if(nIndex)
+				JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);
+			if(JqIsDone(nJob)) 
+				return;
 			nIndex = JqTakeJob(&nSubIndex);
+		}
+		else
+		{
+			JQ_BREAK();
 		}
 		if(!nIndex)
 		{
@@ -1000,6 +1057,12 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 			JqExecuteJob(JqState.Jobs[nIndex].nStartedHandle, nSubIndex);
 		}
 	}
+	if(nIndex)
+	{
+		JqMutexLock lock(JqState.Mutex);
+		JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);
+	}
+
 }
 
 
@@ -1023,7 +1086,7 @@ uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint3
 
 uint64_t JqGroupBegin()
 {
-	JqMutexLock<std::mutex> Lock(JqState.Mutex);
+	JqMutexLock Lock(JqState.Mutex);
 	uint64_t nNextHandle = JqFindHandle(Lock);
 	uint16_t nIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
 	JqJob* pEntry = &JqState.Jobs[nIndex];
@@ -1052,7 +1115,8 @@ void JqGroupEnd()
 {
 	uint64_t nJob = JqSelf();
 	JqSelfPop(nJob);
-
+	
+	JqMutexLock lock(JqState.Mutex);
 	JqIncrementFinished(nJob);
 }
 
@@ -1207,5 +1271,29 @@ void JqSemaphore::Wait()
 
 }
 #endif
+
+#ifdef _WIN32_CRIT_SECT
+JqMutex::JqMutex()
+{
+	InitializeCriticalSection(&CriticalSection);
+}
+
+JqMutex::~JqMutex()
+{
+	DeleteCriticalSection(&CriticalSection);
+}
+
+void JqMutex::lock()
+{
+	EnterCriticalSection(&CriticalSection);
+}
+
+void JqMutex::unlock()
+{
+	LeaveCriticalSection(&CriticalSection);
+}
+#endif
+
+
 
 #endif
