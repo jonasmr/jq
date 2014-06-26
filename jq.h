@@ -911,11 +911,12 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 {
 	JQ_ASSERT(nPrio < JQ_PRIORITY_SIZE);
 	JQ_ASSERT(JqState.nNumWorkers);
+	JQ_ASSERT(nNumJobs);
 	if(nRange < 0)
 	{
 		nRange = nNumJobs;
 	}
-	if(nNumJobs <= 0)
+	if(nNumJobs < 0)
 	{
 		nNumJobs = JqState.nNumWorkers;
 	}
@@ -992,6 +993,7 @@ void JqWaitAll()
 	}
 	if(nIndex)
 	{
+		JqMutexLock lock(JqState.Mutex);
 		JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);		
 	}
 }
@@ -1183,7 +1185,7 @@ void JqPriorityListRemove(uint16_t nIndex)
 #ifdef _WIN32_SEMA
 JqSemaphore::JqSemaphore()
 {
-	Handle = (uint32_t) CreateSemaphore(0, 0, INT_MAX, 0);
+	Handle = (uint32_t)CreateSemaphoreEx(NULL, 0, 0x7fffffff, NULL, 0, SEMAPHORE_MODIFY_STATE);	
 	JQ_ASSERT(Handle);
 }
 JqSemaphore::~JqSemaphore()
