@@ -321,6 +321,8 @@ JQ_THREAD_LOCAL uint64_t JqSelfStack[JQ_MAX_JOB_STACK] = {0};
 JQ_THREAD_LOCAL uint32_t JqSelfPos = 0;
 JQ_THREAD_LOCAL uint32_t JqHasLock = 0;
 
+#define JQ_LT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<0)
+#define JQ_LE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<=0)
 
 struct JqJob
 {
@@ -455,6 +457,35 @@ struct JqMutexLock
 
 void JqStart(int nNumWorkers)
 {
+#if 0
+	//verify macros
+	uint64_t t0 = 0xf000000000000000;
+	uint64_t t1 = 0;
+	uint64_t t2 = 0x1000000000000000;
+	JQ_ASSERT(JQ_LE_WRAP(t0, t0));
+	JQ_ASSERT(JQ_LE_WRAP(t1, t1));
+	JQ_ASSERT(JQ_LE_WRAP(t2, t2));
+	JQ_ASSERT(JQ_LE_WRAP(t0, t1));
+	JQ_ASSERT(!JQ_LE_WRAP(t1, t0));
+	JQ_ASSERT(JQ_LE_WRAP(t1, t2));
+	JQ_ASSERT(!JQ_LE_WRAP(t2, t1));
+	JQ_ASSERT(JQ_LE_WRAP(t0, t2));
+	JQ_ASSERT(!JQ_LE_WRAP(t2, t0));
+	
+	JQ_ASSERT(!JQ_LT_WRAP(t0, t0));
+	JQ_ASSERT(!JQ_LT_WRAP(t1, t1));
+	JQ_ASSERT(!JQ_LT_WRAP(t2, t2));
+	JQ_ASSERT(JQ_LT_WRAP(t0, t1));
+	JQ_ASSERT(!JQ_LT_WRAP(t1, t0));
+	JQ_ASSERT(JQ_LT_WRAP(t1, t2));
+	JQ_ASSERT(!JQ_LT_WRAP(t2, t1));
+	JQ_ASSERT(JQ_LT_WRAP(t0, t2));
+	JQ_ASSERT(!JQ_LT_WRAP(t2, t0));
+#endif
+
+
+
+
 	JQ_ASSERT_NOT_LOCKED();
 
 	JQ_ASSERT( ((JQ_CACHE_LINE_SIZE-1)&(uint64_t)&JqState) == 0);
@@ -514,7 +545,7 @@ void JqCheckFinished(uint64_t nJob)
 {
 	JQ_ASSERT_LOCKED();
 	uint32_t nIndex = nJob % JQ_WORK_BUFFER_SIZE; 
-	JQ_ASSERT(nJob >= JqState.Jobs[nIndex].nFinishedHandle);
+	JQ_ASSERT(JQ_LE_WRAP(JqState.Jobs[nIndex].nFinishedHandle, nJob));
 	JQ_ASSERT(nJob == JqState.Jobs[nIndex].nStartedHandle);
 	if(0 == JqState.Jobs[nIndex].nFirstChild && JqState.Jobs[nIndex].nNumFinished == JqState.Jobs[nIndex].nNumJobs)
 	{
@@ -927,7 +958,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 		uint16_t nIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
 		
 		JqJob* pEntry = &JqState.Jobs[nIndex];
-		JQ_ASSERT(pEntry->nFinishedHandle < nNextHandle);
+		JQ_ASSERT(JQ_LT_WRAP(pEntry->nFinishedHandle, nNextHandle));
 		pEntry->nStartedHandle = nNextHandle;
 		JQ_ASSERT(nNumJobs <= 0xffff);
 		pEntry->nNumJobs = (uint16_t)nNumJobs;
@@ -955,15 +986,16 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 bool JqIsDone(uint64_t nJob)
 {
 	uint64_t nIndex = nJob % JQ_WORK_BUFFER_SIZE;
-	JQ_ASSERT(JqState.Jobs[nIndex].nFinishedHandle <= JqState.Jobs[nIndex].nStartedHandle);
+	JQ_ASSERT(JQ_LE_WRAP(JqState.Jobs[nIndex].nFinishedHandle, JqState.Jobs[nIndex].nStartedHandle));
 	int64_t nDiff = (int64_t)(JqState.Jobs[nIndex].nFinishedHandle - nJob);
-	return nDiff >= 0;
+	JQ_ASSERT((nDiff >= 0) == JQ_LE_WRAP(nJob, JqState.Jobs[nIndex].nFinishedHandle));
+	return JQ_LE_WRAP(nJob, JqState.Jobs[nIndex].nFinishedHandle);
 }
 
 bool JqPendingJobs(uint64_t nJob)
 {
 	uint64_t nIndex = nJob % JQ_WORK_BUFFER_SIZE;
-	JQ_ASSERT(JqState.Jobs[nIndex].nFinishedHandle <= JqState.Jobs[nIndex].nStartedHandle);
+	JQ_ASSERT(JQ_LE_WRAP(JqState.Jobs[nIndex].nFinishedHandle, JqState.Jobs[nIndex].nStartedHandle));
 	return JqState.Jobs[nIndex].nFinishedHandle != JqState.Jobs[nIndex].nStartedHandle;
 }
 
@@ -1092,7 +1124,7 @@ uint64_t JqGroupBegin()
 	uint64_t nNextHandle = JqFindHandle(Lock);
 	uint16_t nIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
 	JqJob* pEntry = &JqState.Jobs[nIndex];
-	JQ_ASSERT(pEntry->nFinishedHandle < nNextHandle);
+	JQ_ASSERT(JQ_LE_WRAP(pEntry->nFinishedHandle, nNextHandle));
 	pEntry->nStartedHandle = nNextHandle;
 	pEntry->nNumJobs = 1;
 	pEntry->nNumStarted = 1;
