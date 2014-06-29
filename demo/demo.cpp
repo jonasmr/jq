@@ -236,8 +236,26 @@ void JqRangeTest(void* pArray, int nBegin, int nEnd)
 	for(int i = nBegin; i < nEnd; ++i)
 		pIntArray[i] = 1;
 }
+
+#ifdef _WIN32
+void uprintf(const char* fmt, ...);
+#else
+#define uprintf printf
+#endif
+
 void JqTest()
 {
+	static int frames = 0;
+	if(frames > 60)
+	{
+		JqStats Stats;
+		JqConsumeStats(&Stats);
+
+		uprintf("Jq Stats Jobs per frame %f, locks per frame %f. Blocking Waits %f Signals %f\n", Stats.nNumFinished / (float)frames, Stats.nNumLocks / (float)frames, Stats.nNumWaitCond / (float)frames, Stats.nNumWaitKicks / (float)frames);
+		frames = 0;
+	}
+
+	++frames;
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST_WAIT_ALL", 0xff00ff);
 		JqWaitAll();
@@ -402,7 +420,7 @@ int main(int argc, char* argv[])
 	if(SDL_Init(SDL_INIT_VIDEO) < 0) {
 		return 1;
 	}
-
+	
 
 	//JqTest();
 	static uint32_t nNumWorkers = g_nNumWorkers;
@@ -442,7 +460,6 @@ int main(int argc, char* argv[])
 	MP_ASSERT(glGetError() == 0);
 
 
-	std::mutex test;
 
 	while(!g_nQuit)
 	{
