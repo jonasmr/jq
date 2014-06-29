@@ -285,7 +285,7 @@ void JqTest()
 		if(0)
 		{
 			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitSpin", 0xff0000);
-			JqWait(nJob, JQ_WAITFLAG_SPIN);
+			JqWait(nJob, JQ_WAITFLAG_SLEEP|JQ_WAITFLAG_EXECUTE_ANY);
 		}
 		else
 		{

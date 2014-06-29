@@ -91,9 +91,7 @@
 #define JQ_FUNCTION_SIZE 32
 #endif
 
-#ifndef JQ_MAX_WAITERS 
-#define JQ_MAX_WAITERS 16
-#endif
+
 #define JQ_ASSERT_SANITY 0
 
 
@@ -168,7 +166,7 @@ public:
 #define JQ_WAITFLAG_EXECUTE_ANY 0x2
 #define JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS 0x3
 //  what to do when out of jobs
-#define JQ_WAITFLAG_SPIN 0x4
+#define JQ_WAITFLAG_BLOCK 0x4
 #define JQ_WAITFLAG_SLEEP 0x8
 
 #ifdef JQ_NO_LAMBDA
@@ -176,9 +174,9 @@ JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJo
 #else
 JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1);
 #endif
-JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SLEEP, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SLEEP, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API uint64_t		JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SLEEP, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
+JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
+JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
+JQ_API uint64_t		JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API uint64_t 	JqGroupBegin(); //add a non-executing job to group all jobs added between begin/end
 JQ_API void 		JqGroupEnd();
 JQ_API bool 		JqIsDone(uint64_t nJob);
@@ -255,8 +253,6 @@ void JqUsleep(__int64 usec)
 }
 #endif
 
-#include <mutex>
-#include <condition_variable>
 #include <thread>
 
 
@@ -352,73 +348,87 @@ struct JqJob
 	uint16_t nLinkNext;
 	uint16_t nLinkPrev;
 	uint8_t nPrio;
-	int8_t nWaitIndex;
+	uint8_t nWaiters;
+	uint8_t nWaitersWas;
+	// int8_t nWaitIndex;
 
-	uint32_t nSignalCount;//debug
+	// uint32_t nSignalCount;//debug
 
 #ifdef JQ_ASSERT_SANITY
 	int nTag;
 #endif
 };
-#ifdef _WIN32
-#define _WIN32_SEMA
-#define _WIN32_CRIT_SECT
-#endif
+
 
 #define JQ_PAD_SIZE(type) (JQ_CACHE_LINE_SIZE - (sizeof(type)%JQ_CACHE_LINE_SIZE))
 #define JQ_ALIGN_CACHELINE __declspec(align(JQ_CACHE_LINE_SIZE))
 
+#ifndef _WIN32
+#include <pthread.h>
+#endif
 #include <atomic>
+
+
+
+struct JqMutex
+{
+	JqMutex();
+	~JqMutex();
+	void Lock();
+	void Unlock();
+#ifdef _WIN32
+	CRITICAL_SECTION CriticalSection;
+#else
+	pthread_mutex_t Mutex;
+#endif
+};
+
+struct JqConditionVariable
+{
+	JqConditionVariable();
+	~JqConditionVariable();
+	void Wait(JqMutex& Mutex);
+	void NotifyOne();
+	void NotifyAll();
+#ifdef _WIN32
+	CONDITION_VARIABLE Cond;
+#else
+	pthread_cond_t Cond;
+#endif
+};
+
+
 
 struct JqSemaphore
 {
 	JqSemaphore();
 	~JqSemaphore();
 	void Signal(uint32_t nCount);
-	void SignalAll();
 	void Wait();
 
-	void Init(int nCount);
+	void Init(int nMaxCount);
 
 #ifdef _WIN32_SEMA
-	uint32_t Handle;
+	HANDLE Handle;
 #else
-	std::mutex Mutex;
-	char pad0[JQ_PAD_SIZE(std::mutex)];
-	std::condition_variable Cond;
-	char pad1[JQ_PAD_SIZE(std::condition_variable)];
-	std::atomic<uint32_t> nReleaseCount;
-
+	JqMutex Mutex;
+	JqConditionVariable Cond;
+	uint32_t nReleaseCount;
+	uint32_t nMaxCount;	
 #endif
-	uint32_t nNumThreads;
 };
 
-#ifdef _WIN32_CRIT_SECT
-struct JqMutex
-{
-	JqMutex();
-	~JqMutex();
-	void lock();
-	void unlock();
-	CRITICAL_SECTION CriticalSection;
-};
-#else
-typedef std::mutex JqMutex;
-#endif
+
 
 struct JQ_ALIGN_CACHELINE JqState_t
 {
 	JqSemaphore Semaphore;
 	char pad0[ JQ_PAD_SIZE(JqSemaphore) ]; 
 	JqMutex Mutex;
-	char pad2[ JQ_PAD_SIZE(JqMutex) ]; 
+	char pad1[ JQ_PAD_SIZE(JqMutex) ]; 
 
-	struct	
-	{
-		JqSemaphore Semaphore;
-		uint64_t nWaitHandle;
-		uint64_t nWaitCount;
-	} Waiters[JQ_MAX_WAITERS];
+	JqConditionVariable WaitCond;
+	char pad2[ JQ_PAD_SIZE(JqConditionVariable) ];
 
 
 	std::thread* pWorkerThreads;
@@ -441,8 +451,8 @@ struct JQ_ALIGN_CACHELINE JqState_t
 
 	uint32_t nNumFinishedTotal;
 	uint32_t nNumLocks;
-	uint32_t nNumSemaWaits;
-	uint32_t nNumSemaKicks;
+	uint32_t nNumWaitCond;
+	uint32_t nNumWaitKicks;
 } JqState;
 
 
@@ -461,7 +471,7 @@ struct JqMutexLock
 	void Lock()
 	{
 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
-		Mutex.lock();
+		Mutex.Lock();
 		JqState.nNumLocks++;
 		JQ_ASSERT_LOCK_ENTER();
 	}
@@ -469,7 +479,7 @@ struct JqMutexLock
 	{
 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
 		JQ_ASSERT_LOCK_LEAVE();
-		Mutex.unlock();
+		Mutex.Unlock();
 	}
 };
 
@@ -513,13 +523,7 @@ void JqStart(int nNumWorkers)
 	JQ_ASSERT(JqState.nNumWorkers == 0);
 
 	JqState.Semaphore.Init(nNumWorkers);
-	for(int i = 0; i < JQ_MAX_WAITERS; ++i)
-	{
-		JqState.Waiters[i].nWaitHandle = 0;
-		JqState.Waiters[i].nWaitCount = 0;
-		JqState.Waiters[i].Semaphore.Init(0x7fffffff);
-	}
-	
+	JqState.nTotalWaiting = 0;
 	JqState.pWorkerThreads = new std::thread[nNumWorkers];
 	JqState.nNumWorkers = nNumWorkers;
 	JqState.nStop = 0;
@@ -532,11 +536,10 @@ void JqStart(int nNumWorkers)
 	memset(&JqState.nPrioListHead, 0, sizeof(JqState.nPrioListHead));
 	JqState.nFreeJobs = JQ_NUM_JOBS;
 	JqState.nNextHandle = 1;
-	JqState.Semaphore.nNumThreads = JqState.nNumWorkers;
 	JqState.nNumFinishedTotal = 0;
 	JqState.nNumLocks = 0;
-	JqState.nNumSemaKicks = 0;
-	JqState.nNumSemaWaits = 0;
+	JqState.nNumWaitKicks = 0;
+	JqState.nNumWaitCond = 0;
 
 	for(int i = 0; i < nNumWorkers; ++i)
 	{
@@ -557,19 +560,19 @@ void JqStop()
 	delete[] JqState.pWorkerThreads;
 	JqState.pWorkerThreads = 0;
 	JqState.nNumWorkers = 0;
-	JqState.Semaphore.nNumThreads = 0;
-
 }
 
-void JqConsumeStats(uint32_t* nNumJobsExecuted, uint32_t* nNumTimesLocked, uint32_t* nNumSemaWaits, uint32_t* nNumSemaKicks)
+void JqConsumeStats(uint32_t* nNumJobsExecuted, uint32_t* nNumTimesLocked, uint32_t* nNumWaitCond, uint32_t* nNumWaitKicks)
 {
 	JqMutexLock lock(JqState.Mutex);
 	*nNumJobsExecuted = JqState.nNumFinishedTotal;
 	*nNumTimesLocked = JqState.nNumLocks;
-	*nNumSemaKicks = JqState.nNumSemaKicks;
-	*nNumSemaWaits= JqState.nNumSemaWaits;
+	*nNumWaitKicks = JqState.nNumWaitKicks;
+	*nNumWaitCond= JqState.nNumWaitCond;
 	JqState.nNumFinishedTotal = 0;
 	JqState.nNumLocks = 0;
+	JqState.nNumWaitKicks = 0;
+	JqState.nNumWaitCond = 0;
 }
 
 
@@ -590,24 +593,20 @@ void JqCheckFinished(uint64_t nJob)
 		}
 		JqState.Jobs[nIndex].nFinishedHandle = JqState.Jobs[nIndex].nStartedHandle;
 		JQ_CLEAR_FUNCTION(JqState.Jobs[nIndex].Function);
-		int8_t nWaitIndex = JqState.Jobs[nIndex].nWaitIndex;
-		if(nWaitIndex != -1)
+
+		//kick waiting threads.
+		int8_t nWaiters = JqState.Jobs[nIndex].nWaiters;
+		if(nWaiters != 0)
 		{
-			JQ_ASSERT(JqState.Waiters[nWaitIndex].nWaitHandle == nJob);
-			JqState.nNumSemaKicks++;
-			JqState.Jobs[nIndex].nSignalCount = (uint32_t)JqState.Waiters[nWaitIndex].nWaitCount;
-			JqState.Waiters[nWaitIndex].nWaitCount = 0;
-			JqState.Waiters[nWaitIndex].nWaitHandle = 0;
-			JqState.Jobs[nIndex].nWaitIndex = -1;
-			
-			JqState.Waiters[nWaitIndex].Semaphore.SignalAll();
-		
+			JqState.nNumWaitKicks++;
+			JqState.WaitCond.NotifyAll();
+			JqState.Jobs[nIndex].nWaiters = 0;
+			JqState.Jobs[nIndex].nWaitersWas = nWaiters;
 		}
 		else
 		{
-			JqState.Jobs[nIndex].nSignalCount = (uint32_t)-1;
+			JqState.Jobs[nIndex].nWaitersWas = -1;
 		}
-
 		JqState.nFreeJobs++;
 	}
 }
@@ -1026,7 +1025,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange)
 		pEntry->pArg = pArg;
 		#endif
 		pEntry->nPrio = nPrio;
-		pEntry->nWaitIndex = -1;
+		pEntry->nWaiters = 0;
 		JqPriorityListAdd(nIndex);
 	}
 
@@ -1118,58 +1117,22 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 		}
 		if(!nIndex)
 		{
-			JQ_ASSERT(0 != (nWaitFlag & (JQ_WAITFLAG_SLEEP|JQ_WAITFLAG_SPIN)));
-			if(nWaitFlag & JQ_WAITFLAG_SPIN)
+			JQ_ASSERT(0 != (nWaitFlag & (JQ_WAITFLAG_SLEEP|JQ_WAITFLAG_BLOCK)));
+			if(nWaitFlag & JQ_WAITFLAG_SLEEP)
 			{
-				JQ_BREAK();
-				uint64_t nTick = JqTick();
-				uint64_t nTicksPerSecond = JqTicksPerSecond();
-				do
-				{
-					uint32_t result = 0;
-					for(uint32_t i = 0; i < 1000; ++i)
-					{
-						result |= i << (i&7); //do something.. whatever
-					}
-					JqSpinloop |= result; //write it somewhere so the optimizer can't remote it
-				}while( (1000000ull*(JqTick()-nTick)) / nTicksPerSecond < nUsWaitTime);
-
+				JQ_USLEEP(nUsWaitTime);
 			}
 			else
 			{
-				int8_t nWaitIndex;
+				JqMutexLock lock(JqState.Mutex);
+				if(JqIsDone(nJob))
 				{
-					JqMutexLock lock(JqState.Mutex);
-					if(JqIsDone(nJob))
-					{
-						return;
-					}
-					uint16_t nIndex = nJob % JQ_WORK_BUFFER_SIZE;
-					nWaitIndex = JqState.Jobs[nIndex].nWaitIndex;
-					if(nWaitIndex == -1)
-					{						
-						for(int i = 1; i < JQ_MAX_WAITERS; ++i)
-						{
-							if(JqState.Waiters[i].nWaitHandle == 0)
-							{
-								nWaitIndex = (int8_t)i;
-								JQ_ASSERT(JqState.Waiters[i].nWaitCount == 0);
-								break;
-							}
-						}
-						JQ_ASSERT(nWaitIndex != -1);
-						JqState.Waiters[nWaitIndex].nWaitHandle = nJob;
-						JqState.Jobs[nIndex].nWaitIndex = nWaitIndex;
-					}
-					JQ_ASSERT(JqState.Jobs[nIndex].nWaitIndex == nWaitIndex);
-					JQ_ASSERT(nWaitIndex != -1);
-					JQ_ASSERT(JqState.Waiters[nWaitIndex].nWaitHandle == nJob);
-					JqState.Waiters[nWaitIndex].nWaitCount++;
-					JqState.nNumSemaWaits++;
-					
+					return;
 				}
-				JQ_ASSERT(nWaitIndex != -1);
-				JqState.Waiters[nWaitIndex].Semaphore.Wait();
+				uint16_t nJobIndex = nJob % JQ_WORK_BUFFER_SIZE;
+				JqState.Jobs[nJobIndex].nWaiters++;
+				JqState.WaitCond.Wait(JqState.Mutex);
+				JqState.Jobs[nJobIndex].nWaiters--;
 			}
 		}
 		else
@@ -1227,7 +1190,7 @@ uint64_t JqGroupBegin()
 	pEntry->pArg = 0;
 	#endif
 	pEntry->nPrio = 7;
-	pEntry->nWaitIndex = -1;
+	pEntry->nWaiters = 0;
 	JqSelfPush(nNextHandle);
 	return nNextHandle;
 }
@@ -1301,129 +1264,7 @@ void JqPriorityListRemove(uint16_t nIndex)
 
 }
 
-#ifdef _WIN32_SEMA
-JqSemaphore::JqSemaphore()
-{
-	Handle = 0;
-}
-JqSemaphore::~JqSemaphore()
-{
-	if(Handle)
-	{
-		CloseHandle((HANDLE)Handle);
-	}
-
-}
-void JqSemaphore::Init(int nCount)
-{
-	if(Handle)
-	{
-		CloseHandle((HANDLE)Handle);
-		Handle = 0;
-	}
-
-	Handle = (uint32_t)CreateSemaphoreEx(NULL, 0, nCount, NULL, 0, SEMAPHORE_ALL_ACCESS);	
-}
-void JqSemaphore::Signal(uint32_t nCount)
-{
-	JQ_MICROPROFILE_SCOPE("void JqSemaphore::Signal()", 0xff);	
-	BOOL r = ReleaseSemaphore((HANDLE)Handle, nCount, NULL);
-
-}
-void JqSemaphore::SignalAll()
-{
-	uint32_t nCount = 1;
-	while(nCount)
-	{
-		LONG nPrevious = 0;
-		BOOL r = ReleaseSemaphore((HANDLE)Handle, nCount, &nPrevious);
-		JQ_ASSERT(nPrevious >= 0);
-		JQ_ASSERT(nPrevious >= (LONG)nCount);
-		nCount = nPrevious - nCount;
-	}
-
-}
-void JqSemaphore::Wait()
-{
-	JQ_MICROPROFILE_SCOPE("void JqSemaphore::Wait()", 0xff);
-	DWORD r = WaitForSingleObject((HANDLE)Handle, INFINITE);
-	JQ_ASSERT(WAIT_OBJECT_0 == r);
-}
-#else
-JqSemaphore::JqSemaphore()
-{
-	nNumThreads = 0xffffffff;
-	nReleaseCount = 0;
-}
-JqSemaphore::~JqSemaphore()
-{
-
-}
-void JqSemaphore::Init(int nCount)
-{
-	nNumThreads = nCount;
-}
-void JqSemaphore::Signal(uint32_t nCount)
-{
-	JQ_MICROPROFILE_SCOPE("void JqSemaphore::Signal()", 0xff);	
-	uint32_t nCurrent = nReleaseCount.load();
-	if(nCurrent >= nCount)
-	{
-		return;
-	}
-	uint32_t nNewCount = nCount - nCurrent;
-	nReleaseCount.fetch_add(nNewCount);
-	if(nNewCount < nNumThreads)
-	{
-		for(uint32_t i = 0;i < nNewCount; ++i)
-		{
-			Cond.notify_one();
-		}
-	}
-	else
-	{
-		Cond.notify_all();
-	}
-
-}
-void JqSemaphore::Wait()
-{
-	JQ_MICROPROFILE_SCOPE("void JqSemaphore::Wait()", 0xff);
-	{
-		//atomic decrement, passthrough if hitting 0
-		//return if decrement succeds
-		uint32_t nCurrent = nReleaseCount.load();
-		while(nCurrent)
-		{
-			if(nReleaseCount.compare_exchange_weak(nCurrent, nCurrent-1))
-			{
-				return;
-			}
-		}
-	}
-	{
-		JQ_MICROPROFILE_SCOPE("SemaWaitLock", 0xff);
-		std::unique_lock<std::mutex> lock(Mutex);
-		Cond.wait(lock);
-	}
-
-	{
-		//atomic decrement, passthrough if hitting 0
-		//return if decrement succeds
-		uint32_t nCurrent = nReleaseCount.load();
-		while(nCurrent)
-		{
-			if(nReleaseCount.compare_exchange_weak(nCurrent, nCurrent-1))
-			{
-				return;
-			}
-		}
-	}
-
-}
-#endif
-
-#ifdef _WIN32_CRIT_SECT
+#ifdef _WIN32
 JqMutex::JqMutex()
 {
 	InitializeCriticalSection(&CriticalSection);
@@ -1434,17 +1275,172 @@ JqMutex::~JqMutex()
 	DeleteCriticalSection(&CriticalSection);
 }
 
-void JqMutex::lock()
+void JqMutex::Lock()
 {
 	EnterCriticalSection(&CriticalSection);
 }
 
-void JqMutex::unlock()
+void JqMutex::Unlock()
 {
 	LeaveCriticalSection(&CriticalSection);
 }
+
+
+JqConditionVariable::JqConditionVariable()
+{
+	InitializeConditionVariable(&Cond);
+}
+
+JqConditionVariable::~JqConditionVariable()
+{
+	//?
+}
+
+void JqConditionVariable::Wait(JqMutex& Mutex)
+{
+	SleepConditionVariableCS(&Cond, &Mutex.CriticalSection);
+}
+
+void JqConditionVariable::NotifyOne()
+{
+	WakeConditionVariable(&Cond);
+}
+
+void JqConditionVariable::NotifyAll()
+{
+	WakeAllConditionVariable(&Cond);
+}
+
+JqSemaphore::JqSemaphore()
+{
+	Handle = 0;
+}
+JqSemaphore::~JqSemaphore()
+{
+	if(Handle)
+	{
+		CloseHandle(Handle);
+	}
+
+}
+void JqSemaphore::Init(int nCount)
+{
+	if(Handle)
+	{
+		CloseHandle(Handle);
+		Handle = 0;
+	}
+
+	Handle = (uint32_t)CreateSemaphoreEx(NULL, 0, nCount, NULL, 0, SEMAPHORE_ALL_ACCESS);	
+}
+void JqSemaphore::Signal(uint32_t nCount)
+{
+	JQ_MICROPROFILE_SCOPE("void JqSemaphore::Signal()", 0xff);	
+	BOOL r = ReleaseSemaphore(Handle, nCount, NULL);
+
+}
+
+void JqSemaphore::Wait()
+{
+	JQ_MICROPROFILE_SCOPE("void JqSemaphore::Wait()", 0xff);
+	DWORD r = WaitForSingleObject((HANDLE)Handle, INFINITE);
+	JQ_ASSERT(WAIT_OBJECT_0 == r);
+}
+
+#else
+JqMutex::JqMutex()
+{
+	pthread_mutex_init(&Mutex, 0);
+}
+
+JqMutex::~JqMutex()
+{
+	pthread_mutex_destroy(&Mutex);
+}
+
+void JqMutex::Lock()
+{
+	pthread_mutex_lock(&Mutex);
+}
+
+void JqMutex::Unlock()
+{
+	pthread_mutex_unlock(&Mutex);
+}
+
+
+JqConditionVariable::JqConditionVariable()
+{
+	pthread_cond_init(&Cond, 0);
+}
+
+JqConditionVariable::~JqConditionVariable()
+{
+	pthread_cond_destroy(&Cond);
+}
+
+void JqConditionVariable::Wait(JqMutex& Mutex)
+{
+	pthread_cond_wait(&Cond, &Mutex.Mutex);
+}
+
+void JqConditionVariable::NotifyOne()
+{
+	pthread_cond_signal(&Cond);
+}
+
+void JqConditionVariable::NotifyAll()
+{
+	pthread_cond_broadcast(&Cond);
+}
+
+JqSemaphore::JqSemaphore()
+{
+	nMaxCount = 0xffffffff;
+	nReleaseCount = 0;
+}
+JqSemaphore::~JqSemaphore()
+{
+
+}
+void JqSemaphore::Init(int nCount)
+{
+	nMaxCount = nCount;
+}
+void JqSemaphore::Signal(uint32_t nCount)
+{
+	JQ_MICROPROFILE_SCOPE("void JqSemaphore::Signal()", 0xff);	
+	{
+		JqMutexLock l(Mutex);
+		uint32_t nCurrent = nReleaseCount;
+		if(nCurrent + nCount > nMaxCount)
+			nCount = nMaxCount - nCurrent;
+		nReleaseCount += nCount;
+		JQ_ASSERT(nReleaseCount <= nMaxCount);
+		if(nReleaseCount == nMaxCount)
+		{
+			Cond.NotifyAll();
+		}
+		else
+		{
+			for(uint32_t i = 0; i < nReleaseCount; ++i)
+			{
+				Cond.NotifyOne();
+			}
+		}
+	}
+}
+
+void JqSemaphore::Wait()
+{
+	JQ_MICROPROFILE_SCOPE("void JqSemaphore::Wait()", 0xff);
+	JqMutexLock l(Mutex);
+	while(!nReleaseCount)
+	{
+		Cond.Wait(Mutex);
+	}
+	nReleaseCount--;
+}
+
 #endif
-
-
-
 #endif
