@@ -42,7 +42,7 @@
 
 #define WIDTH 1024
 #define HEIGHT 600
-
+uint32_t g_FewJobs = 0;
 
 uint32_t g_nNumWorkers = 1;
 uint32_t g_nQuit = 0;
@@ -72,6 +72,10 @@ void HandleEvent(SDL_Event* pEvt)
 			g_nNumWorkers ++;
 		}
 
+		if(pEvt->key.keysym.sym == 'x')
+		{
+			g_FewJobs = !g_FewJobs;
+		}
 
 		if(pEvt->key.keysym.sym == 'z')
 		{
@@ -143,9 +147,9 @@ std::atomic<int> g_nLowCount;
 
 #define JOB_COUNT 2
 #define JOB_COUNT_0 3
-#define JOB_COUNT_1 5
-#define JOB_COUNT_2 10
-#define JOB_COUNT_LOW 200
+#define JOB_COUNT_1 6
+#define JOB_COUNT_2 20
+#define JOB_COUNT_LOW 300
 
 //Helper macros to let the tests run with both interfaces.
 #ifdef JQ_NO_LAMBDA
@@ -177,32 +181,46 @@ void JobTree2(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree2", 0xff);
 	JobSpinWork(5+ rand() % 100);
-	g_nJobCount2++;
+	g_nJobCount2.fetch_add(1);
 }
 
 
 void JobTree1(VOID_ARG int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree1", 0xff0000);
-	for(int i = 0; i < JOB_COUNT_2; ++i)
+	if(g_FewJobs)
 	{
-		JqAdd(JobTree2, 2, VOID_PARAM 1);
+		JqAdd(JobTree2, 2, VOID_PARAM JOB_COUNT_2);
+	}
+	else
+	{
+		for(int i = 0; i < JOB_COUNT_2; ++i)
+		{
+			JqAdd(JobTree2, 2, VOID_PARAM 1);
+		}
 	}
 	JobSpinWork(50 + rand() % 100);
-	g_nJobCount1++;
+	g_nJobCount1.fetch_add(1);
 }
 
 
 void JobTree0(void* pArg, int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree0", 0x00ff00);
-	for(int i = 0; i < JOB_COUNT_1; ++i)
+	if(g_FewJobs)
 	{
-		JqAdd(JobTree1, 2, VOID_PARAM 1);
+		JqAdd(JobTree1, 2, VOID_PARAM JOB_COUNT_1);
+	}
+	else
+	{
+		for(int i = 0; i < JOB_COUNT_1; ++i)
+		{
+			JqAdd(JobTree1, 2, VOID_PARAM 1);
+		}
 	}
 	JobSpinWork(50 + rand() % 100);
 	((int*)pArg)[nStart] = 1;
-	g_nJobCount0++;
+	g_nJobCount0.fetch_add(1);
 }
 
 void JobTree(VOID_ARG int nStart, int nEnd)
@@ -225,7 +243,7 @@ void JobTree(VOID_ARG int nStart, int nEnd)
 	JQ_ASSERT(lala[1] == 1);
 	JQ_ASSERT(lala[2] == 1);
 
-	g_nJobCount++;
+	g_nJobCount.fetch_add(1);
 
 }
 
@@ -251,7 +269,12 @@ void JqTest()
 		JqStats Stats;
 		JqConsumeStats(&Stats);
 
-		uprintf("Jq Stats Jobs per frame %f, locks per frame %f. Blocking Waits %f Signals %f\n", Stats.nNumFinished / (float)frames, Stats.nNumLocks / (float)frames, Stats.nNumWaitCond / (float)frames, Stats.nNumWaitKicks / (float)frames);
+		uprintf("Jobs %6.2f/%6.2f, Sub %6.2f/%6.2f, locks per frame %f. Blocking Waits %f Signals %f\n", 
+			Stats.nNumAdded / (float)frames, 
+			Stats.nNumFinished / (float)frames, 
+			Stats.nNumAddedSub / (float)frames, 
+			Stats.nNumFinishedSub / (float)frames, 
+			Stats.nNumLocks / (float)frames, Stats.nNumWaitCond / (float)frames, Stats.nNumWaitKicks / (float)frames);
 		frames = 0;
 	}
 
