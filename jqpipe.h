@@ -25,8 +25,8 @@
 // Lockless Job pipe
 
 //only config option
-#ifndef JQ_WORK_BUFFER_SIZE
-#define JQ_WORK_BUFFER_SIZE (8192)
+#ifndef JQ_PIPE_BUFFER_SIZE
+#define JQ_PIPE_BUFFER_SIZE (2048)
 #endif
 
 #ifndef JQ_CACHE_LINE_SIZE
@@ -114,6 +114,7 @@ public:
 	JqJobState State;
 #endif
 };
+#include <stdio.h>
 
 #ifdef _WIN32
 inline JqJobState JqJobStateLoad(JqPipeJob* pJob)
@@ -133,10 +134,17 @@ inline JqJobState JqJobStateLoad(JqPipeJob* pJob)
 }
 inline bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old)
 {
-	JQ_ASSERT(0 == (0xf & (intptr_t)&New));
-	JQ_ASSERT(0 == (0xf & (intptr_t)&Old));
+	// JQ_ASSERT(0 == (0xf & (intptr_t)&New));
+	// JQ_ASSERT(0 == (0xf & (intptr_t)&Old));
 	//return 1 == _InterlockedCompareExchange128(pJob->State.Atomic, New.Atomic[0], New.Atomic[1], Old.Atomic);
-	return pJob->State.compare_exchange_weak(New, Old);
+	//JQ_ASSERT(New.nNumJobs != 300);
+	//uint32_t nNumJobsbef = pJob->State.load().nNumJobs;
+	bool bR = pJob->State.compare_exchange_weak(Old, New);
+	// if(bR)
+	// {
+	// 	printf("nNumJobs %d %d\n", nNumJobsbef, pJob->State.load().nNumJobs);
+	// }
+	return bR;
 }
 
 #endif
@@ -165,7 +173,7 @@ struct JqPipe
 	std::atomic<uint64_t>	nPut;
 	std::atomic<uint64_t>	nGet;
 	uint8_t					nPipeId;
-	JqPipeJob				Jobs[JQ_WORK_BUFFER_SIZE];
+	JqPipeJob				Jobs[JQ_PIPE_BUFFER_SIZE];
 
 	JqPipeRunJob			StartJobFunc;
 	JqPipeFinishJob			FinishJobFunc;
@@ -183,10 +191,16 @@ enum EJqPipeExecuteResult
 JQ_API JqPipeHandle 			JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nRange);
 JQ_API EJqPipeExecuteResult		JqPipeExecute(JqPipe* pPipe, JqPipeHandle ExecuteHandle);
 JQ_API bool 					JqPipeIsDone(JqPipe* pPipe, JqPipeHandle Job);
+JQ_API bool 					JqPipeIsAllStarted(JqPipe* pPipe, JqPipeHandle nJob);
+JQ_API void 					JqPipeDump(JqPipe* pPipe);
+
 
 #ifdef JQ_PIPE_IMPL
+#include <stdio.h>
 int64_t JqTick();
 int64_t JqTicksPerSecond();
+std::atomic<JqJobState> State;
+
 JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nRange)
 {
 	JQ_ASSERT(nNumJobs);
@@ -208,7 +222,7 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 		nNextHandle &= 0xffffffff;
 		if(nNextHandle)
 		{
-			uint16_t nJobIndex = nNextHandle % JQ_WORK_BUFFER_SIZE;
+			uint16_t nJobIndex = nNextHandle % JQ_PIPE_BUFFER_SIZE;
 			JqPipeJob* pJob = &pPipe->Jobs[nJobIndex];
 			JqJobState State;
 			do
@@ -228,9 +242,10 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 					New.nFinishedHandle =  State.nFinishedHandle;
 					if(JqJobStateCompareAndSwap(pJob, New, State))
 					{
-						uint64_t Handle = (nNextHandle<<8) | pPipe->nPipeId;
 						JqPipeHandle H;
-						H.Handle = Handle;
+						H.Handle = nNextHandle;
+						H.Pad0 = 0;
+						H.Pipe = pPipe->nPipeId;
 						return H;
 					}
 				}
@@ -247,7 +262,7 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 //internal
 bool JqPipeStartInternal(JqPipe* pPipe, uint32_t nHandleInternal, uint16_t* pSubJob, bool* pLast)
 {
-	uint16_t nJobIndex = nHandleInternal % JQ_WORK_BUFFER_SIZE;
+	uint16_t nJobIndex = nHandleInternal % JQ_PIPE_BUFFER_SIZE;
 	JqPipeJob* pJob = &pPipe->Jobs[nJobIndex];
 	JqJobState State;
 	do
@@ -260,7 +275,7 @@ bool JqPipeStartInternal(JqPipe* pPipe, uint32_t nHandleInternal, uint16_t* pSub
 			bool bLast = State.nNumStarted + 1 == State.nNumJobs;
 			if(JqJobStateCompareAndSwap(pJob, NewState, State))
 			{
-				*pSubJob = NewState.nNumStarted;
+				*pSubJob = State.nNumStarted;
 				*pLast = bLast;
 				return true;
 			}
@@ -279,14 +294,14 @@ bool JqPipeStartInternal(JqPipe* pPipe, uint32_t nHandleInternal, uint16_t* pSub
 
 bool JqPipeFinishInternal(JqPipe* pPipe, uint32_t nHandleInternal)
 {
-	uint16_t nJobIndex = nHandleInternal % JQ_WORK_BUFFER_SIZE;
+	uint16_t nJobIndex = nHandleInternal % JQ_PIPE_BUFFER_SIZE;
 	JqPipeJob* pJob = &pPipe->Jobs[nJobIndex];
 	JqJobState State;
 	do
 	{
 		State = JqJobStateLoad(pJob);
 		JQ_ASSERT(State.nStartedHandle == nHandleInternal);
-		JQ_ASSERT(State.nNumJobs < State.nNumFinished);
+		JQ_ASSERT(State.nNumJobs > State.nNumFinished);
 		JqJobState NewState = State;
 		NewState.nNumFinished = State.nNumFinished+1;
 		bool bLast = NewState.nNumFinished == State.nNumJobs;
@@ -297,6 +312,7 @@ bool JqPipeFinishInternal(JqPipe* pPipe, uint32_t nHandleInternal)
 			Handle.Pad0 = 0;
 			Handle.Pipe = pPipe->nPipeId;
 			pPipe->FinishJobFunc(Handle, State.nExternalId);
+			NewState.nFinishedHandle = State.nStartedHandle;
 		}
 		if(JqJobStateCompareAndSwap(pJob, NewState, State))
 		{
@@ -312,15 +328,20 @@ EJqPipeExecuteResult JqPipeExecuteInternal(JqPipe* pPipe, JqPipeHandle* pFinishe
 	bool bIsLast = false;
 	if(JqPipeStartInternal(pPipe, nHandleInternal, &nSubJob, &bIsLast))
 	{
-		if(bIsLast)
-		{
-			pPipe->nGet.fetch_add(1);
-		}
+		// if(bIsLast)
+		// {
+		// 	uint64_t nGet = pPipe->nGet.load()+1;
+		// 	if((0xffffffff & nGet) == 0)
+		// 	{
+		// 		nGet++;
+		// 	}
+		// 	pPipe->nGet.store(1);
+		// }
 		//execute.
 
 		{
 			//JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
-			uint16_t nJobIndex = nHandleInternal % JQ_WORK_BUFFER_SIZE;
+			uint16_t nJobIndex = nHandleInternal % JQ_PIPE_BUFFER_SIZE;
 			JqPipeJob* pJob = &pPipe->Jobs[nJobIndex];
 
 			JqJobState State = JqJobStateLoad(pJob);
@@ -361,6 +382,7 @@ EJqPipeExecuteResult JqPipeExecute(JqPipe* pPipe, JqPipeHandle ExecuteHandle)
 		uint64_t nGet = pPipe->nGet.load();
 		while(nPut != nGet)
 		{
+			JQ_ASSERT((nGet&0xffffffff) != 0);
 //			uint32_t nHandle = (uint32_t)nGet;
 			JqPipeHandle H;
 			H.HandleInt = nGet & 0xffffffff;
@@ -370,6 +392,16 @@ EJqPipeExecuteResult JqPipeExecute(JqPipe* pPipe, JqPipeHandle ExecuteHandle)
 			if(eRes != EJQ_EXECUTE_FAIL)
 			{
 				return eRes;
+			}
+			else
+			{
+				if(JqPipeIsAllStarted(pPipe, H))
+				{
+					uint64_t nGetNew = nGet+1;
+					if(0 == (nGetNew&0xffffffff))
+						nGetNew++;
+					pPipe->nGet.compare_exchange_weak(nGet, nGetNew);
+				}
 			}
 			nPut = pPipe->nPut.load();
 			nGet = pPipe->nGet.load();
@@ -382,10 +414,52 @@ bool JqPipeIsDone(JqPipe* pPipe, JqPipeHandle nJob)
 	JQ_ASSERT(nJob.Pipe == pPipe->nPipeId);
 
 	uint64_t nHandleInternal = nJob.HandleInt;
-	uint32_t nJobIndex = nHandleInternal % JQ_WORK_BUFFER_SIZE;
+	uint32_t nJobIndex = nHandleInternal % JQ_PIPE_BUFFER_SIZE;
 	
 	uint64_t nFinished = JqJobStateLoad(&pPipe->Jobs[nJobIndex]).nFinishedHandle;
 	return JQ_LE_WRAP_SHIFT(nHandleInternal, nFinished, 32);
 }
 
+bool JqPipeIsAllStarted(JqPipe* pPipe, JqPipeHandle nJob)
+{
+	JQ_ASSERT(nJob.Pipe == pPipe->nPipeId);
+
+	uint64_t nHandleInternal = nJob.HandleInt;
+	uint32_t nJobIndex = nHandleInternal % JQ_PIPE_BUFFER_SIZE;
+	JqJobState State = JqJobStateLoad(&pPipe->Jobs[nJobIndex]);
+	uint64_t nFinished = State.nFinishedHandle;
+	return JQ_LE_WRAP_SHIFT(nHandleInternal, nFinished, 32) || State.nNumStarted == State.nNumJobs;
+}
+
+#include <stdio.h>
+
+void JqPipeDump(JqPipe* pPipe)
+{
+	printf("***** PIPE DUMP BEGIN %d\n", pPipe->nPipeId);
+	printf(" Put %lld\n", pPipe->nPut.load());
+	printf(" Get %lld\n", pPipe->nGet.load());
+	for(uint32_t i = 0; i < JQ_PIPE_BUFFER_SIZE; ++i)
+	{
+		JqPipeJob* pJob = &pPipe->Jobs[i];
+		JqJobState State = JqJobStateLoad(pJob);
+
+		if(State.nStartedHandle != State.nFinishedHandle ||
+			State.nNumStarted != State.nNumJobs || 
+			State.nNumFinished != State.nNumJobs)
+		{
+			printf(" JOB %04d :: ext %d (%3d/%3d/%3d) range %d, (%d/%d)\n", 
+				i, State.nExternalId,
+				State.nNumStarted,
+				State.nNumFinished,
+				State.nNumJobs,
+				State.nRange,
+				State.nStartedHandle,
+				State.nFinishedHandle);
+		}
+	}
+
+	printf("***** PIPE DUMP END   %d\n", pPipe->nPipeId);
+
+
+}
 #endif

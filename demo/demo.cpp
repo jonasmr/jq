@@ -143,7 +143,7 @@ std::atomic<int> g_nJobCount1;
 std::atomic<int> g_nJobCount2;
 std::atomic<int> g_nLowCount;
 
-#define JOB_COUNT 2
+#define JOB_COUNT 1
 #define JOB_COUNT_0 3
 #define JOB_COUNT_1 6
 #define JOB_COUNT_2 20
@@ -218,6 +218,7 @@ void JobTree0(void* pArg, int nStart, int nEnd)
 	}
 	JobSpinWork(50 + rand() % 100);
 	((int*)pArg)[nStart] = 1;
+	printf("wrote %p   ... %p  <<- %d\n", &((int*)pArg)[nStart], pArg, nStart);
 	g_nJobCount0.fetch_add(1);
 }
 
@@ -232,7 +233,9 @@ void JobTree(VOID_ARG int nStart, int nEnd)
 	uint64_t nJobTree0 = JqAdd(
 		[&](int s, int e)
 		{
+			printf("job tree %d\n", s);
 			JobTree0((void*)&lala[0],s,e);
+			printf("end job tree %d\n", s);
 		}, 2, 3);
 	#endif
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree Wait", 0xff5555);
@@ -258,6 +261,7 @@ void uprintf(const char* fmt, ...);
 #else
 #define uprintf printf
 #endif
+
 
 void JqTest()
 {
@@ -293,9 +297,14 @@ void JqTest()
 	uint64_t nJob = JqAdd( [](VOID_ARG int begin, int end)
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
-		JobSpinWork(200);
+//		printf("run job %d\n", begin);
+//		JQ_ASSERT(0);
+	//	JobSpinWork(200);
 		g_nLowCount++;
-	}, 7, VOID_PARAM JOB_COUNT_LOW);
+	}, 3, VOID_PARAM JOB_COUNT_LOW);
+	//printf("waiting\n");
+	JqWait(nJob);
+	//printf("done waiting\n");
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		JobSpinWork(500);
@@ -309,118 +318,118 @@ void JqTest()
 		JqWait(nJobMedium);
 	}
 
-	JQ_ASSERT(g_nJobCount == JOB_COUNT);
-	JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
-	JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
-	JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+// 	JQ_ASSERT(g_nJobCount == JOB_COUNT);
+// 	JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
+// 	JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+// 	JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
-		JobSpinWork(500);
-	}
-
-
-	{
-		if(0)
-		{
-			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitSpin", 0xff0000);
-			JqWait(nJob, JQ_WAITFLAG_SLEEP|JQ_WAITFLAG_EXECUTE_ANY);
-		}
-		else
-		{
-			JqWait(nJob);
-		}
-	}
-
-	JQ_ASSERT(g_nLowCount == JOB_COUNT_LOW);
+// 	{
+// 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
+// 		JobSpinWork(500);
+// 	}
 
 
-	static int nNumJobs = 1;
-	static int nRange = (4<<10)-5;
+// 	{
+// 		if(0)
+// 		{
+// 			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitSpin", 0xff0000);
+// 			JqWait(nJob, JQ_WAITFLAG_SLEEP|JQ_WAITFLAG_EXECUTE_ANY);
+// 		}
+// 		else
+// 		{
+// 			JqWait(nJob);
+// 		}
+// 	}
 
-	int nData[4<<10] = {0};
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "RangeTest", 0xff00ff);
+// 	JQ_ASSERT(g_nLowCount == JOB_COUNT_LOW);
 
-		nNumJobs = (nNumJobs+1) % 21;
-		if(nNumJobs == 0)
-		{
-			nNumJobs = 1;
-			//printf("range test range %d\n", nRange);
-			nRange = (nRange+1) % (4<<10);
-		}
-		for(int i = 0; i < nRange; ++i)
-		{
-			if(nData[i] != 0)
-				JQ_BREAK();
-		}
-#ifndef JQ_NO_LAMBDA
-		uint64_t nRangeTest = JqAdd(
-			[&](int nBegin, int nEnd)
-		{
-			for(int i = nBegin; i < nEnd; ++i)
-			{
-				nData[i] = 1;
-			}
-		}, 3, nNumJobs, nRange);
-#else
-		uint64_t nRangeTest = JqAdd(
-			[](void* pArray, int nBegin, int nEnd)
-		{
-			int* iArray = (int*)pArray;
-			for(int i = nBegin; i < nEnd; ++i)
-			{
-				iArray[i] = 1;
-			}
-		}, 3, &nData[0], nNumJobs, nRange);
-#endif
 
-		JqWait(nRangeTest);
+// 	static int nNumJobs = 1;
+// 	static int nRange = (4<<10)-5;
 
-		for(int i = 0; i < nRange; ++i)
-		{
-			if(nData[i] != 1)
-				JQ_BREAK();
-		}
-	}
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "GroupTest", 0x66ff33);
+// 	int nData[4<<10] = {0};
+// 	{
+// 		MICROPROFILE_SCOPEI("JQDEMO", "RangeTest", 0xff00ff);
 
-		int lala[20] = {0};
-		uint64_t nJobGroup = JqGroupBegin();
+// 		nNumJobs = (nNumJobs+1) % 21;
+// 		if(nNumJobs == 0)
+// 		{
+// 			nNumJobs = 1;
+// 			//printf("range test range %d\n", nRange);
+// 			nRange = (nRange+1) % (4<<10);
+// 		}
+// 		for(int i = 0; i < nRange; ++i)
+// 		{
+// 			if(nData[i] != 0)
+// 				JQ_BREAK();
+// 		}
+// #ifndef JQ_NO_LAMBDA
+// 		uint64_t nRangeTest = JqAdd(
+// 			[&](int nBegin, int nEnd)
+// 		{
+// 			for(int i = nBegin; i < nEnd; ++i)
+// 			{
+// 				nData[i] = 1;
+// 			}
+// 		}, 3, nNumJobs, nRange);
+// #else
+// 		uint64_t nRangeTest = JqAdd(
+// 			[](void* pArray, int nBegin, int nEnd)
+// 		{
+// 			int* iArray = (int*)pArray;
+// 			for(int i = nBegin; i < nEnd; ++i)
+// 			{
+// 				iArray[i] = 1;
+// 			}
+// 		}, 3, &nData[0], nNumJobs, nRange);
+// #endif
 
-#ifndef JQ_NO_LAMBDA
-		for(int i = 0; i < 20; ++i)
-		{
-			JqAdd([i, &lala](int b, int e)
-			{
-				MICROPROFILE_SCOPEI("JQDEMO", "GroupJob", 0x33ff33);
-				JobSpinWork(1000);
-				lala[i] = 1;
-			}, 7, 1);
-		}
-#else
-		for(int i = 0; i < 20; ++i)
-		{
-			JqAdd([](void* p, int b, int e)
-			{
-				MICROPROFILE_SCOPEI("JQDEMO", "GroupJob", 0x33ff00);
+// 		JqWait(nRangeTest);
 
-				JobSpinWork(1000);
-				((int*)p)[0] = 1;
-			}, 7, &lala[i], 1);
-		}
-#endif
-		JqGroupEnd();
+// 		for(int i = 0; i < nRange; ++i)
+// 		{
+// 			if(nData[i] != 1)
+// 				JQ_BREAK();
+// 		}
+// 	}
+// 	{
+// 		MICROPROFILE_SCOPEI("JQDEMO", "GroupTest", 0x66ff33);
 
-		MICROPROFILE_SCOPEI("JQDEMO", "GroupWait", 0x77ff00);
+// 		int lala[20] = {0};
+// 		uint64_t nJobGroup = JqGroupBegin();
 
-		JqWait(nJobGroup);
-		for(int i = 0; i < 20; ++i)
-		{
-			JQ_ASSERT(lala[i] == 1);
-		}
-	}
+// #ifndef JQ_NO_LAMBDA
+// 		for(int i = 0; i < 20; ++i)
+// 		{
+// 			JqAdd([i, &lala](int b, int e)
+// 			{
+// 				MICROPROFILE_SCOPEI("JQDEMO", "GroupJob", 0x33ff33);
+// 				JobSpinWork(1000);
+// 				lala[i] = 1;
+// 			}, 7, 1);
+// 		}
+// #else
+// 		for(int i = 0; i < 20; ++i)
+// 		{
+// 			JqAdd([](void* p, int b, int e)
+// 			{
+// 				MICROPROFILE_SCOPEI("JQDEMO", "GroupJob", 0x33ff00);
+
+// 				JobSpinWork(1000);
+// 				((int*)p)[0] = 1;
+// 			}, 7, &lala[i], 1);
+// 		}
+// #endif
+// 		JqGroupEnd();
+
+// 		MICROPROFILE_SCOPEI("JQDEMO", "GroupWait", 0x77ff00);
+
+// 		JqWait(nJobGroup);
+// 		for(int i = 0; i < 20; ++i)
+// 		{
+// 			JQ_ASSERT(lala[i] == 1);
+// 		}
+// 	}
 }
 
 
@@ -458,6 +467,7 @@ int main(int argc, char* argv[])
 	//JqTest();
 	static uint32_t nNumWorkers = g_nNumWorkers;
 	JqStart(nNumWorkers);
+	//JqStartSentinel(20);
 
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    	    8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,  	    8);
