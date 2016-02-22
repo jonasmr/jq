@@ -7,8 +7,16 @@ CFLAGS+=-g -O0 -Wno-invalid-offsetof
 
 CPPFLAGS=$(CFLAGS)
 CPPFLAGS+=-stdlib=libc++ -std=c++11
+CPPFLAGS+=-DJQ_MICROPROFILE
+CPPFLAGS+=-DJQ_MICROPROFILE_VERBOSE
+CPPFLAGS+=-DJQ_ASSERT_LOCKS
+#define JQ_IMPL
+#define JQ_MICROPROFILE
+#define JQ_MICROPROFILE_VERBOSE
+#define JQ_ASSERT_LOCKS
 
-CPP_SOURCES = demo.cpp microprofile.cpp
+
+CPP_SOURCES = demo.cpp microprofile.cpp pipe.cpp jq.cpp
 C_SOURCES = glew/glew.c
 
 TARGET=demo

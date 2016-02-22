@@ -54,6 +54,8 @@ int g_MouseDelta = 0;
 
 MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 
+int64_t JqTick();
+int64_t JqTicksPerSecond();
 
 void HandleEvent(SDL_Event* pEvt)
 {
@@ -127,10 +129,6 @@ void HandleEvent(SDL_Event* pEvt)
 }
 
 
-#define JQ_IMPL
-#define JQ_MICROPROFILE
-#define JQ_MICROPROFILE_VERBOSE
-#define JQ_ASSERT_LOCKS
 
 //comment out to test different modes
 //#define JQ_NO_LAMBDA
@@ -433,9 +431,21 @@ void MicroProfileBeginDraw(uint32_t nWidth, uint32_t nHeight, float* prj);
 void MicroProfileEndDraw();
 
 
+struct lala
+{
+	void* p1;
+	void* p2;
+};
 
+std::atomic<lala> hest;
 int main(int argc, char* argv[])
 {
+
+	std::atomic<lala> ged;
+	lala l = {0, 0};
+	ged.store(l);
+	hest.compare_exchange_weak(l, l);
+
 	printf("press 'z' to toggle microprofile drawing\n");
 	printf("press 'right shift' to pause microprofile update\n");
 	MicroProfileOnThreadCreate("Main");

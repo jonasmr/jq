@@ -1,3 +1,4 @@
+#pragma once
 #if 0
 #include "jq1.h"
 #else
