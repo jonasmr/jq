@@ -213,7 +213,7 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 	//{
 	// 	nNumJobs = JqState.nNumWorkers;
 	//}
-	JQ_ASSERT(nExternalId < (1<<12));
+	//JQ_ASSERT(nExternalId < (1<<12));
 	uint64_t nNextHandle = 0;
 
 	do
