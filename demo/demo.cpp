@@ -43,6 +43,7 @@
 #define WIDTH 1024
 #define HEIGHT 600
 uint32_t g_FewJobs = 0;
+uint32_t g_DontSleep = 0;
 
 uint32_t g_nNumWorkers = 1;
 uint32_t g_nQuit = 0;
@@ -77,6 +78,10 @@ void HandleEvent(SDL_Event* pEvt)
 		if(pEvt->key.keysym.sym == 'x')
 		{
 			g_FewJobs = !g_FewJobs;
+		}
+		if(pEvt->key.keysym.sym == 'c')
+		{
+			g_DontSleep = !g_DontSleep;
 		}
 
 		if(pEvt->key.keysym.sym == 'z')
@@ -142,6 +147,7 @@ std::atomic<int> g_nJobCount0;
 std::atomic<int> g_nJobCount1;
 std::atomic<int> g_nJobCount2;
 std::atomic<int> g_nLowCount;
+std::atomic<int> g_nExternalStats;
 
 #define JOB_COUNT 1
 #define JOB_COUNT_0 3
@@ -161,6 +167,10 @@ std::atomic<int> g_nLowCount;
 
 uint32_t JobSpinWork(uint32_t nUs)
 {
+	if(g_DontSleep)
+	{
+		return 0;
+	}
 	uint32_t result = 0;
 	uint64_t nTick = JqTick();
 	uint64_t nTicksPerSecond = JqTicksPerSecond();
@@ -189,12 +199,14 @@ void JobTree1(VOID_ARG int nStart, int nEnd)
 	if(g_FewJobs)
 	{
 		JqAdd(JobTree2, 2, VOID_PARAM JOB_COUNT_2);
+		g_nExternalStats ++;
 	}
 	else
 	{
 		for(int i = 0; i < JOB_COUNT_2; ++i)
 		{
 			JqAdd(JobTree2, 2, VOID_PARAM 1);
+			g_nExternalStats ++;
 		}
 	}
 	JobSpinWork(50 + rand() % 100);
@@ -209,12 +221,14 @@ void JobTree0(void* pArg, int nStart, int nEnd)
 	if(g_FewJobs)
 	{
 		JqAdd(JobTree1, 2, VOID_PARAM JOB_COUNT_1);
+		g_nExternalStats ++;
 	}
 	else
 	{
 		for(int i = 0; i < JOB_COUNT_1; ++i)
 		{
 			JqAdd(JobTree1, 2, VOID_PARAM 1);
+			g_nExternalStats ++;
 		}
 	}
 	JobSpinWork(50 + rand() % 100);
@@ -238,6 +252,7 @@ void JobTree(VOID_ARG int nStart, int nEnd)
 			JobTree0((void*)&lala[0],s,e);
 		}, 2, 3);
 	#endif
+	g_nExternalStats ++;
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree Wait", 0xff5555);
 	JqWait(nJobTree0);
 	JQ_ASSERT(lala[0] == 1);
@@ -273,7 +288,8 @@ void JqTest()
 	{
 		JqStats Stats;
 		JqConsumeStats(&Stats);
-
+		int ext = g_nExternalStats.exchange(0);
+		uprintf("ext %6.2f\n", ext / (float)frames);
 		uprintf("Jobs %6.2f/%6.2f, Sub %6.2f/%6.2f, locks per frame %f. Blocking Waits %f Signals %f\n", 
 			Stats.nNumAdded / (float)frames, 
 			Stats.nNumFinished / (float)frames, 
@@ -291,10 +307,6 @@ void JqTest()
 	MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST", 0xff00ff);
 
 	g_nLowCount = 0;
-	g_nJobCount = 0;
-	g_nJobCount0 = 0;
-	g_nJobCount1 = 0;
-	g_nJobCount2 = 0;
 
 
 	uint64_t nJob = JqAdd( [](VOID_ARG int begin, int end)
@@ -305,6 +317,7 @@ void JqTest()
 	//	JobSpinWork(200);
 		g_nLowCount++;
 	}, 3, VOID_PARAM JOB_COUNT_LOW);
+	g_nExternalStats ++;
 	//printf("waiting\n");
 	JqWait(nJob);
 	//printf("done waiting\n");
@@ -315,26 +328,39 @@ void JqTest()
 
 	//printf("job Count %d %d %d %d\n", g_nJobCount.load(), g_nJobCount0.load(), g_nJobCount1.load(), g_nJobCount2.load());
 
-	uint64_t nJobMedium = JqAdd(JobTree, 0, VOID_PARAM JOB_COUNT);
-	//g_TESTID = (uint32_t)nJobMedium;
-	// printf("job medium %lld\n", nJobMedium);
+	uint64_t nStart = JqTick();	
+	// float ft = (JqTick() - nStart) * 1000.f / JqTicksPerSecond();
+	//printf("ft %f\n", ft);
+	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
 	{
-		MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
-		JqWait(nJobMedium);
-		// printf("exp Count %d %d %d %d\n", JOB_COUNT,
-		// JOB_COUNT_0 * JOB_COUNT,
-		// JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT,
-		// JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+		g_nJobCount = 0;
+		g_nJobCount0 = 0;
+		g_nJobCount1 = 0;
+		g_nJobCount2 = 0;
 
-		//printf("job Count %d %d %d %d\n", g_nJobCount.load(), g_nJobCount0.load(), g_nJobCount1.load(), g_nJobCount2.load());
-		//JqCrashAndDump();
+		
+		uint64_t nJobMedium = JqAdd(JobTree, 0, VOID_PARAM JOB_COUNT);
+		g_nExternalStats ++;
+		//g_TESTID = (uint32_t)nJobMedium;
+		// printf("job medium %lld\n", nJobMedium);
+		{
+			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
+			JqWait(nJobMedium);
+			// printf("exp Count %d %d %d %d\n", JOB_COUNT,
+			// JOB_COUNT_0 * JOB_COUNT,
+			// JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT,
+			// JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 
+			//printf("job Count %d %d %d %d\n", g_nJobCount.load(), g_nJobCount0.load(), g_nJobCount1.load(), g_nJobCount2.load());
+			//JqCrashAndDump();
+
+		}
+
+		JQ_ASSERT(g_nJobCount == JOB_COUNT);
+		JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
+		JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+		JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 	}
-
-	JQ_ASSERT(g_nJobCount == JOB_COUNT);
-	JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
-	JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
-	JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 
 // 	{
 // 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
