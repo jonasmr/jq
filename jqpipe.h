@@ -166,7 +166,7 @@ struct JqPipeStats
 };
 
 typedef void (*JqPipeRunJob)(JqPipeHandle Handle, uint32_t nExternalId, uint16_t nSubJob, int nNumJobs, int nRange);
-typedef void (*JqPipeFinishJob)(JqPipeHandle Handle, uint32_t nExternalId);
+typedef void (*JqPipeFinishJob)(JqPipeHandle Handle, uint32_t nExternalId, int nNumJobs);
 
 struct JqPipe
 {
@@ -311,7 +311,7 @@ bool JqPipeFinishInternal(JqPipe* pPipe, uint32_t nHandleInternal)
 			Handle.HandleInt = nHandleInternal;
 			Handle.Pad0 = 0;
 			Handle.Pipe = pPipe->nPipeId;
-			pPipe->FinishJobFunc(Handle, State.nExternalId);
+			pPipe->FinishJobFunc(Handle, State.nExternalId, State.nNumJobs);
 			NewState.nFinishedHandle = State.nStartedHandle;
 		}
 		if(JqJobStateCompareAndSwap(pJob, NewState, State))
@@ -380,7 +380,7 @@ EJqPipeExecuteResult JqPipeExecute(JqPipe* pPipe, JqPipeHandle ExecuteHandle)
 	{
 		uint64_t nPut = pPipe->nPut.load();
 		uint64_t nGet = pPipe->nGet.load();
-		while(nPut != nGet)
+		while(JQ_LT_WRAP(nGet, nPut))
 		{
 			JQ_ASSERT((nGet&0xffffffff) != 0);
 //			uint32_t nHandle = (uint32_t)nGet;
@@ -400,6 +400,7 @@ EJqPipeExecuteResult JqPipeExecute(JqPipe* pPipe, JqPipeHandle ExecuteHandle)
 					uint64_t nGetNew = nGet+1;
 					if(0 == (nGetNew&0xffffffff))
 						nGetNew++;
+					JQ_ASSERT(JQ_LE_WRAP(nGetNew,nPut));
 					pPipe->nGet.compare_exchange_weak(nGet, nGetNew);
 				}
 			}

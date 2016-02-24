@@ -768,7 +768,7 @@ void JqCheckFinished(uint64_t nJob)
 		JQ_ASSERT(nJob == JqState.m_Jobs2[nIndex].nStartedHandle);
 		JqState.m_Jobs2[nIndex].nFinishedHandle = nJob;
 
-		JqState.Stats.nNumFinished++;
+//		JqState.Stats.nNumFinished++;
 		// //kick waiting threads.
 		// int8_t nWaiters = JqState.m_Jobs2[nIndex].nWaiters;
 		// if(nWaiters != 0)
@@ -789,12 +789,15 @@ void JqCheckFinished(uint64_t nJob)
 //maybe be called multiple times, but not from multiple threads
 //will only be called 
 uint32_t g_TESTID = 0;
-void JqFinishJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId)
+void JqFinishJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId, int nNumJobs)
 {
 	JqMutexLock L(JqState.Mutex);
 	JQ_ASSERT(nExternalId != 0);
 	JQ_ASSERT(nExternalId < JQ_TREE_BUFFER_SIZE2);
-	if(0 != JqState.m_Jobs2[nExternalId].PipeHandle.load(std::memory_order_acquire).Handle)
+	JqPipeHandle Null;
+	JqPipeHandle Current = JqState.m_Jobs2[nExternalId].PipeHandle.load(std::memory_order_acquire);
+	//if(0 != JqState.m_Jobs2[nExternalId].PipeHandle.load(std::memory_order_acquire).Handle)
+	if(0 != Current.Handle && JqState.m_Jobs2[nExternalId].PipeHandle.compare_exchange_weak(Current, Null))
 	{
 		//JqState.m_Jobs2[nExternalId].nFinishedHandle != JqState.m_Jobs2[nExternalId].nStartedHandle)
 		JqState.m_Jobs2[nExternalId].PipeHandle.store(JqPipeHandleNull());
@@ -804,6 +807,8 @@ void JqFinishJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId)
 		}
 		// JQ_ASSERT(JqState.m_Jobs2[nExternalId].PipeHandle.load().Handle == PipeHandle.Handle);
 		uint64_t nHandle = JqState.m_Jobs2[nExternalId].nStartedHandle;
+		JqState.Stats.nNumFinishedSub += nNumJobs;
+		JqState.Stats.nNumFinished++;
 		// JqState.m_Jobs2[nExternalId].nFinishedHandle = nHandle;
 		JqCheckFinished(nHandle);
 	}
