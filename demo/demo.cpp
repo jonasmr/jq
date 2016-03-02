@@ -331,6 +331,7 @@ void JqTest()
 	uint64_t nStart = JqTick();	
 	// float ft = (JqTick() - nStart) * 1000.f / JqTicksPerSecond();
 	//printf("ft %f\n", ft);
+	#if 1
 	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
 	{
 		g_nJobCount = 0;
@@ -338,7 +339,7 @@ void JqTest()
 		g_nJobCount1 = 0;
 		g_nJobCount2 = 0;
 
-		
+
 		uint64_t nJobMedium = JqAdd(JobTree, 0, VOID_PARAM JOB_COUNT);
 		g_nExternalStats ++;
 		//g_TESTID = (uint32_t)nJobMedium;
@@ -361,6 +362,7 @@ void JqTest()
 		JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 		JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 	}
+	#endif
 
 // 	{
 // 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
