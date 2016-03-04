@@ -198,6 +198,7 @@ struct JqStats
 	uint32_t nNumWaitKicks;
 	uint32_t nNumWaitCond;
 	uint32_t nMemoryUsed;
+	uint64_t nNextHandle;
 };
 
 
@@ -608,20 +609,22 @@ void JqCheckFinished(uint64_t nJob)
 	if(0 == State.nFirstChild && 0 == PipeHandle.Handle && JqState.m_Jobs2[nIndex].Handle.load().nStarted == nJob)
 	{
 		uint16_t nParent = State.nParent;
+		uint64_t nParentHandle = 0;
 		//JQ_CLEAR_FUNCTION(JqState.m_Jobs2[nIndex].Function);
 		if(nParent)
 		{
-			uint64_t nParentHandle = JqDetachChild(nJob);
-			JqCheckFinished(nParentHandle);
+			nParentHandle = JqDetachChild(nJob);
 		}
 		JqJobFinish Finish;
 		JqJobFinish FinishNew;
+		bool bFail = false;
 		do
 		{
 			Finish = JqState.m_Jobs2[nIndex].Handle.load();
-			if(Finish.nStarted != nJob)
+			if(Finish.nStarted != nJob || Finish.nFinished == nJob)
 			{
 				JQ_ASSERT(JQ_LE_WRAP(nJob, Finish.nStarted));
+				bFail = true;
 				break;
 			}
 			JQ_ASSERT(Finish.nFinished != nJob);
@@ -630,7 +633,14 @@ void JqCheckFinished(uint64_t nJob)
 		}while(!JqState.m_Jobs2[nIndex].Handle.compare_exchange_weak(Finish, FinishNew));
 
 		//JqState.m_Jobs2[nIndex].PipeHandle.store(JqPipeHandleNull(), std::memory_order_release);
-		JqState.nFreeJobs++;
+		if(!bFail)
+		{
+			JqState.nFreeJobs++;
+		}
+		if(nParentHandle)
+		{
+			JqCheckFinished(nParentHandle);
+		}
 	}
 }
 
@@ -644,6 +654,7 @@ void JqFinishJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId, int nNumJo
 	JQ_ASSERT(nExternalId < JQ_TREE_BUFFER_SIZE2);
 	JqPipeHandle Null = JqPipeHandleNull();
 	JqPipeHandle Current = JqState.m_Jobs2[nExternalId].PipeHandle.load(std::memory_order_acquire);
+	uint64_t nHandle = JqState.m_Jobs2[nExternalId].Handle.load().nStarted;
 	//if(0 != JqState.m_Jobs2[nExternalId].PipeHandle.load(std::memory_order_acquire).Handle)
 	if(0 != Current.Handle && JqState.m_Jobs2[nExternalId].PipeHandle.compare_exchange_weak(Current, Null))
 	{
@@ -651,7 +662,6 @@ void JqFinishJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId, int nNumJo
 		{
 			printf("HERE!!\n");
 		}
-		uint64_t nHandle = JqState.m_Jobs2[nExternalId].Handle.load().nStarted; // LL: hvordan kan det nogensinde virke?
 		JqState.Stats.nNumFinishedSub += nNumJobs;
 		JqState.Stats.nNumFinished++;
 		JqCheckFinished(nHandle);
@@ -818,6 +828,7 @@ void JqConsumeStats(JqStats* pStats)
 	pStats->nNumLocks = JqState.Stats.nNumLocks.exchange(0);
 	pStats->nNumWaitKicks = JqState.Stats.nNumWaitKicks.exchange(0);
 	pStats->nNumWaitCond = JqState.Stats.nNumWaitCond.exchange(0);
+	pStats->nNextHandle = JqState.nNextHandle.load();
 }
 
 
@@ -844,9 +855,12 @@ void JqAttachChild(uint64_t nParent, uint64_t nChild)
 	{
 		ParentState = pParent->TreeState.load(std::memory_order_acquire);
 		ChildState.nSibling = ParentState.nFirstChild;
+		JQ_ASSERT(ChildState.nDeleted == 0);
+		JQ_ASSERT(ParentState.nDeleted == 0);
 		pChild->TreeState.store(ChildState, std::memory_order_release);
 		NewParentState = ParentState;
 		NewParentState.nFirstChild = nChildIndex;
+
 	}while(!pParent->TreeState.compare_exchange_weak(ParentState, NewParentState));
 	pChild->nRoot.store(pParent->nRoot.load());
 }
@@ -859,13 +873,14 @@ uint64_t JqDetachChild(uint64_t nChild)
 	uint16_t nParentIndex = BaseState.nParent;
 	JqJob2* pParent = &JqState.m_Jobs2[nParentIndex];
 	JQ_ASSERT(pChild->PipeHandle.load().Handle == 0); //hmmmmmmmmm does this make sense? verify
-//	JQ_ASSERT(0);
+
 	JQ_ASSERT(BaseState.nFirstChild == 0);
 	if(0 == nParentIndex)
 	{
+		JQ_ASSERT(BaseState.nSibling == 0);
 		return 0;
 	}
-	//tag as deleted
+	//tag as deleted --noget fucker up når den kommer ind her efter den er slettet..
 	JqJobTreeState State, NewState;
 	uint64_t nParentHandle = 0;
 	do
@@ -873,17 +888,20 @@ uint64_t JqDetachChild(uint64_t nChild)
 		State = pChild->TreeState.load(std::memory_order_acquire);
 		nParentHandle = JqState.m_Jobs2[State.nParent % JQ_TREE_BUFFER_SIZE2 ].Handle.load().nStarted;
 		JQ_ASSERT(JQ_LE_WRAP(JqState.m_Jobs2[State.nParent % JQ_TREE_BUFFER_SIZE2].Handle.load().nStarted, nParentHandle));
+		if(State.nDeleted || 0 == State.nParent)
+			break;
 		NewState = State;
 		NewState.nDeleted = 1;
 	}while(!pChild->TreeState.compare_exchange_weak(State, NewState));
-	//loop untill self is reached
+
 	JqJobTreeState ChildState = pChild->TreeState.load(std::memory_order_acquire);
 
 	while(ChildState.nDeleted != 0)
 	{
+		JQ_ASSERT(ChildState.nParent);
 		uint16_t nPrevIndex = 0;
 		uint16_t nDeleteIndex = 0;
-		JqJobTreeState PrevState, NewState, DeleteState;
+		JqJobTreeState PrevState, NewState, DeleteState,xx;
 		do
 		{
 
@@ -914,6 +932,7 @@ uint64_t JqDetachChild(uint64_t nChild)
 			}
 			//delete
 			JQ_ASSERT(DeleteState.nDeleted);
+			JQ_ASSERT(!PrevState.nDeleted);
 			NewState = PrevState; 
 			if(PrevState.nFirstChild == nDeleteIndex)
 			{
@@ -921,14 +940,27 @@ uint64_t JqDetachChild(uint64_t nChild)
 			}
 			else
 			{
+				if(PrevState.nSibling != nDeleteIndex || PrevState.nParent != nParentIndex)
+				{
+					continue;
+				}
 				JQ_ASSERT(PrevState.nSibling == nDeleteIndex);
 				NewState.nSibling = DeleteState.nSibling;
 			}
-
+			if(0 == memcmp(&NewState, &PrevState, sizeof(NewState)))
+			{
+				nDeleteIndex = 0;
+				break;
+			}
+			xx = PrevState;
 		}while(!JqState.m_Jobs2[nPrevIndex].TreeState.compare_exchange_weak(PrevState, NewState));
 		if(nDeleteIndex)
 		{
+			JqJobFinish F = JqState.m_Jobs2[nDeleteIndex].Handle.load();
+			JQ_ASSERT(F.nFinished != F.nStarted);
 			JqJobTreeState S = JqState.m_Jobs2[nDeleteIndex].TreeState.load();
+			int cmp = memcmp(&NewState, &xx, sizeof(NewState));
+			JQ_ASSERT(0 != cmp);
 			JQ_ASSERT(S.nDeleted == 1);
 			S.nParent = 0;
 			S.nSibling = 0;
@@ -947,6 +979,10 @@ uint64_t JqDetachChild(uint64_t nChild)
 	ChildState = pChild->TreeState.load(std::memory_order_acquire);
 	JQ_ASSERT(ChildState.nFirstChild == 0);
 	JQ_ASSERT(ChildState.nSibling == 0);
+	JQ_ASSERT(ChildState.nDeleted == 0);
+	JQ_ASSERT(ChildState.nParent == 0);
+	JQ_ASSERT( JqState.m_Jobs2[nParentHandle%JQ_TREE_BUFFER_SIZE2].TreeState.load().nFirstChild != nChildIndex);
+
 	return nParentHandle;
 }
 
