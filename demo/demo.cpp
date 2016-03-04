@@ -288,13 +288,20 @@ void JqTest()
 	{
 		JqStats Stats;
 		JqConsumeStats(&Stats);
+		static uint64_t H = Stats.nNextHandle;
+		uint64_t nHandleConsumption = Stats.nNextHandle - H;
+		H = Stats.nNextHandle;
 		int ext = g_nExternalStats.exchange(0);
+
 		uprintf("ext %6.2f\n", ext / (float)frames);
-		uprintf("Jobs %6.2f/%6.2f, Sub %6.2f/%6.2f, locks per frame %f. Blocking Waits %f Signals %f\n", 
+		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
+		uprintf("Jobs %6.2f/%6.2f, Sub %6.2f/%6.2f, Handles Used %lld, Wrap time %6.4f yrs, locks per frame %f. Blocking Waits %f Signals %f\n", 
 			Stats.nNumAdded / (float)frames, 
 			Stats.nNumFinished / (float)frames, 
 			Stats.nNumAddedSub / (float)frames, 
 			Stats.nNumFinishedSub / (float)frames, 
+			nHandleConsumption,
+			WrapTime,
 			Stats.nNumLocks / (float)frames, Stats.nNumWaitCond / (float)frames, Stats.nNumWaitKicks / (float)frames);
 		frames = 0;
 	}

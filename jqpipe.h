@@ -56,7 +56,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <atomic>
-
+#include <pthread.h>
 
 #define JQ_PIPE_EXTERNAL_ID_BITS 12
 struct JqJobState
@@ -101,7 +101,7 @@ struct JqPipeHandle
 struct JqPipeJob
 {
 #ifdef __cplusplus
-private:
+//private:
 	friend JqJobState JqJobStateLoad(JqPipeJob* pJob);
 	friend bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old);
 	#ifdef _WIN32
@@ -109,6 +109,8 @@ private:
 	#else
 	std::atomic<JqJobState> State;
 	#endif
+
+	uint64_t nThreadId;
 public:
 #else
 	JqJobState State;
@@ -277,6 +279,9 @@ bool JqPipeStartInternal(JqPipe* pPipe, uint32_t nHandleInternal, uint16_t* pSub
 			{
 				*pSubJob = State.nNumStarted;
 				*pLast = bLast;
+// 				uint64_t tid;
+// pthread_threadid_np(NULL, &tid);
+				pthread_threadid_np(NULL, &pJob->nThreadId);
 				return true;
 			}
 			else
