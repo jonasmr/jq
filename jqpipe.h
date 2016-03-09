@@ -100,21 +100,13 @@ struct JqPipeHandle
 
 struct JqPipeJob
 {
-#ifdef __cplusplus
-//private:
 	friend JqJobState JqJobStateLoad(JqPipeJob* pJob);
 	friend bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old);
-	#ifdef _WIN32
-	JqJobState State;
-	#else
 	std::atomic<JqJobState> State;
-	#endif
 
-	uint64_t nThreadId;
-public:
-#else
-	JqJobState State;
-#endif
+
+	// uint64_t nThreadId; //debug
+
 };
 #include <stdio.h>
 
@@ -136,16 +128,7 @@ inline JqJobState JqJobStateLoad(JqPipeJob* pJob)
 }
 inline bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old)
 {
-	// JQ_ASSERT(0 == (0xf & (intptr_t)&New));
-	// JQ_ASSERT(0 == (0xf & (intptr_t)&Old));
-	//return 1 == _InterlockedCompareExchange128(pJob->State.Atomic, New.Atomic[0], New.Atomic[1], Old.Atomic);
-	//JQ_ASSERT(New.nNumJobs != 300);
-	//uint32_t nNumJobsbef = pJob->State.load().nNumJobs;
 	bool bR = pJob->State.compare_exchange_weak(Old, New);
-	// if(bR)
-	// {
-	// 	printf("nNumJobs %d %d\n", nNumJobsbef, pJob->State.load().nNumJobs);
-	// }
 	return bR;
 }
 
@@ -211,13 +194,7 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 		nRange = nNumJobs;
 	}
 	JQ_ASSERT(nNumJobs > 0);
-	//if(nNumJobs < 0)
-	//{
-	// 	nNumJobs = JqState.nNumWorkers;
-	//}
-	//JQ_ASSERT(nExternalId < (1<<12));
 	uint64_t nNextHandle = 0;
-
 	do
 	{
 		nNextHandle = pPipe->nPut.fetch_add(1);
@@ -279,9 +256,7 @@ bool JqPipeStartInternal(JqPipe* pPipe, uint32_t nHandleInternal, uint16_t* pSub
 			{
 				*pSubJob = State.nNumStarted;
 				*pLast = bLast;
-// 				uint64_t tid;
-// pthread_threadid_np(NULL, &tid);
-				pthread_threadid_np(NULL, &pJob->nThreadId);
+				// pthread_threadid_np(NULL, &pJob->nThreadId);
 				return true;
 			}
 			else
@@ -333,17 +308,6 @@ EJqPipeExecuteResult JqPipeExecuteInternal(JqPipe* pPipe, JqPipeHandle* pFinishe
 	bool bIsLast = false;
 	if(JqPipeStartInternal(pPipe, nHandleInternal, &nSubJob, &bIsLast))
 	{
-		// if(bIsLast)
-		// {
-		// 	uint64_t nGet = pPipe->nGet.load()+1;
-		// 	if((0xffffffff & nGet) == 0)
-		// 	{
-		// 		nGet++;
-		// 	}
-		// 	pPipe->nGet.store(1);
-		// }
-		//execute.
-
 		{
 			//JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
 			uint16_t nJobIndex = nHandleInternal % JQ_PIPE_BUFFER_SIZE;
@@ -358,7 +322,6 @@ EJqPipeExecuteResult JqPipeExecuteInternal(JqPipe* pPipe, JqPipeHandle* pFinishe
 			pPipe->StartJobFunc(Handle, State.nExternalId, nSubJob, State.nNumJobs, State.nRange);
 		}
 		//finish
-
 		if(JqPipeFinishInternal(pPipe, nHandleInternal))
 		{
 			return EJQ_EXECUTE_FINISHED;
@@ -388,7 +351,6 @@ EJqPipeExecuteResult JqPipeExecute(JqPipe* pPipe, JqPipeHandle ExecuteHandle)
 		while(JQ_LT_WRAP(nGet, nPut))
 		{
 			JQ_ASSERT((nGet&0xffffffff) != 0);
-//			uint32_t nHandle = (uint32_t)nGet;
 			JqPipeHandle H;
 			H.HandleInt = nGet & 0xffffffff;
 			H.Pad0 = 0;
