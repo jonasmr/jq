@@ -229,7 +229,7 @@ JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, u
 JQ_API void			JqWaitAll();
 JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API uint64_t		JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-//JQ_API void			JqExecuteChildren(uint64_t nJob);
+JQ_API void			JqExecuteChildren(uint64_t nJob);
 JQ_API uint64_t 	JqGroupBegin(); //add a non-executing job to group all jobs added between begin/end
 JQ_API void 		JqGroupEnd();
 JQ_API bool 		JqIsDone(uint64_t nJob);
@@ -373,9 +373,8 @@ void 		JqIncrementFinished(uint64_t nJob);
 void		JqAttachChild(uint64_t nParentJob, uint64_t nChildJob);
 uint64_t 	JqDetachChild(uint64_t nChildJob);
 void 		JqExecuteJob(uint64_t nJob, uint16_t nJobSubIndex);
-//uint16_t 	JqTakeChildJob(uint64_t nJob, uint16_t* pJobSubIndex);
 void 		JqWorker(int nThreadId);
-uint64_t 	JqNextHandlex();
+uint64_t 	JqNextHandle();
 void 		JqWaitAll();
 void 		JqPriorityListAdd(uint16_t nJobIndex);
 void 		JqPriorityListRemove(uint16_t nJobIndex);
@@ -451,26 +450,6 @@ struct JqJob2
 	//		when removing a child it has no childs itself.
 	//it then is reduced to lockless single list insertion & removal.
 };
-
-// struct JqJob
-// {
-// 	JqFunction Function;
-// #ifdef JQ_NO_LAMBDA
-// 	void* pArg;
-// #endif
-
-// 	uint64_t nStartedHandle;
-// 	uint64_t nFinishedHandle;
-// 	int32_t nRange;
-// 	uint16_t nNumJobs;
-// 	uint16_t nNumStarted;
-// 	uint16_t nNumFinished;
-
-// #ifdef JQ_ASSERT_SANITY
-// 	int nTag;
-// #endif
-// };
-
 
 #define JQ_PAD_SIZE(type) (JQ_CACHE_LINE_SIZE - (sizeof(type)%JQ_CACHE_LINE_SIZE))
 #define JQ_ALIGN_CACHELINE __declspec(align(JQ_CACHE_LINE_SIZE))
@@ -1048,146 +1027,6 @@ int JqGetNumWorkers()
 	return JqState.nNumWorkers;
 }
 
-// void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
-// {
-// 	JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
-// 	JQ_ASSERT_NOT_LOCKED();
-// 	JQ_ASSERT(JqSelfPos < JQ_MAX_JOB_STACK);
-// 	JqSelfPush(nJob, nSubIndex);
-// 	uint16_t nWorkIndex = nJob % JQ_TREE_BUFFER_SIZE2;
-// 	uint16_t nNumJobs = JqState.m_Jobs2[nWorkIndex].nNumJobs;
-// 	int nRange = JqState.m_Jobs2[nWorkIndex].nRange;
-// 	int nFraction = nRange / nNumJobs;
-// 	int nRemainder = nRange - nFraction * nNumJobs;	
-// 	int nStart = JqGetRangeStart(nSubIndex, nFraction, nRemainder);
-// 	int nEnd = JqGetRangeStart(nSubIndex+1, nFraction, nRemainder);
-// #ifdef JQ_NO_LAMBDA
-// 	JqState.m_Jobs2[nWorkIndex].Function(JqState.m_Jobs2[nWorkIndex].pArg, nStart, nEnd);
-// #else
-// 	JqState.m_Jobs2[nWorkIndex].Function(nStart, nEnd);
-// #endif
-// 	JqSelfPop(nJob);
-// 	//JqIncrementFinished(nJob);
-// }
-
-
-// uint16_t JqTakeJob(uint16_t* pSubIndex, int nShortOnly)
-// {
-// 	JQ_ASSERT_LOCKED();
-// 	if(nShortOnly)
-// 	{
-// 		for(int i = 0; i < JQ_PRIORITY_ARRAY_SIZE; i+=2)
-// 		{
-// 			uint16_t nIndex = JqState.nPrioListHead[i];
-// 			if(nIndex)
-// 			{
-// 				*pSubIndex = JqIncrementStarted(JqState.m_Jobs2[nIndex].nStartedHandle);
-// 				return nIndex;
-// 			}
-// 		}
-// 	}
-// 	else
-// 	{
-// 		for(int i = 0; i < JQ_PRIORITY_ARRAY_SIZE; ++i)
-// 		{
-// 			uint16_t nIndex = JqState.nPrioListHead[i];
-// 			if(nIndex)
-// 			{
-// 				*pSubIndex = JqIncrementStarted(JqState.m_Jobs2[nIndex].nStartedHandle);
-// 				return nIndex;
-// 			}
-// 		}
-// 	}
-// 	return 0;
-// }
-#ifdef JQ_ASSERT_SANITY
-// void JqTagChildren(uint16_t nRoot)
-// {
-// 	for(int i = 1; i < JQ_TREE_BUFFER_SIZE2; ++i)
-// 	{
-// 		JQ_ASSERT(JqState.m_Jobs2[i].nTag == 0);
-// 		if(nRoot == i)
-// 		{
-// 			JqState.m_Jobs2[i].nTag = 1;
-// 		}
-// 		else
-// 		{
-// 			int nParent = JqState.m_Jobs2[i].nParent;
-// 			while(nParent)
-// 			{
-// 				if(nParent == nRoot)
-// 				{
-// 					JqState.m_Jobs2[i].nTag = 1;
-// 					break;
-// 				}
-// 				nParent = JqState.m_Jobs2[nParent].nParent;
-// 			}
-// 		}
-// 	}
-
-// }
-// void JqCheckTagChildren(uint16_t nRoot)
-// {
-// 	for(int i = 1; i < JQ_TREE_BUFFER_SIZE2; ++i)
-// 	{
-// 		JQ_ASSERT(JqState.m_Jobs2[i].nTag == 0);
-// 		bool bTagged = false;
-// 		if(nRoot == i)
-// 			bTagged = false;
-// 		else
-// 		{
-// 			int nParent = JqState.m_Jobs2[i].nParent;
-// 			while(nParent)
-// 			{
-// 				if(nParent == nRoot)
-// 				{
-// 					bTagged = true;
-// 					break;
-// 				}
-// 				nParent = JqState.m_Jobs2[nParent].nParent;
-// 			}
-// 		}
-// 		JQ_ASSERT(bTagged == (1==JqState.m_Jobs2[i].nTag));
-// 	}
-// }
-
-// void JqLoopChildren(uint16_t nRoot)
-// {
-// 	int nNext = JqState.m_Jobs2[nRoot].nFirstChild;
-// 	while(nNext != nRoot && nNext)
-// 	{
-// 		while(JqState.m_Jobs2[nNext].nFirstChild)
-// 			nNext = JqState.m_Jobs2[nNext].nFirstChild;
-// 		JQ_ASSERT(JqState.m_Jobs2[nNext].nTag == 1);
-// 		JqState.m_Jobs2[nNext].nTag = 0;
-// 		if(JqState.m_Jobs2[nNext].nSibling)
-// 			nNext = JqState.m_Jobs2[nNext].nSibling;
-// 		else
-// 		{
-// 			//search up
-// 			nNext = JqState.m_Jobs2[nNext].nParent;
-// 			while(nNext != nRoot)
-// 			{
-// 				JQ_ASSERT(JqState.m_Jobs2[nNext].nTag == 1);
-// 				JqState.m_Jobs2[nNext].nTag = 0;
-// 				if(JqState.m_Jobs2[nNext].nSibling)
-// 				{
-// 					nNext = JqState.m_Jobs2[nNext].nSibling;
-// 					break;
-// 				}
-// 				else
-// 				{
-// 					nNext = JqState.m_Jobs2[nNext].nParent;
-// 				}
-
-// 			}
-// 		}
-// 	}
-
-// 	JQ_ASSERT(JqState.m_Jobs2[nRoot].nTag == 1);
-// 	JqState.m_Jobs2[nRoot].nTag = 0;
-// }
-#endif
 
 #define JS(i) JqState.m_Jobs2[i].TreeState.load()
 
@@ -1200,17 +1039,11 @@ uint16_t JqTreeIterate(uint64_t nJob, uint16_t nCurrent)
 	if(JqState.m_Jobs2[nRoot].nRoot != JqState.m_Jobs2[nCurrent].nRoot)
 	{
 		return 0; //not root, restart iteration
-		// nCurrent = nJob % JQ_TREE_BUFFER_SIZE2;
-		// nCurrent = nRoot; //not a child. restart iteration.
 	}
 	if(nRoot == nCurrent)
 	{
-		// while(JqState.m_Jobs2[nCurrent].nFirstChild)
-		// 	nCurrent = JqState.m_Jobs2[nCurrent].nFirstChild;
-
 		while(JS(nCurrent).nFirstChild)
 			nCurrent = JS(nCurrent).nFirstChild;
-
 	}
 	else
 	{
@@ -1228,54 +1061,6 @@ uint16_t JqTreeIterate(uint64_t nJob, uint16_t nCurrent)
 	}
 	return nCurrent;
 }
-
-
-// //this code is O(n) where n is the no. of child nodes.
-// //I wish this could be written in a simpler way
-// uint16_t JqTakeChildJob(uint64_t nJob, uint16_t* pSubIndexOut)
-// {
-// 	JQ_MICROPROFILE_VERBOSE_SCOPE("JqTakeChildJob", 0xff);
-// 	JQ_ASSERT_LOCKED();
-// #if JQ_ASSERT_SANITY
-// 	{
-// 		//verify that the child iteration is sane
-// 		for(int i = 0; i < JQ_TREE_BUFFER_SIZE2; ++i)
-// 		{
-// 			JqState.m_Jobs2[i].nTag = 0;
-// 		}
-// 		JqTagChildren(nJob%JQ_TREE_BUFFER_SIZE2);
-// 		uint16_t nIndex = nJob%JQ_TREE_BUFFER_SIZE2;
-// 		uint16_t nRootIndex = nJob % JQ_TREE_BUFFER_SIZE2;
-// 		do
-// 		{
-// 			nIndex = JqTreeIterate(nJob, nIndex);
-// 			JQ_ASSERT(JqState.m_Jobs2[nIndex].nTag == 1);
-// 			JqState.m_Jobs2[nIndex].nTag = 0;
-// 		}while(nIndex != nRootIndex);
-// 		for(int i = 0; i < JQ_TREE_BUFFER_SIZE2; ++i)
-// 		{
-// 			JQ_ASSERT(JqState.m_Jobs2[i].nTag == 0);
-// 		}
-// 	}
-// #endif
-
-// 	uint16_t nRoot = nJob % JQ_TREE_BUFFER_SIZE2;
-// 	uint16_t nIndex = nRoot;
-
-// 	do
-// 	{
-// 		nIndex = JqTreeIterate(nJob, nIndex);
-// 		JQ_ASSERT(nIndex);
-
-// 		if(JqState.m_Jobs2[nIndex].nNumStarted < JqState.m_Jobs2[nIndex].nNumJobs)
-// 		{
-// 			*pSubIndexOut = JqIncrementStarted(JqState.m_Jobs2[nIndex].nStartedHandle);
-// 			return nIndex;
-// 		}
-// 	}while(nIndex != nRoot);
-
-// 	return 0;
-// }
 
 bool JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes);
 bool JqExecuteOne()
@@ -1449,18 +1234,6 @@ void JqDump()
 	uint32_t nHasSibling = 0;
 	uint32_t nDeleted = 0;
 
-	// std::atomic<JqJobFinish> 	Handle;
-	// std::atomic<JqPipeHandle> 	PipeHandle;
-	// std::atomic<uint64_t> 		nRoot;
-
-	// enum
-	// {
-	// 	EJOBTREE_NULL = 0,
-	// 	EJOBTREE_PENDING_REMOVAL = 0xffffffff,
-	// };
-
-	// std::atomic<JqJobTreeState> TreeState;
-
 	for(uint32_t i = 1; i < JQ_TREE_BUFFER_SIZE2; ++i)
 	{
 		JqJob2* pJob = &JqState.m_Jobs2[i];
@@ -1518,8 +1291,6 @@ void JqDump()
 			}
 		}
 	}
-
-	// fprintf(F, "total pending jobs %d/%d\n", nPendingJobs, JQ_TREE_BUFFER_SIZE2);
 
 	fprintf(F, "YYYYY RAW DUMP\n");
 	for(uint32_t i = 0; i < JQ_TREE_BUFFER_SIZE2; ++i)
@@ -1600,7 +1371,7 @@ JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRang
 	JqWait(nJob, nWaitFlag);
 }
 
-uint64_t JqNextHandlex()
+uint64_t JqNextHandle()
 {
 	uint64_t nHandle, nOldHandle;
 	int nSkips = 0;
@@ -1657,16 +1428,14 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs, int nRange, uint
 	}
 	uint64_t nHandle;
 	{
-		//JqMutexLock Lock(JqState.Mutex);
 		JqState.Stats.NA.fetch_add(1);
-		nHandle = JqNextHandlex();
+		nHandle = JqNextHandle();
 		uint16_t nIndex = nHandle % JQ_TREE_BUFFER_SIZE2;
 		JqJob2* pEntry = &JqState.m_Jobs2[nIndex];
 		JQ_ASSERT(pEntry->PipeHandle.load().Handle == 0);
 		JQ_ASSERT(pEntry->TreeState.load().nFirstChild == 0);
 		JQ_ASSERT(pEntry->TreeState.load().nParent == 0);
 		JQ_ASSERT(pEntry->TreeState.load().nSibling == 0);
-		//pEntry->PipeHandle.store(JqPipeHandleNull(), std::memory_order_release);
 		pEntry->Function = JobFunc;
 #ifdef JQ_NO_LAMBDA
 		pEntry->pArg = pArg;
@@ -1678,7 +1447,6 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs, int nRange, uint
 		JQ_ASSERT(bSuccess);
 
 		uint64_t nParentHandle = nParent;
-		//pEntry->nParent = nParentHandle % JQ_TREE_BUFFER_SIZE2;
 		if(nParent)
 		{
 			JqAttachChild(nParentHandle, nHandle);
@@ -1721,52 +1489,16 @@ bool JqIsDoneExt(uint64_t nJob, uint32_t nWaitFlags)
 	return bIsDone;
 }
 
-
-// bool JqPendingJobs(uint64_t nJob)
-// {
-// 	uint64_t nIndex = nJob % JQ_TREE_BUFFER_SIZE2;
-// 	JQ_ASSERT(JQ_LE_WRAP(JqState.m_Jobs2[nIndex].nFinishedHandle, JqState.m_Jobs2[nIndex].nStartedHandle));
-// 	return JqState.m_Jobs2[nIndex].nFinishedHandle != JqState.m_Jobs2[nIndex].nStartedHandle;
-// }
-
-
 void JqWaitAll()
 {
 	while(JqExecuteOne(nullptr, 0))
 		;
 	return;
-	// uint16_t nIndex = 0;
-	// while(JqState.nFreeJobs != JQ_NUM_JOBS)
-	// {
-	// 	uint16_t nSubIndex = 0;
-	// 	{
-	// 		JqMutexLock lock(JqState.Mutex);
-	// 		if(nIndex)
-	// 		{
-	// 			JqIncrementFinished(JqState.m_Jobs2[nIndex].nStartedHandle);		
-	// 		}
-	// 		nIndex = JqTakeJob(&nSubIndex, 0);
-	// 	}
-	// 	if(nIndex)
-	// 	{
-	// 		JqExecuteJob(JqState.m_Jobs2[nIndex].nStartedHandle, nSubIndex);
-	// 	}
-	// 	else
-	// 	{
-	// 		JQ_USLEEP(1000);
-	// 	}	
-	// }
-	// if(nIndex)
-	// {
-	// 	JqMutexLock lock(JqState.Mutex);
-	// 	JqIncrementFinished(JqState.m_Jobs2[nIndex].nStartedHandle);		
-	// }
 }
 
 
 void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 {
-	//uint16_t nIndex = 0;
 	if(JqIsDone(nJob))
 	{
 		return;
@@ -1776,7 +1508,6 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 		JqBlockWhileFrozen();
 		bool bExecuted = false;
 
-		// uint16_t nSubIndex = 0;
 		if((nWaitFlag & JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS) == JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS)
 		{
 			bExecuted = JqExecuteOneChild(nJob);
@@ -1784,38 +1515,14 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 			{
 				bExecuted = JqExecuteOne();
 			}
-			// JqMutexLock lock(JqState.Mutex);
-			// if(nIndex)
-			// 	JqIncrementFinished(JqState.m_Jobs2[nIndex].nStartedHandle);
-			// if(JqIsDoneExt(nJob, nWaitFlag)) 
-			// 	return;
-			// nIndex = JqTakeChildJob(nJob, &nSubIndex);
-			// if(!nIndex)
-			// {
-			// 	nIndex = JqTakeJob(&nSubIndex, 0);
-			// }
 		}
 		else if(nWaitFlag & JQ_WAITFLAG_EXECUTE_SUCCESSORS)
 		{
 			bExecuted = JqExecuteOneChild(nJob);
-
-			// JqMutexLock lock(JqState.Mutex);
-			// if(nIndex)
-			// 	JqIncrementFinished(JqState.m_Jobs2[nIndex].nStartedHandle);
-			// if(JqIsDoneExt(nJob, nWaitFlag)) 
-			// 	return;
-			// nIndex = JqTakeChildJob(nJob, &nSubIndex);
 		}
 		else if(0 != (nWaitFlag & JQ_WAITFLAG_EXECUTE_ANY))
 		{
 			bExecuted = JqExecuteOne();
-
-			// JqMutexLock lock(JqState.Mutex);
-			// if(nIndex)
-			// 	JqIncrementFinished(JqState.m_Jobs2[nIndex].nStartedHandle);
-			// if(JqIsDoneExt(nJob, nWaitFlag)) 
-			// 	return;
-			// nIndex = JqTakeJob(&nSubIndex, 0);
 		}
 		else
 		{
@@ -1847,29 +1554,9 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 			else
 			{
 				JQ_ASSERT(0); // no longer supported
-				// JqMutexLock lock(JqState.Mutex);
-				// if(JqIsDoneExt(nJob, nWaitFlag))
-				// {
-				// 	return;
-				// }
-				// uint16_t nJobIndex = nJob % JQ_TREE_BUFFER_SIZE2;
-				// JqState.m_Jobs2[nJobIndex].nWaiters++;
-				// JqState.Stats.nNumWaitCond++;
-				// JqState.WaitCond.Wait(JqState.Mutex);
-				// JqState.m_Jobs2[nJobIndex].nWaiters--;
 			}
 		}
-		// else
-		// {
-		// 	JqExecuteJob(JqState.m_Jobs2[nIndex].nStartedHandle, nSubIndex);
-		// }
 	}
-	// if(nIndex)
-	// {
-	// 	JqMutexLock lock(JqState.Mutex);
-	// 	JqIncrementFinished(JqState.m_Jobs2[nIndex].nStartedHandle);
-	// }
-
 }
 
 
@@ -1899,10 +1586,8 @@ uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint3
 
 uint64_t JqGroupBegin()
 {
-	//JqMutexLock Lock(JqState.Mutex);
-	JQ_ASSERT(0);
 	JqState.Stats.NB.fetch_add(1);
-	uint64_t nHandle = JqNextHandlex();
+	uint64_t nHandle = JqNextHandle();
 	uint16_t nIndex = nHandle % JQ_TREE_BUFFER_SIZE2;
 	JqJob2* pEntry = &JqState.m_Jobs2[nIndex];
 	pEntry->PipeHandle.store(JqPipeHandleNull(), std::memory_order_release);
@@ -1914,7 +1599,7 @@ uint64_t JqGroupBegin()
 	JQ_ASSERT(bSuccess);
 
 	uint64_t nParentHandle = JqSelf();
-//	pEntry->nParent = nParentHandle % JQ_TREE_BUFFER_SIZE2;
+
 	if(nParentHandle)
 	{
 		JqAttachChild(nParentHandle, nHandle);
@@ -1936,11 +1621,9 @@ void JqGroupEnd()
 	uint64_t nJob = JqSelf();
 	JqSelfPop(nJob);
 
-	//JqMutexLock lock(JqState.Mutex);
 	uint16_t nIndex = nJob % JQ_TREE_BUFFER_SIZE2;
 	uint64_t nHandle = JqState.m_Jobs2[nIndex].Handle.load().nStarted;
 
-	//JqState.m_Jobs2[nIndex].nFinishedHandle = nHandle;
 	JqCheckFinished(nHandle);
 }
 
@@ -1948,59 +1631,6 @@ uint64_t JqSelf()
 {
 	return JqSelfPos ? JqSelfStack[JqSelfPos-1].nHandle : 0;
 }
-
-
-// void JqPriorityListAdd(uint16_t nIndex)
-// {
-// 	uint8_t nPrio = JqState.m_Jobs2[nIndex].nPrio;
-// 	JQ_ASSERT(JqState.m_Jobs2[nIndex].nLinkNext == 0);
-// 	JQ_ASSERT(JqState.m_Jobs2[nIndex].nLinkPrev == 0);
-// 	uint16_t nTail = JqState.nPrioListTail[nPrio];
-// 	if(nTail != 0)
-// 	{
-// 		JQ_ASSERT(JqState.m_Jobs2[nTail].nLinkNext == 0);
-// 		JqState.m_Jobs2[nTail].nLinkNext = nIndex;
-// 		JqState.m_Jobs2[nIndex].nLinkPrev = nTail;
-// 		JqState.m_Jobs2[nIndex].nLinkNext = 0;
-// 		JqState.nPrioListTail[nPrio] = nIndex;
-// 	}
-// 	else
-// 	{
-// 		JQ_ASSERT(JqState.nPrioListHead[nPrio] == 0);
-// 		JqState.nPrioListHead[nPrio] = nIndex;
-// 		JqState.nPrioListTail[nPrio] = nIndex;
-// 		JqState.m_Jobs2[nIndex].nLinkNext = 0;
-// 		JqState.m_Jobs2[nIndex].nLinkPrev = 0;
-// 	}
-// }
-// void JqPriorityListRemove(uint16_t nIndex)
-// {
-// 	uint8_t nPrio = JqState.m_Jobs2[nIndex].nPrio;
-// 	uint16_t nNext = JqState.m_Jobs2[nIndex].nLinkNext;
-// 	uint16_t nPrev = JqState.m_Jobs2[nIndex].nLinkPrev;
-// 	JqState.m_Jobs2[nIndex].nLinkNext = 0;
-// 	JqState.m_Jobs2[nIndex].nLinkPrev = 0;
-
-// 	if(nNext != 0)
-// 	{
-// 		JqState.m_Jobs2[nNext].nLinkPrev = nPrev;
-// 	}
-// 	else
-// 	{
-// 		JQ_ASSERT(JqState.nPrioListTail[nPrio] == nIndex);
-// 		JqState.nPrioListTail[nPrio] = nPrev;
-// 	}
-// 	if(nPrev != 0)
-// 	{
-// 		JqState.m_Jobs2[nPrev].nLinkNext = nNext;
-// 	}
-// 	else
-// 	{
-// 		JQ_ASSERT(JqState.nPrioListHead[nPrio] == nIndex);
-// 		JqState.nPrioListHead[nPrio] = nNext;
-// 	}
-
-// }
 
 #ifdef _WIN32
 JqMutex::JqMutex()
@@ -2171,27 +1801,6 @@ void JqSemaphore::Signal(uint32_t nCount)
 			}
 		}
 	}
-// }
-
-// 	{
-// 		JqMutexLock l(Mutex);
-// 		uint32_t nCurrent = nReleaseCount;
-// 		if(nCurrent + nCount > nMaxCount)
-// 			nCount = nMaxCount - nCurrent;
-// 		nReleaseCount += nCount;
-// 		JQ_ASSERT(nReleaseCount <= nMaxCount);
-// 		if(nReleaseCount == nMaxCount)
-// 		{
-// 			Cond.NotifyAll();
-// 		}
-// 		else
-// 		{
-// 			for(uint32_t i = 0; i < nReleaseCount; ++i)
-// 			{
-// 				Cond.NotifyOne();
-// 			}
-// 		}
-// 	}
 }
 
 void JqSemaphore::Wait()
