@@ -288,22 +288,52 @@ void JqTest()
 	{
 		JqStats Stats;
 		JqConsumeStats(&Stats);
+		static bool bFirst = true;		
 		static uint64_t H = Stats.nNextHandle;
+		static uint64_t TickLast = JqTick();
 		uint64_t nHandleConsumption = Stats.nNextHandle - H;
 		H = Stats.nNextHandle;
-		int ext = g_nExternalStats.exchange(0);
 
-		uprintf("ext %6.2f\n", ext / (float)frames);
+		bool bUseWrapping = true;
+		if(bFirst)
+		{
+			bFirst = false;
+			bUseWrapping = false;
+
+		uprintf("|Per Sec %10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|\n", 
+			"JobAdd", "JobFin",
+			"SubAdd", "SubFin",
+			"Locks", "Waits", "Kicks", 
+			"JobAdd", "JobFin", "SubAdd", "SubFin","Handles", "WrapTime");
+		}
+
+		uint64_t nDelta = JqTick() - TickLast;
+		uint64_t nTicksPerSecond = JqTicksPerSecond();
+		float fTime = 1000.f * nDelta / nTicksPerSecond;
+
+
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
-		uprintf("Jobs %6.2f/%6.2f, Sub %6.2f/%6.2f, Handles Used %lld, Wrap time %6.4f yrs, locks per frame %f. Blocking Waits %f Signals %f\n", 
-			Stats.nNumAdded / (float)frames, 
-			Stats.nNumFinished / (float)frames, 
-			Stats.nNumAddedSub / (float)frames, 
-			Stats.nNumFinishedSub / (float)frames, 
+		uprintf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|     ", 
+			bUseWrapping ? '\r' : ' ',
+			Stats.nNumAdded / (float)fTime, 
+			Stats.nNumFinished / (float)fTime, 
+			Stats.nNumAddedSub / (float)fTime, 
+			Stats.nNumFinishedSub / (float)fTime, 
+			Stats.nNumLocks / (float)fTime, 
+			Stats.nNumWaitCond / (float)fTime, 
+			Stats.nNumWaitKicks / (float)fTime,
+			Stats.nNumAdded, 
+			Stats.nNumFinished, 
+			Stats.nNumAddedSub, 
+			Stats.nNumFinishedSub, 
 			nHandleConsumption,
-			WrapTime,
-			Stats.nNumLocks / (float)frames, Stats.nNumWaitCond / (float)frames, Stats.nNumWaitKicks / (float)frames);
+			WrapTime
+			); 
+		fflush(stdout);
+
+
 		frames = 0;
+		TickLast = JqTick();
 	}
 
 	++frames;

@@ -50,7 +50,7 @@
 #ifdef JQ_NO_ASSERT
 #define JQ_ASSERT(a) do{}while(0)
 #else
-#define JQ_ASSERT(a) do{if(!(a)){JQ_BREAK();} }while(0)
+#define JQ_ASSERT(a) do{if(!(a)){JqDump(); JQ_BREAK();} }while(0)
 #endif
 
 #include <stddef.h>
@@ -194,9 +194,9 @@ JQ_API JqPipeHandle 			JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJo
 JQ_API EJqPipeExecuteResult		JqPipeExecute(JqPipe* pPipe, JqPipeHandle ExecuteHandle);
 JQ_API bool 					JqPipeIsDone(JqPipe* pPipe, JqPipeHandle Job);
 JQ_API bool 					JqPipeIsAllStarted(JqPipe* pPipe, JqPipeHandle nJob);
-JQ_API void 					JqPipeDump(JqPipe* pPipe);
+JQ_API void 					JqPipeDump(FILE* F, JqPipe* pPipe);
 
-
+JQ_API void JqDump();
 #ifdef JQ_PIPE_IMPL
 #include <stdio.h>
 int64_t JqTick();
@@ -439,11 +439,11 @@ bool JqPipeIsAllStarted(JqPipe* pPipe, JqPipeHandle nJob)
 
 #include <stdio.h>
 
-void JqPipeDump(JqPipe* pPipe)
+void JqPipeDump(FILE* F, JqPipe* pPipe)
 {
-	printf("***** PIPE DUMP BEGIN %d\n", pPipe->nPipeId);
-	printf(" Put %lld\n", pPipe->nPut.load());
-	printf(" Get %lld\n", pPipe->nGet.load());
+	fprintf(F, "***** PIPE DUMP BEGIN %d\n", pPipe->nPipeId);
+	fprintf(F, " Put %lld\n", pPipe->nPut.load());
+	fprintf(F, " Get %lld\n", pPipe->nGet.load());
 	for(uint32_t i = 0; i < JQ_PIPE_BUFFER_SIZE; ++i)
 	{
 		JqPipeJob* pJob = &pPipe->Jobs[i];
@@ -453,7 +453,7 @@ void JqPipeDump(JqPipe* pPipe)
 			State.nNumStarted != State.nNumJobs || 
 			State.nNumFinished != State.nNumJobs)
 		{
-			printf(" JOB %04d :: ext %d (%3d/%3d/%3d) range %d, (%d/%d)\n", 
+			fprintf(F, " JOB %04d :: ext %d (%3d/%3d/%3d) range %d, (%d/%d)\n", 
 				i, State.nExternalId,
 				State.nNumStarted,
 				State.nNumFinished,
@@ -464,7 +464,7 @@ void JqPipeDump(JqPipe* pPipe)
 		}
 	}
 
-	printf("***** PIPE DUMP END   %d\n", pPipe->nPipeId);
+	fprintf(F, "***** PIPE DUMP END   %d\n", pPipe->nPipeId);
 
 
 }
