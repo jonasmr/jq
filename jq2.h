@@ -188,9 +188,6 @@ struct JqStatsInternal
 	std::atomic<uint32_t> nMemoryUsed;
 	std::atomic<uint32_t> nAttempts;
 	std::atomic<uint32_t> nNextHandleCalled;
-	std::atomic<uint32_t> NX;
-	std::atomic<uint32_t> NA;
-	std::atomic<uint32_t> NB;
 	std::atomic<uint32_t> nSkips;
 };
 
@@ -208,10 +205,6 @@ struct JqStats
 	uint32_t nSkips;
 	uint32_t nAttempts;
 	uint32_t nNextHandleCalled;
-	uint32_t NX;
-	uint32_t NA;
-	uint32_t NB;
-
 };
 
 
@@ -825,16 +818,12 @@ void JqConsumeStats(JqStats* pStats)
 	pStats->nAttempts = JqState.Stats.nAttempts.exchange(0);
 	pStats->nSkips = JqState.Stats.nSkips.exchange(0);
 	pStats->nNextHandleCalled = JqState.Stats.nNextHandleCalled.exchange(0);
-	pStats->NX = JqState.Stats.NX.exchange(0);
-	pStats->NA = JqState.Stats.NA.exchange(0);
-	pStats->NB = JqState.Stats.NB.exchange(0);
 }
 
 
 
 void JqAttachChild(uint64_t nParent, uint64_t nChild)
 {
-	JQ_ASSERT_LOCKED();
 	uint16_t nParentIndex = nParent % JQ_TREE_BUFFER_SIZE2;
 	uint16_t nChildIndex = nChild % JQ_TREE_BUFFER_SIZE2;
 	JQ_ASSERT(JqState.m_Jobs2[nChildIndex].Handle.load().nStarted == nChild);
@@ -1376,8 +1365,6 @@ uint64_t JqNextHandle()
 	uint64_t nHandle, nOldHandle;
 	int nSkips = 0;
 	int nAttempts = 0;
-	JqState.Stats.NX.fetch_add(1);
-
 	do
 	{
 		nOldHandle = JqState.nNextHandle.load();
@@ -1428,7 +1415,6 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs, int nRange, uint
 	}
 	uint64_t nHandle;
 	{
-		JqState.Stats.NA.fetch_add(1);
 		nHandle = JqNextHandle();
 		uint16_t nIndex = nHandle % JQ_TREE_BUFFER_SIZE2;
 		JqJob2* pEntry = &JqState.m_Jobs2[nIndex];
@@ -1586,7 +1572,6 @@ uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint3
 
 uint64_t JqGroupBegin()
 {
-	JqState.Stats.NB.fetch_add(1);
 	uint64_t nHandle = JqNextHandle();
 	uint16_t nIndex = nHandle % JQ_TREE_BUFFER_SIZE2;
 	JqJob2* pEntry = &JqState.m_Jobs2[nIndex];
