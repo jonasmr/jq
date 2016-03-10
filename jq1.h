@@ -188,6 +188,7 @@ struct JqStats
 	uint32_t nNumLocks;
 	uint32_t nNumWaitKicks;
 	uint32_t nNumWaitCond;
+	uint64_t nNextHandle;
 };
 enum EJqJobType
 {
@@ -204,7 +205,8 @@ JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int 
 JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1, EJqJobType eJobType = EJQ_TYPE_NORMAL, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK);
 #endif
 JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
+JQ_API void 		JqWaitAll();
+//JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API uint64_t		JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API void			JqExecuteChildren(uint64_t nJob);
 JQ_API uint64_t 	JqGroupBegin(); //add a non-executing job to group all jobs added between begin/end
@@ -218,6 +220,7 @@ JQ_API uint32_t		JqSelfJobIndex();
 JQ_API int 			JqGetNumWorkers();
 JQ_API void 		JqConsumeStats(JqStats* pStatsOut);
 JQ_API bool			JqExecuteOne(int nShortOnly);
+JQ_API void			JqDump();
 
 
 
@@ -371,7 +374,7 @@ struct JqSelfStack
 	uint32_t nJobIndex;
 };
 
-JQ_THREAD_LOCAL JqSelfStack JqSelfStack[JQ_MAX_JOB_STACK] = {0};
+JQ_THREAD_LOCAL JqSelfStack JqSelfStack[JQ_MAX_JOB_STACK] = {{0}};
 JQ_THREAD_LOCAL uint32_t JqSelfPos = 0;
 JQ_THREAD_LOCAL uint32_t JqHasLock = 0;
 
@@ -645,6 +648,7 @@ void JqConsumeStats(JqStats* pStats)
 	JqState.Stats.nNumLocks = 0;
 	JqState.Stats.nNumWaitKicks = 0;
 	JqState.Stats.nNumWaitCond = 0;
+	JqState.Stats.nNextHandle = JqState.nNextHandle;
 }
 
 
@@ -1179,6 +1183,11 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, EJqJ
 		JqState.SemaphoreSmall.Signal(nNumJobs);
 	}
 	return nNextHandle;
+}
+
+void JqDump()
+{
+
 }
 
 bool JqIsDone(uint64_t nJob)

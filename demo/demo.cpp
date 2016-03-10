@@ -54,6 +54,7 @@ uint32_t g_MouseDown1 = 0;
 int g_MouseDelta = 0;
 
 MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
+#define DEMO_ASSERT(a) do{if(!(a)){__builtin_trap();} }while(0)
 
 int64_t JqTick();
 int64_t JqTicksPerSecond();
@@ -255,9 +256,9 @@ void JobTree(VOID_ARG int nStart, int nEnd)
 	g_nExternalStats ++;
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree Wait", 0xff5555);
 	JqWait(nJobTree0);
-	JQ_ASSERT(lala[0] == 1);
-	JQ_ASSERT(lala[1] == 1);
-	JQ_ASSERT(lala[2] == 1);
+	DEMO_ASSERT(lala[0] == 1);
+	DEMO_ASSERT(lala[1] == 1);
+	DEMO_ASSERT(lala[2] == 1);
 
 	g_nJobCount.fetch_add(1);
 	// printf("jc0 %d :: %d\n", njc, JOB_COUNT);
@@ -350,7 +351,7 @@ void JqTest()
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
 //		printf("run job %d\n", begin);
-//		JQ_ASSERT(0);
+//		DEMO_ASSERT(0);
 	//	JobSpinWork(200);
 		g_nLowCount++;
 	}, 3, VOID_PARAM JOB_COUNT_LOW);
@@ -394,10 +395,10 @@ void JqTest()
 
 		}
 
-		JQ_ASSERT(g_nJobCount == JOB_COUNT);
-		JQ_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
-		JQ_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
-		JQ_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+		DEMO_ASSERT(g_nJobCount == JOB_COUNT);
+		DEMO_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
+		DEMO_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+		DEMO_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 	}
 	#endif
 
@@ -419,7 +420,7 @@ void JqTest()
 // 		}
 // 	}
 
-// 	JQ_ASSERT(g_nLowCount == JOB_COUNT_LOW);
+// 	DEMO_ASSERT(g_nLowCount == JOB_COUNT_LOW);
 
 
 // 	static int nNumJobs = 1;
@@ -505,7 +506,7 @@ void JqTest()
 // 		JqWait(nJobGroup);
 // 		for(int i = 0; i < 20; ++i)
 // 		{
-// 			JQ_ASSERT(lala[i] == 1);
+// 			DEMO_ASSERT(lala[i] == 1);
 // 		}
 // 	}
 }
