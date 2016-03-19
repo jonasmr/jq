@@ -1107,13 +1107,14 @@ bool JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes)
 
 bool JqExecuteOneChild(uint64_t nJob)
 {
-	if(JqIsDone(nJob))
-		return false;
 	uint16_t nIndex = nJob % JQ_TREE_BUFFER_SIZE2;
 	uint64_t nRootHandle = JqState.m_Jobs2[nIndex].nRoot.load();
 	uint16_t nRootIndex = nJob % JQ_TREE_BUFFER_SIZE2;
 	uint32_t nIdleRepeat = 0;
 
+	if(JqIsDone(nJob))
+		return false;
+	
 	do
 	{
 		if(JqIsDone(nJob))
