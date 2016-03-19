@@ -42,8 +42,8 @@
 
 #define WIDTH 1024
 #define HEIGHT 600
-uint32_t g_FewJobs = 0;
-uint32_t g_DontSleep = 0;
+uint32_t g_FewJobs = 1;
+uint32_t g_DontSleep = 1;
 
 uint32_t g_nNumWorkers = 1;
 uint32_t g_nQuit = 0;
@@ -58,6 +58,8 @@ MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 
 int64_t JqTick();
 int64_t JqTicksPerSecond();
+
+uint32_t g_Reset = 0;
 
 void HandleEvent(SDL_Event* pEvt)
 {
@@ -74,6 +76,12 @@ void HandleEvent(SDL_Event* pEvt)
 		if(pEvt->key.keysym.scancode == SDL_SCANCODE_SPACE)
 		{
 			g_nNumWorkers ++;
+			g_Reset = true;
+		}
+
+		if(pEvt->key.keysym.sym == 'v')
+		{
+			g_Reset = true;
 		}
 
 		if(pEvt->key.keysym.sym == 'x')
@@ -285,13 +293,28 @@ extern uint32_t g_TESTID;
 void JqTest()
 {
 	static int frames = 0;
-	if(frames > 60)
+	static float fLimit = 5;
+	static JqStats Stats ;
+	static bool bFirst = true;
+	bool bIncremental = true;
+	static uint64_t TickLast = JqTick();
+
+	if(bFirst || !bIncremental || g_Reset)
 	{
-		JqStats Stats;
-		JqConsumeStats(&Stats);
+		g_Reset = false;
+		bFirst = false;
+		memset(&Stats, 0, sizeof(Stats));
+		TickLast = JqTick();
+	}
+
+	if(frames > fLimit)
+	{
+		fLimit = 5;
+		JqStats Stats0;
+		JqConsumeStats(&Stats0);
+		Stats.Add(Stats0);
 		static bool bFirst = true;		
 		static uint64_t H = Stats.nNextHandle;
-		static uint64_t TickLast = JqTick();
 		uint64_t nHandleConsumption = Stats.nNextHandle - H;
 		H = Stats.nNextHandle;
 
@@ -314,7 +337,7 @@ void JqTest()
 
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
-		uprintf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|     ", 
+		uprintf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs     ", 
 			bUseWrapping ? '\r' : ' ',
 			Stats.nNumAdded / (float)fTime, 
 			Stats.nNumFinished / (float)fTime, 
@@ -328,13 +351,16 @@ void JqTest()
 			Stats.nNumAddedSub, 
 			Stats.nNumFinishedSub, 
 			nHandleConsumption,
-			WrapTime
+			WrapTime,
+			fTime / 1000.f
 			); 
 		fflush(stdout);
 
-
 		frames = 0;
-		TickLast = JqTick();
+		if(!bIncremental)
+		{
+			TickLast = JqTick();
+		}
 	}
 
 	++frames;

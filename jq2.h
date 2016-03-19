@@ -135,7 +135,7 @@ public:
 #if _MSC_VER < 1900	//HACK: msvc 2015 ALWAYS hits this :/
 		static_assert(std::is_trivially_copyable<F>::value, "Only captures of trivial types supported. Use std::function if you think you need non-trivial types");
 #endif
-		static_assert(sizeof(F) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
+		static_assert(sizeof(JqCallable<F>) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
 #ifdef _WIN32
 		static_assert(__alignof(F) <= __alignof(void*), "Alignment requirements too high");
 #else
@@ -205,6 +205,21 @@ struct JqStats
 	uint32_t nSkips;
 	uint32_t nAttempts;
 	uint32_t nNextHandleCalled;
+	void Add(JqStats& Other)
+	{
+		nNumAdded += Other.nNumAdded;
+		nNumFinished += Other.nNumFinished;
+		nNumAddedSub += Other.nNumAddedSub;
+		nNumFinishedSub += Other.nNumFinishedSub;
+		nNumLocks += Other.nNumLocks;
+		nNumWaitKicks += Other.nNumWaitKicks;
+		nNumWaitCond += Other.nNumWaitCond;
+		nMemoryUsed += Other.nMemoryUsed;
+		nNextHandle += Other.nNextHandle;
+		nSkips += Other.nSkips;
+		nAttempts += Other.nAttempts;
+		nNextHandleCalled += Other.nNextHandleCalled;
+	}
 };
 
 
@@ -531,14 +546,19 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	std::atomic<uint64_t> nNextHandle;
 	uint32_t nFreeJobs;
 	uint64_t nShortOnlyMask;
-	std::atomic<uint64_t> nJobsFinished;
+
+
+	std::atomic<uint64_t> 	nNumFinished;
+	std::atomic<uint64_t> 	nNumAdded;
+	//std::atomic<uint64_t> nJobsFinished;
 
 	uint8_t m_nNumPipes[JQ_MAX_THREADS];
 	uint8_t m_PipeList[JQ_MAX_THREADS][JQ_NUM_PIPES];
 
 	JqPipe 			m_Pipes[JQ_NUM_PIPES];
 
-	std::atomic<uint64_t> 	m_NextHandle;
+	//std::atomic<uint64_t> 	m_NextHandle;
+
 	JqJob2 			m_Jobs2[JQ_TREE_BUFFER_SIZE2];
 
 	JqState_t()
@@ -650,6 +670,7 @@ void JqFinishJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId, int nNumJo
 		}
 		JqState.Stats.nNumFinishedSub += nNumJobs;
 		JqState.Stats.nNumFinished++;
+		JqState.nNumFinished.fetch_add(1);
 		JqCheckFinished(nHandle);
 	}
 }
@@ -1316,11 +1337,11 @@ void JqSentinel(int nSeconds)
 	int64_t nTickLimit = JqTicksPerSecond() * nSeconds;
 	int64_t nTicks = 0;
 	int64_t nTickLast = JqTick();
-	uint64_t nJobs = JqState.nJobsFinished.load();
+	uint64_t nJobs = JqState.nNumFinished.load();
 	while(0 == JqState.nStopSentinel)
 	{
 		JQ_USLEEP(50000);
-		int64_t nJobsCur = JqState.nJobsFinished.load();
+		int64_t nJobsCur = JqState.nNumFinished.load();
 		if(nJobsCur != nJobs)
 		{
 			nTicks = 0;
@@ -1443,6 +1464,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs, int nRange, uint
 		}
 		JqPipeHandle Handle = JqPipeAdd(&JqState.m_Pipes[nPipe], (uint32_t)nHandle, nNumJobs, nRange);
 		pEntry->PipeHandle.store(Handle, std::memory_order_release);
+		JqState.nNumAdded.fetch_add(1);
 		JqState.Stats.nNumAdded.fetch_add(1);
 		JqState.Stats.nNumAddedSub += nNumJobs;
 	}
@@ -1477,8 +1499,10 @@ bool JqIsDoneExt(uint64_t nJob, uint32_t nWaitFlags)
 
 void JqWaitAll()
 {
-	while(JqExecuteOne(nullptr, 0))
-		;
+	while(JqState.nNumAdded.load() != JqState.nNumFinished.load())
+	{
+		JqExecuteOne(nullptr, 0);
+	}
 	return;
 }
 
@@ -1548,7 +1572,7 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 
 void JqExecuteChildren(uint64_t nJob)
 {
-	JQ_ASSERT(0);
+	JqExecuteOneChild(nJob);
 }
 
 

@@ -138,7 +138,7 @@ public:
 #if _MSC_VER < 1900	//HACK: msvc 2015 ALWAYS hits this :/
 		static_assert(std::is_trivially_copyable<F>::value, "Only captures of trivial types supported. Use std::function if you think you need non-trivial types");
 #endif
-		static_assert(sizeof(F) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
+		static_assert(sizeof(JqCallable<F>) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
 #ifdef _WIN32
 		static_assert(__alignof(F) <= __alignof(void*), "Alignment requirements too high");
 #else
@@ -189,6 +189,18 @@ struct JqStats
 	uint32_t nNumWaitKicks;
 	uint32_t nNumWaitCond;
 	uint64_t nNextHandle;
+
+	void Add(JqStats& Other)
+	{
+		nNumAdded += Other.nNumAdded;
+		nNumFinished += Other.nNumFinished;
+		nNumAddedSub += Other.nNumAddedSub;
+		nNumFinishedSub += Other.nNumFinishedSub;
+		nNumLocks += Other.nNumLocks;
+		nNumWaitKicks += Other.nNumWaitKicks;
+		nNumWaitCond += Other.nNumWaitCond;
+	}
+
 };
 enum EJqJobType
 {
