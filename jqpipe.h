@@ -81,7 +81,6 @@ struct JqJobState
 		};
 	};
 };
-
 struct JqPipeHandle
 {
 	union
@@ -95,6 +94,8 @@ struct JqPipeHandle
 		};
 	};
 };
+static_assert(sizeof(JqJobState) == 16, "invalid size");
+static_assert(sizeof(JqPipeHandle) == 8, "invalid size");
 
 #include <atomic>
 
@@ -103,10 +104,6 @@ struct JqPipeJob
 	friend JqJobState JqJobStateLoad(JqPipeJob* pJob);
 	friend bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old);
 	std::atomic<JqJobState> State;
-
-
-	// uint64_t nThreadId; //debug
-
 };
 #include <stdio.h>
 
@@ -147,6 +144,7 @@ struct JqPipeStats
 	std::atomic<uint64_t> nJobsFinished;
 	std::atomic<uint64_t> nSubJobsAdded;
 	std::atomic<uint64_t> nSubJobsFinished;
+	std::atomic<uint64_t> nMaxHandleRetries;
 
 };
 
@@ -195,12 +193,14 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 	}
 	JQ_ASSERT(nNumJobs > 0);
 	uint64_t nNextHandle = 0;
+	uint64_t nHandleRetries = 0;
 	do
 	{
 		nNextHandle = pPipe->nPut.fetch_add(1);
 		nNextHandle &= 0xffffffff;
 		if(nNextHandle)
 		{
+			nHandleRetries++;
 			uint16_t nJobIndex = nNextHandle % JQ_PIPE_BUFFER_SIZE;
 			JqPipeJob* pJob = &pPipe->Jobs[nJobIndex];
 			JqJobState State;
@@ -225,6 +225,20 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 						H.Handle = nNextHandle;
 						H.Pad0 = 0;
 						H.Pipe = pPipe->nPipeId;
+
+						uint64_t nMaxRetries;
+						JQ_ASSERT(nHandleRetries < JQ_PIPE_BUFFER_SIZE * 2); // if you hit this, bump buffer size
+						do
+						{
+							nMaxRetries = pPipe->Stats.nMaxHandleRetries.load();
+							if(nMaxRetries > nHandleRetries)
+							{
+								break;
+							}
+						}while(!pPipe->Stats.nMaxHandleRetries.compare_exchange_weak(nMaxRetries, nHandleRetries));
+
+
+
 						return H;
 					}
 				}
@@ -396,7 +410,14 @@ bool JqPipeIsAllStarted(JqPipe* pPipe, JqPipeHandle nJob)
 	uint32_t nJobIndex = nHandleInternal % JQ_PIPE_BUFFER_SIZE;
 	JqJobState State = JqJobStateLoad(&pPipe->Jobs[nJobIndex]);
 	uint64_t nFinished = State.nFinishedHandle;
-	return JQ_LE_WRAP_SHIFT(nHandleInternal, nFinished, 32) || State.nNumStarted == State.nNumJobs;
+	uint64_t nStarted = State.nStartedHandle;
+
+	bool bFinished = JQ_LE_WRAP_SHIFT(nHandleInternal, nFinished, 32);
+	bool bStarted = !JQ_LT_WRAP_SHIFT(nStarted, nHandleInternal, 32);
+	bool bStartedAndFinished = bStarted && State.nNumStarted == State.nNumJobs ;
+
+	return  bFinished || bStartedAndFinished; 
+
 }
 
 #include <stdio.h>
