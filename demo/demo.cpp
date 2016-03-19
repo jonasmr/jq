@@ -376,25 +376,15 @@ void JqTest()
 	uint64_t nJob = JqAdd( [](VOID_ARG int begin, int end)
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
-//		printf("run job %d\n", begin);
-//		DEMO_ASSERT(0);
-	//	JobSpinWork(200);
 		g_nLowCount++;
 	}, 3, VOID_PARAM JOB_COUNT_LOW);
 	g_nExternalStats ++;
-	//printf("waiting\n");
 	JqWait(nJob);
-	//printf("done waiting\n");
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		JobSpinWork(500);
 	}
-
-	//printf("job Count %d %d %d %d\n", g_nJobCount.load(), g_nJobCount0.load(), g_nJobCount1.load(), g_nJobCount2.load());
-
 	uint64_t nStart = JqTick();	
-	// float ft = (JqTick() - nStart) * 1000.f / JqTicksPerSecond();
-	//printf("ft %f\n", ft);
 	#if 1
 	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
 	{
@@ -406,18 +396,9 @@ void JqTest()
 
 		uint64_t nJobMedium = JqAdd(JobTree, 0, VOID_PARAM JOB_COUNT);
 		g_nExternalStats ++;
-		//g_TESTID = (uint32_t)nJobMedium;
-		// printf("job medium %lld\n", nJobMedium);
 		{
 			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
 			JqWait(nJobMedium);
-			// printf("exp Count %d %d %d %d\n", JOB_COUNT,
-			// JOB_COUNT_0 * JOB_COUNT,
-			// JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT,
-			// JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
-
-			//printf("job Count %d %d %d %d\n", g_nJobCount.load(), g_nJobCount0.load(), g_nJobCount1.load(), g_nJobCount2.load());
-			//JqCrashAndDump();
 
 		}
 
@@ -427,114 +408,6 @@ void JqTest()
 		DEMO_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 	}
 	#endif
-
-// 	{
-// 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
-// 		JobSpinWork(500);
-// 	}
-
-
-// 	{
-// 		if(0)
-// 		{
-// 			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitSpin", 0xff0000);
-// 			JqWait(nJob, JQ_WAITFLAG_SLEEP|JQ_WAITFLAG_EXECUTE_ANY);
-// 		}
-// 		else
-// 		{
-// 			JqWait(nJob);
-// 		}
-// 	}
-
-// 	DEMO_ASSERT(g_nLowCount == JOB_COUNT_LOW);
-
-
-// 	static int nNumJobs = 1;
-// 	static int nRange = (4<<10)-5;
-
-// 	int nData[4<<10] = {0};
-// 	{
-// 		MICROPROFILE_SCOPEI("JQDEMO", "RangeTest", 0xff00ff);
-
-// 		nNumJobs = (nNumJobs+1) % 21;
-// 		if(nNumJobs == 0)
-// 		{
-// 			nNumJobs = 1;
-// 			//printf("range test range %d\n", nRange);
-// 			nRange = (nRange+1) % (4<<10);
-// 		}
-// 		for(int i = 0; i < nRange; ++i)
-// 		{
-// 			if(nData[i] != 0)
-// 				JQ_BREAK();
-// 		}
-// #ifndef JQ_NO_LAMBDA
-// 		uint64_t nRangeTest = JqAdd(
-// 			[&](int nBegin, int nEnd)
-// 		{
-// 			for(int i = nBegin; i < nEnd; ++i)
-// 			{
-// 				nData[i] = 1;
-// 			}
-// 		}, 3, nNumJobs, nRange);
-// #else
-// 		uint64_t nRangeTest = JqAdd(
-// 			[](void* pArray, int nBegin, int nEnd)
-// 		{
-// 			int* iArray = (int*)pArray;
-// 			for(int i = nBegin; i < nEnd; ++i)
-// 			{
-// 				iArray[i] = 1;
-// 			}
-// 		}, 3, &nData[0], nNumJobs, nRange);
-// #endif
-
-// 		JqWait(nRangeTest);
-
-// 		for(int i = 0; i < nRange; ++i)
-// 		{
-// 			if(nData[i] != 1)
-// 				JQ_BREAK();
-// 		}
-// 	}
-// 	{
-// 		MICROPROFILE_SCOPEI("JQDEMO", "GroupTest", 0x66ff33);
-
-// 		int lala[20] = {0};
-// 		uint64_t nJobGroup = JqGroupBegin();
-
-// #ifndef JQ_NO_LAMBDA
-// 		for(int i = 0; i < 20; ++i)
-// 		{
-// 			JqAdd([i, &lala](int b, int e)
-// 			{
-// 				MICROPROFILE_SCOPEI("JQDEMO", "GroupJob", 0x33ff33);
-// 				JobSpinWork(1000);
-// 				lala[i] = 1;
-// 			}, 7, 1);
-// 		}
-// #else
-// 		for(int i = 0; i < 20; ++i)
-// 		{
-// 			JqAdd([](void* p, int b, int e)
-// 			{
-// 				MICROPROFILE_SCOPEI("JQDEMO", "GroupJob", 0x33ff00);
-
-// 				JobSpinWork(1000);
-// 				((int*)p)[0] = 1;
-// 			}, 7, &lala[i], 1);
-// 		}
-// #endif
-// 		JqGroupEnd();
-
-// 		MICROPROFILE_SCOPEI("JQDEMO", "GroupWait", 0x77ff00);
-
-// 		JqWait(nJobGroup);
-// 		for(int i = 0; i < 20; ++i)
-// 		{
-// 			DEMO_ASSERT(lala[i] == 1);
-// 		}
-// 	}
 }
 
 
@@ -567,9 +440,6 @@ int main(int argc, char* argv[])
 	if(SDL_Init(SDL_INIT_VIDEO) < 0) {
 		return 1;
 	}
-	
-
-	//JqTest();
 	static uint32_t nNumWorkers = g_nNumWorkers;
 	JqStart(nNumWorkers);
 	//JqStartSentinel(20);
