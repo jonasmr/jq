@@ -54,7 +54,11 @@ uint32_t g_MouseDown1 = 0;
 int g_MouseDelta = 0;
 
 MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
+#ifdef _WIN32
+#define DEMO_ASSERT(a) do{if(!(a)){__debugbreak();} }while(0)
+#else
 #define DEMO_ASSERT(a) do{if(!(a)){__builtin_trap();} }while(0)
+#endif
 
 int64_t JqTick();
 int64_t JqTicksPerSecond();
@@ -324,7 +328,7 @@ void JqTest()
 			bFirst = false;
 			bUseWrapping = false;
 
-		uprintf("|Per Sec %10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|\n", 
+		printf("|Per ms  %10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|\n", 
 			"JobAdd", "JobFin",
 			"SubAdd", "SubFin",
 			"Locks", "Waits", "Kicks", 
@@ -334,10 +338,12 @@ void JqTest()
 		uint64_t nDelta = JqTick() - TickLast;
 		uint64_t nTicksPerSecond = JqTicksPerSecond();
 		float fTime = 1000.f * nDelta / nTicksPerSecond;
+		double HandlesPerMs = nHandleConsumption / fTime;
+		double HandlesPerYear = (0x8000000000000000 / (365llu * 24 * 60 * 60 * 60 * 1000)) / HandlesPerMs;
 
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
-		uprintf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs     ", 
+		printf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs     ", 
 			bUseWrapping ? '\r' : ' ',
 			Stats.nNumAdded / (float)fTime, 
 			Stats.nNumFinished / (float)fTime, 
@@ -351,7 +357,7 @@ void JqTest()
 			Stats.nNumAddedSub, 
 			Stats.nNumFinishedSub, 
 			nHandleConsumption,
-			WrapTime,
+			HandlesPerYear,
 			fTime / 1000.f
 			); 
 		fflush(stdout);
@@ -418,25 +424,15 @@ void MicroProfileBeginDraw(uint32_t nWidth, uint32_t nHeight, float* prj);
 void MicroProfileEndDraw();
 
 
-struct lala
-{
-	void* p1;
-	void* p2;
-};
 
-std::atomic<lala> hest;
 int main(int argc, char* argv[])
 {
-
-	std::atomic<lala> ged;
-	lala l = {0, 0};
-	ged.store(l);
-	hest.compare_exchange_weak(l, l);
-
 	printf("press 'z' to toggle microprofile drawing\n");
 	printf("press 'right shift' to pause microprofile update\n");
 	MicroProfileOnThreadCreate("Main");
-
+#ifdef _WIN32
+	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
+#endif
 	if(SDL_Init(SDL_INIT_VIDEO) < 0) {
 		return 1;
 	}

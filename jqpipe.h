@@ -45,7 +45,11 @@
 #endif
 
 //hack
+#ifdef _WIN32
+#define JQ_BREAK() __debugbreak()
+#else
 #define JQ_BREAK() __builtin_trap()
+#endif
 
 #ifdef JQ_NO_ASSERT
 #define JQ_ASSERT(a) do{}while(0)
@@ -56,7 +60,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <atomic>
+#ifndef _WIN32
 #include <pthread.h>
+#endif
 
 #define JQ_PIPE_EXTERNAL_ID_BITS 12
 struct JqJobState
@@ -98,6 +104,7 @@ static_assert(sizeof(JqJobState) == 16, "invalid size");
 static_assert(sizeof(JqPipeHandle) == 8, "invalid size");
 
 #include <atomic>
+#include <stdio.h>
 
 struct JqPipeJob
 {
@@ -105,20 +112,7 @@ struct JqPipeJob
 	friend bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old);
 	std::atomic<JqJobState> State;
 };
-#include <stdio.h>
 
-#ifdef _WIN32
-inline JqJobState JqJobStateLoad(JqPipeJob* pJob)
-{
-	return pJob->State;
-}
-inline bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old)
-{
-	JQ_ASSERT(0 == (0xf & (intptr)&New));
-	JQ_ASSERT(0 == (0xf & (intptr)&Old));
-	return 1 == _InterlockedCompareExchange128(pJob->State.Atomic, New.Atomic[0], New.Atomic[1], Old.Atomic);
-}
-#else
 inline JqJobState JqJobStateLoad(JqPipeJob* pJob)
 {
 	return pJob->State.load();
@@ -128,8 +122,6 @@ inline bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobStat
 	bool bR = pJob->State.compare_exchange_weak(Old, New);
 	return bR;
 }
-
-#endif
 
 inline JqPipeHandle JqPipeHandleNull()
 {
