@@ -487,9 +487,9 @@ int main(int argc, char* argv[])
 		if(g_nNumWorkers != nNumWorkers)
 		{
 			nNumWorkers = g_nNumWorkers;
-			printf("NumWorkers %d\n", 1 + nNumWorkers % 8);
+			printf("NumWorkers %d\n", 1 + nNumWorkers % 12);
 			JqStop();
-			JqStart(1 + nNumWorkers % 8);
+			JqStart(1 + nNumWorkers % 12);
 		}
 
 
