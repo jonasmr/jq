@@ -123,27 +123,30 @@ struct JQ_ALIGN_16 JqPipeJob
 	friend bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old);
 private:
 #ifdef WIN32_ATOMIC
-	__int64 StateArray[2];
+	volatile __int64 StateArray[2];
 #else
 	std::atomic<JqJobState> State;
 #endif
 };
 
 #ifdef WIN32_ATOMIC
-inline JqJobState JqJobStateLoad(JqPipeJob* pJob)
+inline 
+JqJobState JqJobStateLoad(JqPipeJob* pJob)
 {
 	JqJobState R;
 	R.Atomic[0] = pJob->StateArray[0];
 	R.Atomic[1] = pJob->StateArray[1];
 	return R;
 }
-inline bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old)
+inline 
+bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old)
 {
-	bool bR = 1 == _InterlockedCompareExchange128_np((int64_t*)&pJob->StateArray[0], (int64_t)New.Atomic[1], (int64_t)New.Atomic[0], (int64_t*)&Old.Atomic[0]);
+	bool bR = 1 == _InterlockedCompareExchange128((int64_t*)&pJob->StateArray[0], (int64_t)New.Atomic[1], (int64_t)New.Atomic[0], (int64_t*)&Old.Atomic[0]);
 	return bR;
 }
 #else
-inline JqJobState JqJobStateLoad(JqPipeJob* pJob)
+inline 
+JqJobState JqJobStateLoad(JqPipeJob* pJob)
 {
 	return pJob->State.load(std::memory_order_relaxed);
 }
