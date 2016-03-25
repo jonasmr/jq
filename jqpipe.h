@@ -106,23 +106,54 @@ static_assert(sizeof(JqPipeHandle) == 8, "invalid size");
 #include <atomic>
 #include <stdio.h>
 
-struct JqPipeJob
+#ifdef _WIN32
+#define WIN32_ATOMIC
+#endif
+
+#ifdef WIN32_ATOMIC
+#define JQ_ALIGN_16 __declspec(align(16))
+#else
+#define JQ_ALIGN_16 
+#endif
+
+
+struct JQ_ALIGN_16 JqPipeJob
 {
 	friend JqJobState JqJobStateLoad(JqPipeJob* pJob);
 	friend bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old);
+private:
+#ifdef WIN32_ATOMIC
+	__int64 StateArray[2];
+#else
 	std::atomic<JqJobState> State;
+#endif
 };
 
+#ifdef WIN32_ATOMIC
 inline JqJobState JqJobStateLoad(JqPipeJob* pJob)
 {
-	return pJob->State.load();
+	JqJobState R;
+	R.Atomic[0] = pJob->StateArray[0];
+	R.Atomic[1] = pJob->StateArray[1];
+	return R;
 }
 inline bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old)
+{
+	bool bR = 1 == _InterlockedCompareExchange128_np((int64_t*)&pJob->StateArray[0], (int64_t)New.Atomic[1], (int64_t)New.Atomic[0], (int64_t*)&Old.Atomic[0]);
+	return bR;
+}
+#else
+inline JqJobState JqJobStateLoad(JqPipeJob* pJob)
+{
+	return pJob->State.load(std::memory_order_relaxed);
+}
+inline
+bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old)
 {
 	bool bR = pJob->State.compare_exchange_weak(Old, New);
 	return bR;
 }
-
+#endif
 inline JqPipeHandle JqPipeHandleNull()
 {
 	JqPipeHandle H;
