@@ -26,6 +26,7 @@
 
 
 #include "microprofile.h"
+#include "microprofileui.h"
 #include "glinc.h"
 
 #ifdef main
@@ -367,6 +368,12 @@ void JqTest()
 		{
 			TickLast = JqTick();
 		}
+
+		if (fTime / 1000.f > 60.f)
+		{
+			g_nNumWorkers++;
+			g_Reset = true;
+		}
 	}
 
 	++frames;
@@ -417,11 +424,12 @@ void JqTest()
 }
 
 
-
+#if MICROPROFILE_ENABLED
 void MicroProfileQueryInitGL();
 void MicroProfileDrawInit();
 void MicroProfileBeginDraw(uint32_t nWidth, uint32_t nHeight, float* prj);
 void MicroProfileEndDraw();
+#endif
 
 
 
@@ -463,15 +471,18 @@ int main(int argc, char* argv[])
 	GLenum err=glewInit();
 	if(err!=GLEW_OK)
 	{
-		MP_BREAK();
+		exit(1);
+//		MP_BREAK();
 	}
 	glGetError(); //glew generates an error
 		
 
 
+#if MICROPROFILE_ENABLED
 	MicroProfileQueryInitGL();
 	MicroProfileDrawInit();
 	MP_ASSERT(glGetError() == 0);
+#endif
 
 
 
@@ -502,9 +513,9 @@ int main(int argc, char* argv[])
 		g_MouseDelta = 0;
 
 
-		MicroProfileFlip();
+		MicroProfileFlip(0);
 		{
-			MICROPROFILE_SCOPEGPUI("GPU", "MicroProfileDraw", 0x88dd44);
+			MICROPROFILE_SCOPEGPUI("MicroProfileDraw", 0x88dd44);
 			float projection[16];
 			float left = 0.f;
 			float right = WIDTH;
@@ -525,9 +536,11 @@ int main(int argc, char* argv[])
  			glEnable(GL_BLEND);
  			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+#if MICROPROFILE_ENABLED
 			MicroProfileBeginDraw(WIDTH, HEIGHT, &projection[0]);
 			MicroProfileDraw(WIDTH, HEIGHT);
 			MicroProfileEndDraw();
+#endif
 			glDisable(GL_BLEND);
 		}
 

@@ -41,8 +41,10 @@ void uprintf(const char* fmt, ...)
 #endif
 
 
-#define MICRO_PROFILE_IMPL
+#define MICROPROFILE_IMPL
 #include "microprofile.h"
+#define MICROPROFILEUI_IMPL
+#include "microprofileui.h"
 #include "glinc.h"
 
 #if MICROPROFILE_ENABLED
@@ -315,7 +317,7 @@ void MicroProfileFlush()
 	if(0 == nVertexPos)
 		return;
 	MICROPROFILE_SCOPEI("MicroProfile", "Flush", 0xffff3456);
-	MICROPROFILE_SCOPEGPUI("GPU", "FlushDraw", 0xffff4444);
+	MICROPROFILE_SCOPEGPUI("FlushDraw", 0xffff4444);
 
 
 
@@ -514,7 +516,7 @@ void MicroProfileQueryInitGL()
 	glGenQueries(MICROPROFILE_NUM_QUERIES, &g_GlTimers[0]);		
 }
 
-uint32_t MicroProfileGpuInsertTimeStamp()
+uint32_t MicroProfileGpuInsertTimeStamp(void* pContext)
 {
 	uint32_t nIndex = (g_GlTimerPos+1)%MICROPROFILE_NUM_QUERIES;
 	glQueryCounter(g_GlTimers[nIndex], GL_TIMESTAMP);
@@ -537,6 +539,10 @@ uint64_t MicroProfileTicksPerSecondGpu()
 	return 1000000000ll;
 }
 
+int MicroProfileGetGpuTickReference(int64_t* pOutCPU, int64_t* pOutGpu)
+{
+	return 0;
+}
 
 namespace
 {
