@@ -462,7 +462,7 @@ void JqPipeDump(FILE* F, JqPipe* pPipe)
 			State.nNumStarted != State.nNumJobs || 
 			State.nNumFinished != State.nNumJobs)
 		{
-			fprintf(F, " JOB %04d :: ext %d (%3d/%3d/%3d) range %d, (%d/%d)\n", 
+			fprintf(F, " JOB %04d :: ext %lld (%3lld/%3lld/%3lld) range %lld, (%lld/%lld)\n", 
 				i, State.nExternalId,
 				State.nNumStarted,
 				State.nNumFinished,
