@@ -61,6 +61,7 @@ MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 #define DEMO_ASSERT(a) do{if(!(a)){__builtin_trap();} }while(0)
 #endif
 
+#define JQ_STRESS_TEST 1
 int64_t JqTick();
 int64_t JqTicksPerSecond();
 
@@ -295,6 +296,36 @@ void uprintf(const char* fmt, ...);
 #endif
 extern uint32_t g_TESTID;
 
+void JqTestPrio()
+{
+	g_DontSleep =  0;
+	uint64_t J1 = JqAdd([](int b, int e)
+	{
+		MICROPROFILE_SCOPEI("JQ_TEST", "P7", 0xffffff);
+		JobSpinWork(5000);
+	}, 7, 3);
+	uint64_t J2 = JqAdd([](int b, int e)
+	{
+		MICROPROFILE_SCOPEI("JQ_TEST", "P0", 0xff0000);		
+		JqAdd([](int b, int e)
+		{
+			MICROPROFILE_SCOPEI("JQ_TEST", "P1", 0x0000ff);
+			JqAdd([](int b, int e)
+			{
+				MICROPROFILE_SCOPEI("JQ_TEST", "P5", 0xffff00);
+
+			}, 5, 500);
+			JobSpinWork(20);
+
+		}, 1, 20);
+		JobSpinWork(2000);
+
+	}, 0, 2, 1);
+
+	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY| JQ_WAITFLAG_SLEEP);
+	JqWait(J2);
+
+}
 void JqTest()
 {
 	static int frames = 0;
@@ -431,7 +462,7 @@ void MicroProfileBeginDraw(uint32_t nWidth, uint32_t nHeight, float* prj);
 void MicroProfileEndDraw();
 #endif
 
-
+#define JQ_TEST_WORKERS 5
 
 int main(int argc, char* argv[])
 {
@@ -445,7 +476,28 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 	static uint32_t nNumWorkers = g_nNumWorkers;
-	JqStart(nNumWorkers);
+#if JQ_STRESS_TEST
+	JqStart(nNumWorkers, 0, nullptr);
+#else
+	uint8_t nPipeConfig[JQ_NUM_PIPES * JQ_TEST_WORKERS] = 
+	{
+		0, 1, 2, 3,				4, 5, 6, 0xff,
+		3, 2, 1, 0xff,			0xff, 0xff, 0xff, 0xff,
+		5, 1, 0xff, 0xff,		0xff, 0xff, 0xff, 0xff,
+		1, 5, 0xff, 0xff,		0xff, 0xff, 0xff, 0xff,
+		7, 0xff, 0xff, 0xff,		0xff, 0xff, 0xff, 0xff,
+
+	};
+	//JQ_NUM_PIPES
+	JqStart(JQ_TEST_WORKERS, sizeof(nPipeConfig), nPipeConfig);
+
+	uint8_t MyPipeConfig[JQ_NUM_PIPES] =
+	{
+		0,5, 0xff, 0xff,	0xff, 0xff, 0xff, 0xff,
+	};
+
+	JqSetThreadPipeConfig(MyPipeConfig);
+#endif
 	//JqStartSentinel(20);
 
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    	    8);
@@ -495,13 +547,15 @@ int main(int argc, char* argv[])
 		{
 			HandleEvent(&Evt);
 		}
+#if JQ_STRESS_TEST
 		if(g_nNumWorkers != nNumWorkers)
 		{
 			nNumWorkers = g_nNumWorkers;
 			printf("NumWorkers %d\n", 1 + nNumWorkers % 12);
 			JqStop();
-			JqStart(1 + nNumWorkers % 12);
+			JqStart(1 + nNumWorkers % 12, 0, nullptr);
 		}
+#endif
 
 
 		glClearColor(0.3f,0.4f,0.6f,0.f);
@@ -550,7 +604,11 @@ int main(int argc, char* argv[])
 		}
 		
 		{
+#if JQ_STRESS_TEST
 			JqTest();
+#else
+			JqTestPrio();
+#endif
 		}
 
 	}
