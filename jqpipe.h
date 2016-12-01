@@ -130,6 +130,8 @@ private:
 };
 
 #ifdef WIN32_ATOMIC
+#include <stdio.h>
+#include <intrin.h>
 inline 
 JqJobState JqJobStateLoad(JqPipeJob* pJob)
 {
