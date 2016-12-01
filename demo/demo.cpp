@@ -21,24 +21,11 @@
 
 #include <stdio.h>
 #include <stdarg.h>
-#include <SDL.h>
 #include <string>
-
-
+#include <Windows.h>
 #include "microprofile.h"
-#include "microprofileui.h"
-#include "glinc.h"
-
-#ifdef main
-#undef main
-#endif
-
-#ifdef _WIN32
-#undef near
-#undef far
-#define snprintf _snprintf
-#include <windows.h>
-#endif
+#include <conio.h>
+#define JQ_MICROPROFILE 1
 
 
 #define WIDTH 1024
@@ -67,88 +54,8 @@ int64_t JqTicksPerSecond();
 
 uint32_t g_Reset = 0;
 
-void HandleEvent(SDL_Event* pEvt)
-{
-	switch(pEvt->type)
-	{
-	case SDL_QUIT:
-		g_nQuit = true;
-		break;
-	case SDL_KEYUP:
-		if(pEvt->key.keysym.scancode == SDL_SCANCODE_ESCAPE)
-		{
-			g_nQuit = 1;
-		}
-		if(pEvt->key.keysym.scancode == SDL_SCANCODE_SPACE)
-		{
-			g_nNumWorkers ++;
-			g_Reset = true;
-		}
 
-		if(pEvt->key.keysym.sym == 'v')
-		{
-			g_Reset = true;
-		}
-
-		if(pEvt->key.keysym.sym == 'x')
-		{
-			g_FewJobs = !g_FewJobs;
-		}
-		if(pEvt->key.keysym.sym == 'c')
-		{
-			g_DontSleep = !g_DontSleep;
-		}
-
-		if(pEvt->key.keysym.sym == 'z')
-		{
-			MicroProfileToggleDisplayMode();
-		}
-		if(pEvt->key.keysym.scancode == SDL_SCANCODE_RSHIFT)
-		{
-			MicroProfileTogglePause();
-		}
-		if(pEvt->key.keysym.scancode == SDL_SCANCODE_LCTRL)
-		{
-			MicroProfileModKey(0);
-		}
-		if(pEvt->key.keysym.sym == 'a')
-		{
-			MicroProfileDumpTimers();
-		}
-		break;
-	case SDL_KEYDOWN:
-		if(pEvt->key.keysym.scancode == SDL_SCANCODE_LCTRL)
-		{
-			MicroProfileModKey(1);
-		}
-		break;
-	case SDL_MOUSEMOTION:
-		g_MouseX = pEvt->motion.x;
-		g_MouseY = pEvt->motion.y;
-		break;
-	case SDL_MOUSEBUTTONDOWN:
-		if(pEvt->button.button == 1)
-			g_MouseDown0 = 1;
-		else if(pEvt->button.button == 3)
-			g_MouseDown1 = 1;
-		break;
-	case SDL_MOUSEBUTTONUP:
-		if(pEvt->button.button == 1)
-		{
-			g_MouseDown0 = 0;
-		}
-		else if(pEvt->button.button == 3)
-		{
-			g_MouseDown1 = 0;
-		}
-		break;
-	case SDL_MOUSEWHEEL:
-			g_MouseDelta -= pEvt->wheel.y;
-		break;
-	}
-}
-
-
+#include <thread>
 
 //comment out to test different modes
 //#define JQ_NO_LAMBDA
@@ -454,14 +361,6 @@ void JqTest()
 	#endif
 }
 
-
-#if MICROPROFILE_ENABLED
-void MicroProfileQueryInitGL();
-void MicroProfileDrawInit();
-void MicroProfileBeginDraw(uint32_t nWidth, uint32_t nHeight, float* prj);
-void MicroProfileEndDraw();
-#endif
-
 #define JQ_TEST_WORKERS 5
 
 int main(int argc, char* argv[])
@@ -472,9 +371,7 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
 #endif
-	if(SDL_Init(SDL_INIT_VIDEO) < 0) {
-		return 1;
-	}
+	//}
 	static uint32_t nNumWorkers = g_nNumWorkers;
 #if JQ_STRESS_TEST
 	JqStart(nNumWorkers, 0, nullptr);
@@ -499,54 +396,49 @@ int main(int argc, char* argv[])
 	JqSetThreadPipeConfig(MyPipeConfig);
 #endif
 	//JqStartSentinel(20);
-
-	SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    	    8);
-	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,  	    8);
-	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,   	    8);
-	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,  	    8);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,  	    24);
-	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,  	    8);	
-	SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE,		    32);	
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,	    1);	
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetSwapInterval(1);
-
-	SDL_Window * pWindow = SDL_CreateWindow("microprofiledemo", 10, 10, WIDTH, HEIGHT, SDL_WINDOW_OPENGL);
-	if(!pWindow)
-		return 1;
-
-	SDL_GLContext glcontext = SDL_GL_CreateContext(pWindow);
-
-	glewExperimental=1;
-	GLenum err=glewInit();
-	if(err!=GLEW_OK)
+	//I feel like im gonna burn someday for this code, but its the only way i know how to write it.
+	std::atomic<int> keypressed = 0;
+	std::thread	foo(
+		[&]()
 	{
-		exit(1);
-//		MP_BREAK();
-	}
-	glGetError(); //glew generates an error
-		
-
-
-#if MICROPROFILE_ENABLED
-	MicroProfileQueryInitGL();
-	MicroProfileDrawInit();
-	MP_ASSERT(glGetError() == 0);
-#endif
-
-
+		int c = 0;
+		while (!g_nQuit && c != 'q' && c != 27 )
+		{
+			c = _getch(); 
+			keypressed.exchange(c);
+		}
+		g_nQuit = 1;
+	});
 
 	while(!g_nQuit)
 	{
 		MICROPROFILE_SCOPE(MAIN);
 
-		SDL_Event Evt;
-		while(SDL_PollEvent(&Evt))
+		int key = keypressed.exchange(0);
+		if (key)
 		{
-			HandleEvent(&Evt);
+			switch (key)
+			{
+			case 'v':
+				g_Reset = 1; break;
+			case 'x':
+				g_FewJobs = !g_FewJobs; 
+				break;
+			case 'c':
+				g_DontSleep = !g_DontSleep;
+				break;
+			case ' ':
+				{
+					g_nNumWorkers++;
+					g_Reset = 1;
+				}
+				break;
+			case 'q':
+				g_nQuit = 1;
+				break;
+			}
 		}
+
 #if JQ_STRESS_TEST
 		if(g_nNumWorkers != nNumWorkers)
 		{
@@ -556,53 +448,7 @@ int main(int argc, char* argv[])
 			JqStart(1 + nNumWorkers % 12, 0, nullptr);
 		}
 #endif
-
-
-		glClearColor(0.3f,0.4f,0.6f,0.f);
-		glViewport(0, 0, WIDTH, HEIGHT);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		MicroProfileMouseButton(g_MouseDown0, g_MouseDown1);
-		MicroProfileMousePosition(g_MouseX, g_MouseY, g_MouseDelta);
-		g_MouseDelta = 0;
-
-
 		MicroProfileFlip(0);
-		{
-			MICROPROFILE_SCOPEGPUI("MicroProfileDraw", 0x88dd44);
-			float projection[16];
-			float left = 0.f;
-			float right = WIDTH;
-			float bottom = HEIGHT;
-			float top = 0.f;
-			float near = -1.f;
-			float far = 1.f;
-			memset(&projection[0], 0, sizeof(projection));
-
-			projection[0] = 2.0f / (right - left);
-			projection[5] = 2.0f / (top - bottom);
-			projection[10] = -2.0f / (far - near);
-			projection[12] = - (right + left) / (right - left);
-			projection[13] = - (top + bottom) / (top - bottom);
-			projection[14] = - (far + near) / (far - near);
-			projection[15] = 1.f; 
- 
- 			glEnable(GL_BLEND);
- 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-#if MICROPROFILE_ENABLED
-			MicroProfileBeginDraw(WIDTH, HEIGHT, &projection[0]);
-			MicroProfileDraw(WIDTH, HEIGHT);
-			MicroProfileEndDraw();
-#endif
-			glDisable(GL_BLEND);
-		}
-
-		{
-			MICROPROFILE_SCOPEI("MAIN", "Flip", 0xffee00);
-			SDL_GL_SwapWindow(pWindow);
-		}
-		
 		{
 #if JQ_STRESS_TEST
 			JqTest();
@@ -612,14 +458,15 @@ int main(int argc, char* argv[])
 		}
 
 	}
+	foo.join();
 	JqStop();
-
-	MicroProfileShutdown();
-
-  	SDL_GL_DeleteContext(glcontext);  
- 	SDL_DestroyWindow(pWindow);
- 	SDL_Quit();
-
+//
+//	MicroProfileShutdown();
+//
+//  	SDL_GL_DeleteContext(glcontext);  
+// 	SDL_DestroyWindow(pWindow);
+// 	SDL_Quit();
+//
 
 	return 0;
 }
