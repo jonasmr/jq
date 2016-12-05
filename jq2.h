@@ -1275,7 +1275,7 @@ void JqWorker(int nThreadId)
 	g_nJqNumPipes = nNumPipes; //even though its never usedm, its tagged because changing it is not supported.
 	memcpy(g_JqPipes, pPipes, nNumPipes);
 	int nSemaphoreIndex = JqState.m_SemaphoreIndex[nThreadId];
-#if MICROPROFILE_ENABLED
+#if JQ_MICROPROFILE
 	char PipeStr[512];
 	memset(PipeStr, '0', sizeof(PipeStr)-1);
 	PipeStr[JQ_NUM_PIPES] = '\0';
@@ -1311,7 +1311,7 @@ void JqWorker(int nThreadId)
 			JqState.Semaphore[nSemaphoreIndex].S.Wait();
 		}
 	}
-#ifdef JQ_MICROPROFILE
+#ifdef MICROPROFILE_ENABLED
 	MicroProfileOnThreadExit();
 #endif
 }
