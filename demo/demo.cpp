@@ -25,7 +25,7 @@
 #include <Windows.h>
 #include "microprofile.h"
 #include <conio.h>
-#define JQ_MICROPROFILE 1
+
 
 
 #define WIDTH 1024
@@ -266,12 +266,11 @@ void JqTest()
 		{
 			bFirst = false;
 			bUseWrapping = false;
-
-		printf("|Per ms  %10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|\n", 
+		printf("\n|Per ms  %10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|%7s|%7s\n", 
 			"JobAdd", "JobFin",
 			"SubAdd", "SubFin",
 			"Locks", "Waits", "Kicks", 
-			"JobAdd", "JobFin", "SubAdd", "SubFin","Handles", "WrapTime");
+			"JobAdd", "JobFin", "SubAdd", "SubFin","Handles", "WrapTime", "Time", "Workers");
 		}
 
 		uint64_t nDelta = JqTick() - TickLast;
@@ -282,22 +281,23 @@ void JqTest()
 
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
-		printf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs     ", 
+		printf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs|%2d     ",
 			bUseWrapping ? '\r' : ' ',
-			Stats.nNumAdded / (float)fTime, 
-			Stats.nNumFinished / (float)fTime, 
-			Stats.nNumAddedSub / (float)fTime, 
-			Stats.nNumFinishedSub / (float)fTime, 
-			Stats.nNumLocks / (float)fTime, 
-			Stats.nNumWaitCond / (float)fTime, 
+			Stats.nNumAdded / (float)fTime,
+			Stats.nNumFinished / (float)fTime,
+			Stats.nNumAddedSub / (float)fTime,
+			Stats.nNumFinishedSub / (float)fTime,
+			Stats.nNumLocks / (float)fTime,
+			Stats.nNumWaitCond / (float)fTime,
 			Stats.nNumWaitKicks / (float)fTime,
-			Stats.nNumAdded, 
-			Stats.nNumFinished, 
-			Stats.nNumAddedSub, 
-			Stats.nNumFinishedSub, 
+			Stats.nNumAdded,
+			Stats.nNumFinished,
+			Stats.nNumAddedSub,
+			Stats.nNumFinishedSub,
 			nHandleConsumption,
 			HandlesPerYear,
-			fTime / 1000.f
+			fTime / 1000.f,
+			JqGetNumWorkers()
 			); 
 		fflush(stdout);
 
@@ -443,7 +443,7 @@ int main(int argc, char* argv[])
 		if(g_nNumWorkers != nNumWorkers)
 		{
 			nNumWorkers = g_nNumWorkers;
-			printf("NumWorkers %d\n", 1 + nNumWorkers % 12);
+			printf("\n");
 			JqStop();
 			JqStart(1 + nNumWorkers % 12, 0, nullptr);
 		}
