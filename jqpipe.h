@@ -111,13 +111,13 @@ static_assert(sizeof(JqPipeHandle) == 8, "invalid size");
 #endif
 
 #ifdef WIN32_ATOMIC
-#define JQ_ALIGN_16 __declspec(align(16))
+#define JQ_PIPE_ALIGN_16 __declspec(align(16))
 #else
-#define JQ_ALIGN_16 
+#define JQ_PIPE_ALIGN_16 
 #endif
 
 
-struct JQ_ALIGN_16 JqPipeJob
+struct JQ_PIPE_ALIGN_16 JqPipeJob
 {
 	friend JqJobState JqJobStateLoad(JqPipeJob* pJob);
 	friend bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old);

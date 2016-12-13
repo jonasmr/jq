@@ -1,5 +1,5 @@
 
-LDFLAGS=-framework OpenGL `sdl2-config --static-libs` -lpthread
+LDFLAGS=-framework OpenGL `sdl2-config --static-libs` -lpthread -lcurses
 
 CFLAGS=`sdl2-config --cflags` -I.. -Iglew -DGLEW_STATIC -Wno-c++11-extensions -Wall
 #CFLAGS+=-fsanitize=undefined-trap -fsanitize-undefined-trap-on-error
@@ -9,6 +9,7 @@ CPPFLAGS=$(CFLAGS)
 CPPFLAGS+=-stdlib=libc++ -std=c++11
 CPPFLAGS+=-DJQ_MICROPROFILE
 CPPFLAGS+=-DJQ_MICROPROFILE_VERBOSE
+CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
 #CPPFLAGS+=-DJQ_ASSERT_LOCKS
 #define JQ_IMPL
 #define JQ_MICROPROFILE
@@ -17,7 +18,7 @@ CPPFLAGS+=-DJQ_MICROPROFILE_VERBOSE
 
 
 CPP_SOURCES = demo.cpp microprofile.cpp pipe.cpp jq.cpp
-C_SOURCES = glew/glew.c
+C_SOURCES =
 
 TARGET=demo
 CC=clang
@@ -42,8 +43,8 @@ $(TARGET): $(C_OBJS) $(CPP_OBJS)
 
 
 clean: depend
-	rm *.o $(TARGET)
+	rm -f *.o $(TARGET)
 
 depend: $(CPP_SOURCES) $(C_SOURCES)
-	$(CC) -MM $(CFLAGS) $(C_SOURCES) > .depend
+#	$(CC) -MM $(CFLAGS) $(C_SOURCES) > .depend
 	$(CPP) -MM $(CPPFLAGS) $(CPP_SOURCES) >> .depend
