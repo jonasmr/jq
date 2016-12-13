@@ -22,9 +22,15 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string>
+#include <stdlib.h>
+#ifdef _WIN32
 #include <Windows.h>
-#include "microprofile.h"
 #include <conio.h>
+#else
+#include <curses.h>
+#endif
+
+#include "microprofile.h"
 
 
 
@@ -397,7 +403,9 @@ int main(int argc, char* argv[])
 #endif
 	//JqStartSentinel(20);
 	//I feel like im gonna burn someday for this code, but its the only way i know how to write it.
-	std::atomic<int> keypressed = 0;
+
+#ifdef _WIN32
+	std::atomic<int> keypressed;
 	std::thread	foo(
 		[&]()
 	{
@@ -409,12 +417,23 @@ int main(int argc, char* argv[])
 		}
 		g_nQuit = 1;
 	});
+#else
+	WINDOW* w = initscr();
+	cbreak();
+	nodelay(w, TRUE);
+	atexit([]{endwin();});
+#endif
 
 	while(!g_nQuit)
 	{
 		MICROPROFILE_SCOPE(MAIN);
 
-		int key = keypressed.exchange(0);
+		int key;
+#ifdef _WIN32
+		key = keypressed.exchange(0);
+#else
+		key = getch();
+#endif
 		if (key)
 		{
 			switch (key)
@@ -458,15 +477,9 @@ int main(int argc, char* argv[])
 		}
 
 	}
+#ifdef _WIN32 
 	foo.join();
+#endif
 	JqStop();
-//
-//	MicroProfileShutdown();
-//
-//  	SDL_GL_DeleteContext(glcontext);  
-// 	SDL_DestroyWindow(pWindow);
-// 	SDL_Quit();
-//
-
 	return 0;
 }

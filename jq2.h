@@ -260,6 +260,7 @@ JQ_API void 		JqDump();
 #ifdef JQ_IMPL
 #if defined(__APPLE__)
 #include <mach/mach_time.h>
+#include <unistd.h>
 #define JQ_BREAK() __builtin_trap()
 #define JQ_THREAD_LOCAL __thread
 #define JQ_STRCASECMP strcasecmp
@@ -461,8 +462,17 @@ struct JqJob2
 };
 
 #define JQ_PAD_SIZE(type) (JQ_CACHE_LINE_SIZE - (sizeof(type)%JQ_CACHE_LINE_SIZE))
+#ifdef _WIN32
+
 #define JQ_ALIGN_CACHELINE __declspec(align(JQ_CACHE_LINE_SIZE))
 #define JQ_ALIGN_16 __declspec(align(16))
+
+#else
+
+#define JQ_ALIGN_CACHELINE __attribute__((__aligned__(JQ_CACHE_LINE_SIZE)))
+#define JQ_ALIGN_16 __attribute__((__aligned__(16)))
+
+#endif
 
 #ifndef _WIN32
 #include <pthread.h>
