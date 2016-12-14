@@ -20,15 +20,17 @@
 
 struct JqNode
 {
-	JqNode(JqFunction Func, uint8_t nPipe, int nNumJobs, int nRange);
+	JqNode(JqFunction Func, uint8_t nPipe, int nNumJobs = 1, int nRange = -1);
 	~JqNode();
 	void Run();
 	void After(JqNode& pNode);
 	void Wait();
 private:
 	void RunInternal();
+	void KickInternal();
 	JqFunction JobFunc;
-	uint64_t nMasterJob;
+	uint64_t nControlJob;
+	uint64_t nWorkJob;
 	int nNumJobs;
 	int nRange;
 	uint8_t nPipe;
@@ -44,14 +46,13 @@ private:
 	JqNode* pParent;
 	JqNode* Dependent[JQ_NODE_MAX_DEPENDENT_JOBS];
 };
-//uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, void* pArg, int nNumJobs, int nRange, uint64_t nParent)
-
 
 #ifdef JQ_IMPL
 
 JqNode::JqNode(JqFunction Func, uint8_t nPipe, int nNumJobs, int nRange)
 	:JobFunc(Func)
-	,nJob(0)
+	,nControlJob(0)
+	,nWorkJob(0)
 	,nNumJobs(nNumJobs)
 	,nRange(nRange)
 	,nPipe(nPipe)
@@ -63,25 +64,29 @@ JqNode::JqNode(JqFunction Func, uint8_t nPipe, int nNumJobs, int nRange)
 }
 JqNode::~JqNode()
 {
-	JQ_ASSERT(m_State == STATE_DONE);
+	JQ_ASSERT(JqIsDone(nControlJob));
 }
 
 void JqNode::Run()
 {
-	JQ_ASSERT(nMasterJob == 0);
-	JQ_ASSERT(m_State == STATE_INIT);
-	nMasterJob = JqAdd(
+	KickInternal();
+}
+
+void JqNode::KickInternal()
+{
+	JQ_ASSERT(nControlJob == 0);
+	JQ_ASSERT(State == STATE_INIT);
+	nControlJob = JqAdd(
 		[this](int b, int e){
 			RunInternal();
 		}, nPipe, 1, 1);
 }
 void JqNode::After(JqNode& Node)
 {
-	JQ_ASSERT(nMasterJob == 0);
-	JQ_ASSERT(Node.nMasterJob == 0); // must be called before job is started
+	JQ_ASSERT(nControlJob == 0);
+	JQ_ASSERT(Node.nControlJob == 0); // must be called before job is started
 	JQ_ASSERT(Node.NumDependent < JQ_NODE_MAX_DEPENDENT_JOBS);
-	JQ_ASSERT(Node.m_State == STATE_INIT);
-	JQ_ASSERT(m_State == STATE_INIT);
+	JQ_ASSERT(nControlJob == 0);
 	Node.Dependent[Node.NumDependent++] = this;
 	pParent = &Node;
 }
@@ -91,25 +96,23 @@ void JqNode::Wait()
 		pParent->Wait();
 	else
 	{
-		JQ_ASSERT(nMasterJob);
-		JqWait(nMasterJob);
+		JQ_ASSERT(nControlJob);
+		JqWait(nControlJob);
 	}
+	nWorkJob = 0;
+	nControlJob = 0;
 }
 void JqNode::RunInternal()
 {
-	uint64_t nJob = JqAdd(JobFunc, nPipe, nNumJobs, nRange);
+	JQ_ASSERT(nWorkJob == 0);
+	nWorkJob = JqAdd(JobFunc, nPipe, nNumJobs, nRange);
 	if(NumDependent)
 	{
-		JqWait(nJob);
+		JqWait(nWorkJob);
 		for(uint32_t i = 0; i < NumDependent; ++i)
 		{
-			JqNode* pNode = Dependent[i]; 
-			JqAdd([pNode](int b, int e)
-			{
-				pNode->RunInternal();
-			},
+			Dependent[i]->KickInternal();
 		}
-		JqAdd([]
 	}
 }
 #endif

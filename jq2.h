@@ -575,7 +575,6 @@ struct JQ_ALIGN_CACHELINE JqState_t
 
 	std::atomic<uint64_t> 	nNumFinished;
 	std::atomic<uint64_t> 	nNumAdded;
-	//std::atomic<uint64_t> nJobsFinished;
 
 	uint8_t m_nNumPipes[JQ_MAX_THREADS];
 	uint8_t m_PipeList[JQ_MAX_THREADS][JQ_NUM_PIPES];
@@ -583,9 +582,6 @@ struct JQ_ALIGN_CACHELINE JqState_t
 
 
 	JqPipe 			m_Pipes[JQ_NUM_PIPES];
-
-	//std::atomic<uint64_t> 	m_NextHandle;
-
 	JqJob2 			m_Jobs2[JQ_TREE_BUFFER_SIZE2];
 
 	JqState_t()

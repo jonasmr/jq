@@ -240,6 +240,8 @@ JQ_API void			JqDump();
 
 #ifdef JQ_IMPL
 #if defined(__APPLE__)
+#include <mach/mach_time.h>
+#include <unistd.h>
 #define JQ_BREAK() __builtin_trap()
 #define JQ_THREAD_LOCAL __thread
 #define JQ_STRCASECMP strcasecmp
@@ -426,9 +428,16 @@ struct JqJob
 #endif
 };
 
-
-#define JQ_PAD_SIZE(type) (JQ_CACHE_LINE_SIZE - (sizeof(type)%JQ_CACHE_LINE_SIZE))
+#ifdef _WIN32
 #define JQ_ALIGN_CACHELINE __declspec(align(JQ_CACHE_LINE_SIZE))
+#define JQ_ALIGN_16 __declspec(align(16))
+#else
+#define JQ_ALIGN_CACHELINE __attribute__((__aligned__(JQ_CACHE_LINE_SIZE)))
+#define JQ_ALIGN_16 __attribute__((__aligned__(16)))
+#endif
+
+// #define JQ_PAD_SIZE(type) (JQ_CACHE_LINE_SIZE - (sizeof(type)%JQ_CACHE_LINE_SIZE))
+// #define JQ_ALIGN_CACHELINE __declspec(align(JQ_CACHE_LINE_SIZE))
 
 #ifndef _WIN32
 #include <pthread.h>
@@ -490,18 +499,9 @@ struct JqSemaphore
 
 struct JQ_ALIGN_CACHELINE JqState_t
 {
-	struct JQ_ALIGN_CACHELINE JqPaddedSemaphore
-	{
-		JqSemaphore S;
-		char pad0[JQ_PAD_SIZE(JqSemaphore)];
-	};
-	JqPaddedSemaphore Semaphore[JQ_MAX_SEMAPHORES];
-
+	JqSemaphore Semaphore[JQ_MAX_SEMAPHORES];
 	JqMutex Mutex;
-	char pad1[ JQ_PAD_SIZE(JqMutex) ]; 
-
 	JqConditionVariable WaitCond;
-	char pad2[ JQ_PAD_SIZE(JqConditionVariable) ];
 
 	uint64_t m_SemaphoreMask[JQ_MAX_SEMAPHORES];
 	uint8_t m_PipeNumSemaphores[JQ_NUM_PIPES];
@@ -679,7 +679,7 @@ void JqStart(int nNumWorkers, uint32_t nPipeConfigSize, uint8_t* pPipeConfig)
 
 	for (uint32_t i = 0; i < JQ_MAX_SEMAPHORES; ++i)
 	{
-		JqState.Semaphore[i].S.Init(JqState.m_SemaphoreClientCount[i] ? JqState.m_SemaphoreClientCount[i] : 1);
+		JqState.Semaphore[i].Init(JqState.m_SemaphoreClientCount[i] ? JqState.m_SemaphoreClientCount[i] : 1);
 	}
 
 
@@ -754,7 +754,7 @@ void JqStop()
 	JqState.nStop = 1;
 	for (int i = 0; i < JqState.m_ActiveSemaphores; ++i)
 	{
-		JqState.Semaphore[i].S.Signal(JqState.nNumWorkers);
+		JqState.Semaphore[i].Signal(JqState.nNumWorkers);
 	}
 	for(int i = 0; i < JqState.nNumWorkers; ++i)
 	{
@@ -1209,7 +1209,7 @@ void JqWorker(int nThreadId)
 			JqExecuteJob(JqState.Jobs[nWork].nStartedHandle, nSubIndex);
 		}while(1);
 
-		JqState.Semaphore[nSemaphoreIndex].S.Wait();
+		JqState.Semaphore[nSemaphoreIndex].Wait();
 	}
 #ifdef JQ_MICROPROFILE
 	MicroProfileOnThreadExit();
@@ -1327,7 +1327,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint
 	for (uint32_t i = 0; i < nNumSema; ++i)
 	{
 		int nSemaIndex = JqState.m_PipeToSemaphore[nPrio][i];
-		JqState.Semaphore[nSemaIndex].S.Signal(nNumJobs);
+		JqState.Semaphore[nSemaIndex].Signal(nNumJobs);
 	}
 
 	//JqState.SemaphoreAll.Signal(nNumJobs);

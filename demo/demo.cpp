@@ -34,6 +34,8 @@
 
 
 
+
+
 #define WIDTH 1024
 #define HEIGHT 600
 uint32_t g_FewJobs = 1;
@@ -68,6 +70,8 @@ uint32_t g_Reset = 0;
 //#define JQ_USE_STD_FUNCTION
 
 #include "../jq.h"
+
+#include "../jqnode.h"
 
 #include <atomic>
 std::atomic<int> g_nJobCount;
@@ -287,6 +291,7 @@ void JqTest()
 
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
+		(void)WrapTime;
 		printf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs|%2d     ",
 			bUseWrapping ? '\r' : ' ',
 			Stats.nNumAdded / (float)fTime,
@@ -367,6 +372,10 @@ void JqTest()
 	#endif
 }
 
+
+
+#define JQ_NODE_TEST 1
+
 #define JQ_TEST_WORKERS 5
 
 int main(int argc, char* argv[])
@@ -418,10 +427,58 @@ int main(int argc, char* argv[])
 		g_nQuit = 1;
 	});
 #else
+
+	#if 0 == JQ_NODE_TEST
 	WINDOW* w = initscr();
 	cbreak();
 	nodelay(w, TRUE);
 	atexit([]{endwin();});
+	#endif
+#endif
+
+
+#if JQ_NODE_TEST
+	JqNode A(
+		[](int b, int e)
+		{
+			printf("NODE A %d-%d\n",b,e);
+		}, 1, 3, 10);
+	JqNode B(
+		[](int b, int e)
+		{
+			printf("NODE B %d-%d\n",b,e);
+		}, 1, 1000);
+	JqNode B1(
+		[](int b, int e)
+		{
+			printf("NODE B1 %d-%d\n",b,e);
+		}, 1, 2);
+	JqNode C(
+		[](int b, int e)
+		{
+			printf("NODE C %d-%d\n",b,e);
+		}, 1, 5);
+	JqNode D(
+		[](int b, int e)
+		{
+			printf("NODE D %d-%d\n",b,e);
+		}, 1, 10);
+	JqNode X(
+		[](int b, int e)
+		{
+			printf("NODE X %d-%d\n",b,e);
+		}, 1, 1);
+
+	B.After(A);
+	B1.After(A);
+	C.After(B1);
+	D.After(C);
+	X.After(B);
+
+	A.Run();
+	A.Wait();
+	g_nQuit = 1;
+	//exit(0);
 #endif
 
 	while(!g_nQuit)
