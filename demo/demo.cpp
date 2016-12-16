@@ -447,7 +447,7 @@ int main(int argc, char* argv[])
 		[](int b, int e)
 		{
 			printf("NODE B %d-%d\n",b,e);
-		}, 1, 1000);
+		}, 1, 50);
 	JqNode B1(
 		[](int b, int e)
 		{
@@ -472,11 +472,19 @@ int main(int argc, char* argv[])
 	B.After(A);
 	B1.After(A);
 	C.After(B1);
-	D.After(C);
-	X.After(B);
+	D.After(B1);
+	X.After(C,D,A,B1);
 
 	A.Run();
 	A.Wait();
+
+	printf("XXX RUN 1 DONE\n");
+
+
+	A.ResetGraph();
+	A.Run();
+	A.Wait();
+	printf("YYY RUN 2 DONE\n");
 	g_nQuit = 1;
 	//exit(0);
 #endif

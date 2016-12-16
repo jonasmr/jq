@@ -7,8 +7,10 @@
 // JqNode A(..);
 // JqNode B(..);
 // JqNode C(..);
+// JqNode D(..);
 // B.After(A);
 // C.After(B);
+// D.After(B, C);
 // A.Run();
 //
 //
@@ -23,14 +25,20 @@ struct JqNode
 	JqNode(JqFunction Func, uint8_t nPipe, int nNumJobs = 1, int nRange = -1);
 	~JqNode();
 	void Run();
-	void After(JqNode& pNode);
+	void After(JqNode& Node);
+	void After(JqNode& NodeA,JqNode& NodeB);
+	void After(JqNode& NodeA,JqNode& NodeB, JqNode& NodeC);
+	void After(JqNode& NodeA,JqNode& NodeB, JqNode& NodeC, JqNode& NodeD);
+	void After(JqNode& NodeA,JqNode& NodeB, JqNode& NodeC, JqNode& NodeD, JqNode& NodeE);
+	void After(JqNode& NodeA,JqNode& NodeB, JqNode& NodeC, JqNode& NodeD, JqNode& NodeE, JqNode& NodeF);
 	void Wait();
+	void ResetGraph();
 private:
-	void RunInternal();
+	void RunInternal(int b, int e);
 	void KickInternal();
+	void DependencyDone();
 	JqFunction JobFunc;
-	uint64_t nControlJob;
-	uint64_t nWorkJob;
+	uint64_t nJob;
 	int nNumJobs;
 	int nRange;
 	uint8_t nPipe;
@@ -42,8 +50,9 @@ private:
 		STATE_DONE,
 	};
 	uint8_t State;
-	uint8_t NumDependent;
-	JqNode* pParent;
+	std::atomic<uint32_t> NumJobDependent;
+	std::atomic<uint32_t> NumJobFinished;
+	uint32_t NumDependent;
 	JqNode* Dependent[JQ_NODE_MAX_DEPENDENT_JOBS];
 };
 
@@ -51,20 +60,20 @@ private:
 
 JqNode::JqNode(JqFunction Func, uint8_t nPipe, int nNumJobs, int nRange)
 	:JobFunc(Func)
-	,nControlJob(0)
-	,nWorkJob(0)
+	,nJob(0)
 	,nNumJobs(nNumJobs)
 	,nRange(nRange)
 	,nPipe(nPipe)
 	,State(STATE_INIT)
+	,NumJobDependent(0)
+	,NumJobFinished(0)
 	,NumDependent(0)
-	,pParent(nullptr)
 {
 	memset(&Dependent[0], 0, sizeof(Dependent));
 }
 JqNode::~JqNode()
 {
-	JQ_ASSERT(JqIsDone(nControlJob));
+	JQ_ASSERT(JqIsDone(nJob));
 }
 
 void JqNode::Run()
@@ -74,45 +83,108 @@ void JqNode::Run()
 
 void JqNode::KickInternal()
 {
-	JQ_ASSERT(nControlJob == 0);
+	JQ_ASSERT(nJob == 0);
 	JQ_ASSERT(State == STATE_INIT);
-	nControlJob = JqAdd(
+	JQ_ASSERT(NumJobFinished.load() == NumJobDependent.load());
+	nJob = JqAdd(
 		[this](int b, int e){
-			RunInternal();
-		}, nPipe, 1, 1);
+			RunInternal(b, e);
+		}, nPipe, nNumJobs, nRange);
 }
 void JqNode::After(JqNode& Node)
 {
-	JQ_ASSERT(nControlJob == 0);
-	JQ_ASSERT(Node.nControlJob == 0); // must be called before job is started
+	JQ_ASSERT(nJob == 0);
+	JQ_ASSERT(Node.nJob == 0); // must be called before job is started
 	JQ_ASSERT(Node.NumDependent < JQ_NODE_MAX_DEPENDENT_JOBS);
-	JQ_ASSERT(nControlJob == 0);
+	//assert not double adding
+	for(uint32_t i = 0; i < Node.NumDependent; ++i)
+	{
+		JQ_ASSERT(Node.Dependent[i] != this);
+	}
 	Node.Dependent[Node.NumDependent++] = this;
-	pParent = &Node;
+	NumJobDependent += Node.nNumJobs;
 }
+void JqNode::After(JqNode& NodeA, JqNode& NodeB)
+{
+	After(NodeA);
+	After(NodeB);
+}
+void JqNode::After(JqNode& NodeA, JqNode& NodeB, JqNode& NodeC)
+{
+	After(NodeA);
+	After(NodeB);
+	After(NodeC);
+
+}
+void JqNode::After(JqNode& NodeA, JqNode& NodeB, JqNode& NodeC, JqNode& NodeD)
+{
+	After(NodeA);
+	After(NodeB);
+	After(NodeC);
+	After(NodeD);
+}
+void JqNode::After(JqNode& NodeA, JqNode& NodeB, JqNode& NodeC, JqNode& NodeD, JqNode& NodeE)
+{
+	After(NodeA);
+	After(NodeB);
+	After(NodeC);
+	After(NodeD);
+	After(NodeE);
+}
+void JqNode::After(JqNode& NodeA, JqNode& NodeB, JqNode& NodeC, JqNode& NodeD, JqNode& NodeE, JqNode& NodeF)
+{
+	After(NodeA);
+	After(NodeB);
+	After(NodeC);
+	After(NodeD);
+	After(NodeE);
+	After(NodeF);
+}
+
+
+void JqNode::ResetGraph()
+{
+	JQ_ASSERT(State == STATE_INIT);
+	NumJobFinished.store(0);
+	if(nJob)
+	{
+		JqWait(nJob);
+		nJob = 0;
+	}
+	for(uint32_t i = 0; i < NumDependent; ++i)
+	{
+		Dependent[i]->ResetGraph();
+	}
+
+
+}
+
+
 void JqNode::Wait()
 {
-	if(pParent)
-		pParent->Wait();
-	else
+	JQ_ASSERT(NumJobDependent.load() == 0); //only callable on root jobs
+	JQ_ASSERT(nJob != 0);
 	{
-		JQ_ASSERT(nControlJob);
-		JqWait(nControlJob);
+		JQ_ASSERT(nJob);
+		JqWait(nJob);
 	}
-	nWorkJob = 0;
-	nControlJob = 0;
+	nJob = 0;
+	State = STATE_INIT;
 }
-void JqNode::RunInternal()
+void JqNode::DependencyDone()
 {
-	JQ_ASSERT(nWorkJob == 0);
-	nWorkJob = JqAdd(JobFunc, nPipe, nNumJobs, nRange);
-	if(NumDependent)
+	uint32_t nValue = NumJobFinished.fetch_add(1);
+	if(nValue+1 == NumJobDependent.load())
 	{
-		JqWait(nWorkJob);
-		for(uint32_t i = 0; i < NumDependent; ++i)
-		{
-			Dependent[i]->KickInternal();
-		}
+		KickInternal();
+	}
+}
+void JqNode::RunInternal(int b, int e)
+{
+	JobFunc(b, e);
+	for(uint32_t i = 0; i < NumDependent; ++i)
+	{
+		Dependent[i]->DependencyDone();
 	}
 }
 #endif
