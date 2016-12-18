@@ -102,17 +102,49 @@
 
 
 
-#ifdef JQ_NO_LAMBDA
-typedef void (*JqFunction)(void*, int, int);
-#ifdef JQ_USE_STD_FUNCTION
-#error "JQ_NO_LAMBDA and JQ_USE_STD_FUNCTION cannot both be defined"
-#endif
-#else
-#ifdef JQ_USE_STD_FUNCTION
-#include <functional>
-typedef std::function<void (int,int) > JqFunction;
-#else
 #include <type_traits>
+
+//template stuff to make the job function accept to 0-2 arguments
+template <typename T>
+struct JqAdapt : public JqAdapt<decltype(&T::operator())>{};
+template <typename C>
+struct JqAdapt<void (C::*)(int, int) const>
+{
+	template<typename T>
+	void call(T& t, int a, int b){ t(a,b);}
+};
+template <typename C>
+struct JqAdapt<void (C::*)(int) const>
+{
+	template<typename T>
+	void call(T& t, int a, int b){ t(a); }
+};
+template <typename C>
+struct JqAdapt<void (C::*)() const>
+{
+	template<typename T>
+	void call(T& t, int a, int b){ t();}
+};
+
+template <>
+struct JqAdapt<void (*)(int, int)>
+{
+	template<typename T>
+	void call(T& t, int a, int b){ t(a,b);}
+};
+template <>
+struct JqAdapt<void (*)(int)>
+{
+	template<typename T>
+	void call(T& t, int a, int b){ t(a); }
+};
+template <>
+struct JqAdapt<void (*)()>
+{
+	template<typename T>
+	void call(T& t, int a, int b){ t();}
+};
+
 //minimal lambda implementation without support for non-trivial types
 //and fixed memory footprint
 struct JqCallableBase {
@@ -122,7 +154,11 @@ template <typename F>
 struct JqCallable : JqCallableBase {
 	F functor;
 	JqCallable(F functor) : functor(functor) {}
-	virtual void operator()(int a, int b) { functor(a, b); }
+	virtual void operator()(int a, int b) 
+	{ 
+		JqAdapt<F> X;
+		X.call(functor,a,b);
+	}
 };
 class JqFunction {
 	union
@@ -153,12 +189,6 @@ public:
 	void operator()(int a, int b) { (*Base())(a, b); }
 };
 #define JQ_CLEAR_FUNCTION(f) do{f.Clear();}while(0)
-#endif
-#endif
-
-#ifndef JQ_CLEAR_FUNCTION
-#define JQ_CLEAR_FUNCTION(f) do{f = nullptr;}while(0)
-#endif
 
 
 
@@ -206,13 +236,8 @@ struct JqStats
 };
 
 JQ_API uint64_t		JqSelf();
-#ifdef JQ_NO_LAMBDA
-JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs = 1, int nRange = -1, uint64_t nParent = JqSelf());
-JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs = 1, int nRange = -1, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK);
-#else
 JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1, uint64_t nParent = JqSelf());
 JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK);
-#endif
 JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API void 		JqWaitAll();
 //JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
@@ -395,9 +420,6 @@ JQ_THREAD_LOCAL uint32_t JqHasLock = 0;
 struct JqJob
 {
 	JqFunction Function;
-#ifdef JQ_NO_LAMBDA
-	void* pArg;
-#endif
 
 	uint64_t nStartedHandle;
 	uint64_t nFinishedHandle;
@@ -947,11 +969,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 	int nRemainder = nRange - nFraction * nNumJobs;	
 	int nStart = JqGetRangeStart(nSubIndex, nFraction, nRemainder);
 	int nEnd = JqGetRangeStart(nSubIndex+1, nFraction, nRemainder);
-#ifdef JQ_NO_LAMBDA
-	JqState.Jobs[nWorkIndex].Function(JqState.Jobs[nWorkIndex].pArg, nStart, nEnd);
-#else
 	JqState.Jobs[nWorkIndex].Function(nStart, nEnd);
-#endif
 	JqSelfPop(nJob);
 	//JqIncrementFinished(nJob);
 }
@@ -1260,25 +1278,13 @@ uint64_t JqFindHandle(JqMutexLock& Lock)
 	return nNextHandle;
 }
 
-#ifdef JQ_NO_LAMBDA
-JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs, int nRange, uint32_t nWaitFlag)
-#else
 JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint32_t nWaitFlag)
-#endif
 {
-#ifdef JQ_NO_LAMBDA
-	uint64_t nJob = JqAdd(JobFunc, nPrio, pArg, nNumJobs, nRange);
-#else
 	uint64_t nJob = JqAdd(JobFunc, nPrio, nNumJobs, nRange);
-#endif
 	JqWait(nJob, nWaitFlag);
 }
 
-#ifdef JQ_NO_LAMBDA
-uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, void* pArg, int nNumJobs, int nRange, uint64_t nParent)
-#else
 uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint64_t nParent)
-#endif
 {
 	JQ_ASSERT(nPrio < JQ_PRIORITY_SIZE);
 	JQ_ASSERT(JqState.nNumWorkers);
@@ -1312,9 +1318,6 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint
 			JqAttachChild(nParentHandle, nNextHandle);
 		}
 		pEntry->Function = JobFunc;
-#ifdef JQ_NO_LAMBDA
-		pEntry->pArg = pArg;
-#endif
 		pEntry->nPrio = nPrio;
 		pEntry->nWaiters = 0;
 		JqState.Stats.nNumAdded++;
@@ -1569,9 +1572,6 @@ uint64_t JqGroupBegin()
 		JqAttachChild(nParentHandle, nNextHandle);
 	}
 	JQ_CLEAR_FUNCTION(pEntry->Function);
-#ifdef JQ_NO_LAMBDA
-	pEntry->pArg = 0;
-#endif
 	pEntry->nPrio = 7;
 	pEntry->nWaiters = 0;
 	JqSelfPush(nNextHandle, 0);

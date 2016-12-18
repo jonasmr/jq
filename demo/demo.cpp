@@ -65,10 +65,6 @@ uint32_t g_Reset = 0;
 
 #include <thread>
 
-//comment out to test different modes
-//#define JQ_NO_LAMBDA
-//#define JQ_USE_STD_FUNCTION
-
 #include "../jq.h"
 
 #include "../jqnode.h"
@@ -86,15 +82,6 @@ std::atomic<int> g_nExternalStats;
 #define JOB_COUNT_1 3
 #define JOB_COUNT_2 20
 #define JOB_COUNT_LOW 300
-
-//Helper macros to let the tests run with both interfaces.
-#ifdef JQ_NO_LAMBDA
-#define VOID_ARG void* pArg,
-#define VOID_PARAM nullptr, 
-#else
-#define VOID_ARG
-#define VOID_PARAM 
-#endif
 
 
 uint32_t JobSpinWork(uint32_t nUs)
@@ -117,7 +104,7 @@ uint32_t JobSpinWork(uint32_t nUs)
 
 }
 
-void JobTree2(VOID_ARG int nStart, int nEnd)
+void JobTree2(int nStart)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree2", 0xff);
 	JobSpinWork(5+ rand() % 100);
@@ -125,19 +112,19 @@ void JobTree2(VOID_ARG int nStart, int nEnd)
 }
 
 
-void JobTree1(VOID_ARG int nStart, int nEnd)
+void JobTree1()
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree1", 0xff0000);
 	if(g_FewJobs)
 	{
-		JqAdd(JobTree2, 2, VOID_PARAM JOB_COUNT_2);
+		JqAdd(JobTree2, 2, JOB_COUNT_2);
 		g_nExternalStats ++;
 	}
 	else
 	{
 		for(int i = 0; i < JOB_COUNT_2; ++i)
 		{
-			JqAdd(JobTree2, 2, VOID_PARAM 1);
+			JqAdd(JobTree2, 2, 1);
 			g_nExternalStats ++;
 		}
 	}
@@ -152,14 +139,14 @@ void JobTree0(void* pArg, int nStart, int nEnd)
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree0", 0x00ff00);
 	if(g_FewJobs)
 	{
-		JqAdd(JobTree1, 2, VOID_PARAM JOB_COUNT_1);
+		JqAdd(JobTree1, 2, JOB_COUNT_1);
 		g_nExternalStats ++;
 	}
 	else
 	{
 		for(int i = 0; i < JOB_COUNT_1; ++i)
 		{
-			JqAdd(JobTree1, 2, VOID_PARAM 1);
+			JqAdd(JobTree1, 2, 1);
 			g_nExternalStats ++;
 		}
 	}
@@ -170,20 +157,16 @@ void JobTree0(void* pArg, int nStart, int nEnd)
 
 }
 
-void JobTree(VOID_ARG int nStart, int nEnd)
+void JobTree()
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
 	JobSpinWork(100);
 	int lala[3]={0,0,0};
-	#ifdef JQ_NO_LAMBDA
-	uint64_t nJobTree0 = JqAdd(JobTree0, 2, (void*)&lala[0], 3);
-	#else
 	uint64_t nJobTree0 = JqAdd(
 		[&](int s, int e)
 		{
 			JobTree0((void*)&lala[0],s,e);
 		}, 2, 3);
-	#endif
 	g_nExternalStats ++;
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree Wait", 0xff5555);
 	JqWait(nJobTree0);
@@ -258,6 +241,7 @@ void JqTest()
 		bFirst = false;
 		memset(&Stats, 0, sizeof(Stats));
 		TickLast = JqTick();
+		printf("\n");
 	}
 
 	if(frames > fLimit)
@@ -292,7 +276,7 @@ void JqTest()
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
 		(void)WrapTime;
-		printf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs|%2d     ",
+		printf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs|%2d,%c,%c     ",
 			bUseWrapping ? '\r' : ' ',
 			Stats.nNumAdded / (float)fTime,
 			Stats.nNumFinished / (float)fTime,
@@ -308,7 +292,10 @@ void JqTest()
 			nHandleConsumption,
 			HandlesPerYear,
 			fTime / 1000.f,
-			JqGetNumWorkers()
+			JqGetNumWorkers(),
+			g_DontSleep?'d':' ',
+			g_FewJobs?'f':' '
+
 			); 
 		fflush(stdout);
 
@@ -335,11 +322,11 @@ void JqTest()
 	g_nLowCount = 0;
 
 
-	uint64_t nJob = JqAdd( [](VOID_ARG int begin, int end)
+	uint64_t nJob = JqAdd( [](int begin, int end)
 	{
 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
 		g_nLowCount++;
-	}, 3, VOID_PARAM JOB_COUNT_LOW);
+	}, 3, JOB_COUNT_LOW);
 	g_nExternalStats ++;
 	JqWait(nJob);
 	{
@@ -356,7 +343,7 @@ void JqTest()
 		g_nJobCount2 = 0;
 
 
-		uint64_t nJobMedium = JqAdd(JobTree, 0, VOID_PARAM JOB_COUNT);
+		uint64_t nJobMedium = JqAdd(JobTree, 0, JOB_COUNT);
 		g_nExternalStats ++;
 		{
 			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
@@ -374,12 +361,13 @@ void JqTest()
 
 
 
-#define JQ_NODE_TEST 1
+#define JQ_NODE_TEST 0
 
 #define JQ_TEST_WORKERS 5
 
 int main(int argc, char* argv[])
 {
+
 	printf("press 'z' to toggle microprofile drawing\n");
 	printf("press 'right shift' to pause microprofile update\n");
 	MicroProfileOnThreadCreate("Main");
@@ -439,9 +427,9 @@ int main(int argc, char* argv[])
 
 #if JQ_NODE_TEST
 	JqNode A(
-		[](int b, int e)
+		[]
 		{
-			printf("NODE A %d-%d\n",b,e);
+			printf("NODE A %d-%d\n",0,0);
 		}, 1, 3, 10);
 	JqNode B(
 		[](int b, int e)
@@ -459,9 +447,9 @@ int main(int argc, char* argv[])
 			printf("NODE C %d-%d\n",b,e);
 		}, 1, 5);
 	JqNode D(
-		[](int b, int e)
+		[](int b)
 		{
-			printf("NODE D %d-%d\n",b,e);
+			printf("NODE D %d\n",b);
 		}, 1, 10);
 	JqNode X(
 		[](int b, int e)
@@ -507,9 +495,11 @@ int main(int argc, char* argv[])
 				g_Reset = 1; break;
 			case 'x':
 				g_FewJobs = !g_FewJobs; 
+				g_Reset = 1; break;
 				break;
 			case 'c':
 				g_DontSleep = !g_DontSleep;
+				g_Reset = 1; break;
 				break;
 			case ' ':
 				{

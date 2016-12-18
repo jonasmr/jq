@@ -3,12 +3,12 @@ LDFLAGS=-framework OpenGL `sdl2-config --static-libs` -lpthread -lcurses
 
 CFLAGS=`sdl2-config --cflags` -I.. -Iglew -DGLEW_STATIC -Wno-c++11-extensions -Wall
 #CFLAGS+=-fsanitize=undefined-trap -fsanitize-undefined-trap-on-error
-CFLAGS+=-g -O0 -Wno-invalid-offsetof
+CFLAGS+=-g -O3 -Wno-invalid-offsetof
 
 CPPFLAGS=$(CFLAGS)
 CPPFLAGS+=-stdlib=libc++ -std=c++11
-CPPFLAGS+=-DJQ_MICROPROFILE
-CPPFLAGS+=-DJQ_MICROPROFILE_VERBOSE
+#CPPFLAGS+=-DJQ_MICROPROFILE
+#CPPFLAGS+=-DJQ_MICROPROFILE_VERBOSE
 CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
 #CPPFLAGS+=-DJQ_ASSERT_LOCKS
 #define JQ_IMPL
