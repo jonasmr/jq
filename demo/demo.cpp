@@ -469,7 +469,7 @@ int main(int argc, char* argv[])
 	printf("XXX RUN 1 DONE\n");
 
 
-	A.ResetGraph();
+	A.Reset();
 	A.Run();
 	A.Wait();
 	printf("YYY RUN 2 DONE\n");
