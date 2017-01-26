@@ -20,6 +20,16 @@
 #define JQ_NODE_MAX_DEPENDENT_JOBS 8
 #endif
 
+#define JQNODE_VERIFY 1
+
+#if JQNODE_VERIFY
+#define JQNODE_STATE_VERIFY(exp) JQ_ASSERT(exp);
+#define JQNODE_STATE_NEXT(s) do{State = s;}while(0)
+#else
+#define JQNODE_STATE_VERIFY(cur) do{}while(0)
+#define JQNODE_STATE_NEXT(s) do{}while(0)
+#endif
+
 struct JqNode
 {
 	JqNode(JqFunction Func, uint8_t nPipe, int nNumJobs = 1, int nRange = -1);
@@ -32,27 +42,33 @@ struct JqNode
 	void After(JqNode& NodeA,JqNode& NodeB, JqNode& NodeC, JqNode& NodeD, JqNode& NodeE);
 	void After(JqNode& NodeA,JqNode& NodeB, JqNode& NodeC, JqNode& NodeD, JqNode& NodeE, JqNode& NodeF);
 	void Wait();
-	void ResetGraph();
+	void Reset();
 private:
+	JqNode(const JqNode&);
+	JqNode& operator =(const JqNode&);
 	void RunInternal(int b, int e);
 	void KickInternal();
 	void DependencyDone();
 	JqFunction JobFunc;
 	uint64_t nJob;
-	int nNumJobs;
+	const int nNumJobs; // must be set on construction and never change.
 	int nRange;
 	uint8_t nPipe;
 	enum
 	{
 		STATE_INIT,
+		STATE_KICKED,
 		STATE_RUNNING,
-		STATE_DEPENDENT,
 		STATE_DONE,
 	};
 	uint8_t State;
 	std::atomic<uint32_t> NumJobDependent;
 	std::atomic<uint32_t> NumJobFinished;
-	uint32_t NumDependent;
+#if JQNODE_VERIFY
+	std::atomic<uint32_t> nNumJobsExecuted;
+#endif
+
+	uint32_t NumDependencies;
 	JqNode* Dependent[JQ_NODE_MAX_DEPENDENT_JOBS];
 };
 
@@ -67,25 +83,31 @@ JqNode::JqNode(JqFunction Func, uint8_t nPipe, int nNumJobs, int nRange)
 	,State(STATE_INIT)
 	,NumJobDependent(0)
 	,NumJobFinished(0)
-	,NumDependent(0)
+#if JQNODE_VERIFY
+	,nNumJobsExecuted(0)
+#endif
+	,NumDependencies(0)
 {
 	memset(&Dependent[0], 0, sizeof(Dependent));
 }
 JqNode::~JqNode()
 {
+	JQNODE_STATE_VERIFY(STATE_DONE == State);
 	JQ_ASSERT(JqIsDone(nJob));
 }
 
 void JqNode::Run()
 {
+	JQNODE_STATE_VERIFY(STATE_INIT == State);
 	KickInternal();
 }
 
 void JqNode::KickInternal()
 {
 	JQ_ASSERT(nJob == 0);
-	JQ_ASSERT(State == STATE_INIT);
+	JQNODE_STATE_VERIFY(State == STATE_INIT);
 	JQ_ASSERT(NumJobFinished.load() == NumJobDependent.load());
+	JQNODE_STATE_NEXT(STATE_KICKED);
 	nJob = JqAdd(
 		[this](int b, int e){
 			RunInternal(b, e);
@@ -93,15 +115,17 @@ void JqNode::KickInternal()
 }
 void JqNode::After(JqNode& Node)
 {
+	JQNODE_STATE_VERIFY(State == STATE_INIT);
+	JQNODE_STATE_VERIFY(Node.State == STATE_INIT);
 	JQ_ASSERT(nJob == 0);
 	JQ_ASSERT(Node.nJob == 0); // must be called before job is started
-	JQ_ASSERT(Node.NumDependent < JQ_NODE_MAX_DEPENDENT_JOBS);
+	JQ_ASSERT(Node.NumDependencies < JQ_NODE_MAX_DEPENDENT_JOBS);
 	//assert not double adding
-	for(uint32_t i = 0; i < Node.NumDependent; ++i)
+	for(uint32_t i = 0; i < Node.NumDependencies; ++i)
 	{
 		JQ_ASSERT(Node.Dependent[i] != this);
 	}
-	Node.Dependent[Node.NumDependent++] = this;
+	Node.Dependent[Node.NumDependencies++] = this;
 	NumJobDependent += Node.nNumJobs;
 }
 void JqNode::After(JqNode& NodeA, JqNode& NodeB)
@@ -142,34 +166,37 @@ void JqNode::After(JqNode& NodeA, JqNode& NodeB, JqNode& NodeC, JqNode& NodeD, J
 }
 
 
-void JqNode::ResetGraph()
+void JqNode::Reset()
 {
-	JQ_ASSERT(State == STATE_INIT);
-	NumJobFinished.store(0);
+	JQNODE_STATE_VERIFY(State == STATE_INIT || State == STATE_DONE);
 	if(nJob)
 	{
 		JqWait(nJob);
 		nJob = 0;
 	}
-	for(uint32_t i = 0; i < NumDependent; ++i)
+	JQNODE_STATE_NEXT(STATE_INIT);
+	NumJobFinished.store(0);
+#if JQNODE_VERIFY
+	nNumJobsExecuted.store(0);
+#endif
+	for(uint32_t i = 0; i < NumDependencies; ++i)
 	{
-		Dependent[i]->ResetGraph();
+		Dependent[i]->Reset();
 	}
-
-
 }
 
 
 void JqNode::Wait()
 {
+	JQNODE_STATE_VERIFY(State != STATE_INIT);
 	JQ_ASSERT(NumJobDependent.load() == 0); //only callable on root jobs
 	JQ_ASSERT(nJob != 0);
 	{
 		JQ_ASSERT(nJob);
 		JqWait(nJob);
 	}
+	JQNODE_STATE_VERIFY(State == STATE_DONE);
 	nJob = 0;
-	State = STATE_INIT;
 }
 void JqNode::DependencyDone()
 {
@@ -182,7 +209,14 @@ void JqNode::DependencyDone()
 void JqNode::RunInternal(int b, int e)
 {
 	JobFunc(b, e);
-	for(uint32_t i = 0; i < NumDependent; ++i)
+#if JQNODE_VERIFY
+	if(nNumJobsExecuted.fetch_add(1)+1 == nNumJobs)
+	{
+		JQNODE_STATE_VERIFY(State == STATE_KICKED);
+		JQNODE_STATE_NEXT(STATE_DONE);
+	}
+#endif
+	for(uint32_t i = 0; i < NumDependencies; ++i)
 	{
 		Dependent[i]->DependencyDone();
 	}

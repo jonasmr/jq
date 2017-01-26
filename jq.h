@@ -1,6 +1,6 @@
 #pragma once
 #if 0
-#include "jq1.h"
+#include "jq1.h" //locked
 #else
-#include "jq2.h"
+#include "jq2.h" //lockless 
 #endif
