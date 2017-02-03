@@ -217,6 +217,8 @@ struct JqStats
 	uint32_t nNumFinished;
 	uint32_t nNumAddedSub;
 	uint32_t nNumFinishedSub;
+	uint32_t nNumCancelled;
+	uint32_t nNumCancelledSub;
 	uint32_t nNumLocks;
 	uint32_t nNumWaitKicks;
 	uint32_t nNumWaitCond;
@@ -228,6 +230,8 @@ struct JqStats
 		nNumFinished += Other.nNumFinished;
 		nNumAddedSub += Other.nNumAddedSub;
 		nNumFinishedSub += Other.nNumFinishedSub;
+		nNumCancelled += Other.nNumCancelled;
+		nNumCancelledSub += Other.nNumCancelledSub;
 		nNumLocks += Other.nNumLocks;
 		nNumWaitKicks += Other.nNumWaitKicks;
 		nNumWaitCond += Other.nNumWaitCond;
@@ -242,6 +246,7 @@ JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUC
 JQ_API void 		JqWaitAll();
 //JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API uint64_t		JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
+JQ_API bool 		JqCancel(uint64_t nJob);
 JQ_API void			JqExecuteChildren(uint64_t nJob);
 JQ_API uint64_t 	JqGroupBegin(); //add a non-executing job to group all jobs added between begin/end
 JQ_API void 		JqGroupEnd();
@@ -414,8 +419,16 @@ JQ_THREAD_LOCAL JqSelfStack JqSelfStack[JQ_MAX_JOB_STACK] = {{0}};
 JQ_THREAD_LOCAL uint32_t JqSelfPos = 0;
 JQ_THREAD_LOCAL uint32_t JqHasLock = 0;
 
+#ifndef JG_LT_WRAP
 #define JQ_LT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<0)
 #define JQ_LE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<=0)
+#define JQ_GE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>=0)
+#define JQ_GT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>0)
+#define JQ_LT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<0)
+#define JQ_LE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<=0)
+#define JQ_GE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>=0)
+#define JQ_GT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>0)
+#endif
 
 struct JqJob
 {
@@ -810,6 +823,8 @@ void JqConsumeStats(JqStats* pStats)
 	JqState.Stats.nNumFinished = 0;
 	JqState.Stats.nNumAddedSub = 0;
 	JqState.Stats.nNumFinishedSub = 0;
+	JqState.Stats.nNumCancelled = 0;
+	JqState.Stats.nNumCancelledSub = 0;
 	JqState.Stats.nNumLocks = 0;
 	JqState.Stats.nNumWaitKicks = 0;
 	JqState.Stats.nNumWaitCond = 0;
@@ -1283,6 +1298,31 @@ JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRang
 	uint64_t nJob = JqAdd(JobFunc, nPrio, nNumJobs, nRange);
 	JqWait(nJob, nWaitFlag);
 }
+
+bool JqCancel(uint64_t nJob)
+{
+	JqMutexLock Lock(JqState.Mutex);
+	uint16_t nIndex = nJob % JQ_WORK_BUFFER_SIZE;
+
+	JqJob* pEntry = &JqState.Jobs[nIndex];
+	if(pEntry->nStartedHandle != nJob)
+		return false;
+	if(pEntry->nNumStarted != 0)
+		return false;
+	uint32_t nNumJobs = pEntry->nNumJobs;
+	pEntry->nNumJobs = 0;
+
+	JqPriorityListRemove(nIndex);
+	JqCheckFinished(nJob);
+	JQ_ASSERT(JqIsDone(nJob));
+
+	JqState.Stats.nNumCancelled++;
+	JqState.Stats.nNumCancelledSub += nNumJobs;
+	return true;
+}
+
+
+
 
 uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint64_t nParent)
 {

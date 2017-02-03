@@ -57,6 +57,7 @@ MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 #endif
 
 #define JQ_STRESS_TEST 1
+#define JQ_CANCEL_TEST 0
 int64_t JqTick();
 int64_t JqTicksPerSecond();
 
@@ -66,8 +67,8 @@ uint32_t g_Reset = 0;
 #include <thread>
 
 #include "../jq.h"
-
 #include "../jqnode.h"
+
 
 #include <atomic>
 std::atomic<int> g_nJobCount;
@@ -226,6 +227,90 @@ void JqTestPrio()
 	JqWait(J2);
 
 }
+
+struct SCancelJobState
+{
+	uint64_t nHandle;
+	std::atomic<int> nStarted;
+	std::atomic<int> nFinished;
+	int nCancelled;
+	int nCancelRequested;
+};
+std::atomic<int> g_CancelFinished;
+
+void JqTestCancel()
+{
+	int nNumWorkers = JqGetNumWorkers();
+	int nNumJobs = nNumWorkers * 2;
+	SCancelJobState* Cancel = new SCancelJobState[nNumJobs];
+	g_CancelFinished = 0;
+	//start a bunch of jobs, cancel half of them
+	uint64_t nGroup = JqGroupBegin();
+	for(uint32_t i = 0; i < nNumJobs; ++i)
+	{
+		SCancelJobState* pState = &Cancel[i];
+		Cancel[i].nStarted = 0;
+		Cancel[i].nFinished = 0;
+		Cancel[i].nCancelled = 0;
+		Cancel[i].nCancelRequested = 0;
+		Cancel[i].nHandle = JqAdd([pState]
+		{
+			MICROPROFILE_SCOPEI("CANCEL", "WORK", MP_CYAN);
+			pState->nStarted.fetch_add(1);
+			JobSpinWork(5000);
+			pState->nFinished.fetch_add(1);
+			g_CancelFinished.fetch_add(1);
+		}, 0);
+	}
+	JqGroupEnd();
+	int nNumCancelled = 0;
+	{
+		MICROPROFILE_SCOPEI("CANCEL", "CANCEL", MP_CYAN);
+		JobSpinWork(2000);
+		if(1)
+		{
+			for(uint32_t i = 0; i < nNumWorkers; ++i)
+			{
+				do
+				{
+					int idx = rand() % nNumJobs;
+					// int idx = 
+					// idx = nNumJobs-1;
+					SCancelJobState* pState = &Cancel[idx];
+					if(!pState->nCancelRequested)
+					{
+						if(JqCancel(pState->nHandle))
+						{
+							pState->nCancelled = 1;
+							nNumCancelled++;
+						}
+						pState->nCancelRequested = 1;
+						break;
+					}
+				}while(1);
+			}
+		}
+	}
+
+	JqWait(nGroup);
+	for(uint32_t i = 0; i < nNumJobs; ++i)
+	{
+		SCancelJobState* pState = &Cancel[i];	
+		if(pState->nCancelled)
+		{
+			DEMO_ASSERT(pState->nStarted.load() == 0);
+			DEMO_ASSERT(pState->nFinished.load() == 0);
+		}
+		else
+		{
+			DEMO_ASSERT(pState->nStarted.load() == 1);
+			DEMO_ASSERT(pState->nFinished.load() == 1);
+		}
+	}
+	//printf("num cancelled %d/%d\n", nNumCancelled, nNumJobs);
+
+}
+
 void JqTest()
 {
 	static int frames = 0;
@@ -260,8 +345,8 @@ void JqTest()
 		{
 			bFirst = false;
 			bUseWrapping = false;
-		printf("\n|Per ms  %10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|%7s|%7s\n", 
-			"JobAdd", "JobFin",
+		printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|%7s|%7s\n", 
+			"JobAdd", "JobFin","JobCancel",
 			"SubAdd", "SubFin",
 			"Locks", "Waits", "Kicks", 
 			"JobAdd", "JobFin", "SubAdd", "SubFin","Handles", "WrapTime", "Time", "Workers");
@@ -276,10 +361,11 @@ void JqTest()
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
 		(void)WrapTime;
-		printf("%c|        %10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs|%2d,%c,%c     ",
+		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs|%2d,%c,%c     ",
 			bUseWrapping ? '\r' : ' ',
 			Stats.nNumAdded / (float)fTime,
 			Stats.nNumFinished / (float)fTime,
+			Stats.nNumCancelled / (float)fTime,
 			Stats.nNumAddedSub / (float)fTime,
 			Stats.nNumFinishedSub / (float)fTime,
 			Stats.nNumLocks / (float)fTime,
@@ -374,8 +460,8 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
 #endif
-	//}
 	static uint32_t nNumWorkers = g_nNumWorkers;
+	(void)nNumWorkers;
 #if JQ_STRESS_TEST
 	JqStart(nNumWorkers, 0, nullptr);
 #else
@@ -416,7 +502,7 @@ int main(int argc, char* argv[])
 	});
 #else
 
-	#if 0 == JQ_NODE_TEST
+	#if 1 == JQ_STRESS_TEST
 	WINDOW* w = initscr();
 	cbreak();
 	nodelay(w, TRUE);
@@ -430,7 +516,7 @@ int main(int argc, char* argv[])
 		[]
 		{
 			printf("NODE A %d-%d\n",0,0);
-		}, 1, 3, 10);
+		}, 1, 3);
 	JqNode B(
 		[](int b, int e)
 		{
@@ -530,6 +616,11 @@ int main(int argc, char* argv[])
 			JqTestPrio();
 #endif
 		}
+
+#if JQ_CANCEL_TEST
+		JqTestCancel();
+#endif
+
 
 	}
 #ifdef _WIN32 
