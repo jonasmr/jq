@@ -56,8 +56,7 @@ MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 #define DEMO_ASSERT(a) do{if(!(a)){__builtin_trap();} }while(0)
 #endif
 
-#define JQ_STRESS_TEST 1
-#define JQ_CANCEL_TEST 0
+#define JQ_CANCEL_TEST 1
 int64_t JqTick();
 int64_t JqTicksPerSecond();
 
@@ -307,147 +306,147 @@ void JqTestCancel()
 			DEMO_ASSERT(pState->nFinished.load() == 1);
 		}
 	}
-	//printf("num cancelled %d/%d\n", nNumCancelled, nNumJobs);
+	printf("num cancelled %d/%d\n", nNumCancelled, nNumJobs);
 
 }
 
-void JqTest()
-{
-	static int frames = 0;
-	static float fLimit = 5;
-	static JqStats Stats ;
-	static bool bFirst = true;
-	bool bIncremental = true;
-	static uint64_t TickLast = JqTick();
+// void JqTest()
+// {
+// 	static int frames = 0;
+// 	static float fLimit = 5;
+// 	static JqStats Stats ;
+// 	static bool bFirst = true;
+// 	bool bIncremental = true;
+// 	static uint64_t TickLast = JqTick();
 
-	if(bFirst || !bIncremental || g_Reset)
-	{
-		g_Reset = false;
-		bFirst = false;
-		memset(&Stats, 0, sizeof(Stats));
-		TickLast = JqTick();
-		printf("\n");
-	}
+// 	if(bFirst || !bIncremental || g_Reset)
+// 	{
+// 		g_Reset = false;
+// 		bFirst = false;
+// 		memset(&Stats, 0, sizeof(Stats));
+// 		TickLast = JqTick();
+// 		printf("\n");
+// 	}
 
-	if(frames > fLimit)
-	{
-		fLimit = 5;
-		JqStats Stats0;
-		JqConsumeStats(&Stats0);
-		Stats.Add(Stats0);
-		static bool bFirst = true;		
-		static uint64_t H = Stats.nNextHandle;
-		uint64_t nHandleConsumption = Stats.nNextHandle - H;
-		H = Stats.nNextHandle;
+// 	if(frames > fLimit)
+// 	{
+// 		fLimit = 5;
+// 		JqStats Stats0;
+// 		JqConsumeStats(&Stats0);
+// 		Stats.Add(Stats0);
+// 		static bool bFirst = true;		
+// 		static uint64_t H = Stats.nNextHandle;
+// 		uint64_t nHandleConsumption = Stats.nNextHandle - H;
+// 		H = Stats.nNextHandle;
 
-		bool bUseWrapping = true;
-		if(bFirst)
-		{
-			bFirst = false;
-			bUseWrapping = false;
-		printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|%7s|%7s\n", 
-			"JobAdd", "JobFin","JobCancel",
-			"SubAdd", "SubFin",
-			"Locks", "Waits", "Kicks", 
-			"JobAdd", "JobFin", "SubAdd", "SubFin","Handles", "WrapTime", "Time", "Workers");
-		}
+// 		bool bUseWrapping = true;
+// 		if(bFirst)
+// 		{
+// 			bFirst = false;
+// 			bUseWrapping = false;
+// 		printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|%7s|%7s\n", 
+// 			"JobAdd", "JobFin","JobCancel",
+// 			"SubAdd", "SubFin",
+// 			"Locks", "Waits", "Kicks", 
+// 			"JobAdd", "JobFin", "SubAdd", "SubFin","Handles", "WrapTime", "Time", "Workers");
+// 		}
 
-		uint64_t nDelta = JqTick() - TickLast;
-		uint64_t nTicksPerSecond = JqTicksPerSecond();
-		float fTime = 1000.f * nDelta / nTicksPerSecond;
-		double HandlesPerMs = nHandleConsumption / fTime;
-		double HandlesPerYear = (0x8000000000000000 / (365llu * 24 * 60 * 60 * 60 * 1000)) / HandlesPerMs;
-
-
-		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
-		(void)WrapTime;
-		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs|%2d,%c,%c     ",
-			bUseWrapping ? '\r' : ' ',
-			Stats.nNumAdded / (float)fTime,
-			Stats.nNumFinished / (float)fTime,
-			Stats.nNumCancelled / (float)fTime,
-			Stats.nNumAddedSub / (float)fTime,
-			Stats.nNumFinishedSub / (float)fTime,
-			Stats.nNumLocks / (float)fTime,
-			Stats.nNumWaitCond / (float)fTime,
-			Stats.nNumWaitKicks / (float)fTime,
-			Stats.nNumAdded,
-			Stats.nNumFinished,
-			Stats.nNumAddedSub,
-			Stats.nNumFinishedSub,
-			nHandleConsumption,
-			HandlesPerYear,
-			fTime / 1000.f,
-			JqGetNumWorkers(),
-			g_DontSleep?'d':' ',
-			g_FewJobs?'f':' '
-
-			); 
-		fflush(stdout);
-
-		frames = 0;
-		if(!bIncremental)
-		{
-			TickLast = JqTick();
-		}
-
-		if (fTime / 1000.f > 60.f)
-		{
-			g_nNumWorkers++;
-			g_Reset = true;
-		}
-	}
-
-	++frames;
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST_WAIT_ALL", 0xff00ff);
-		JqWaitAll();
-	}
-	MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST", 0xff00ff);
-
-	g_nLowCount = 0;
+// 		uint64_t nDelta = JqTick() - TickLast;
+// 		uint64_t nTicksPerSecond = JqTicksPerSecond();
+// 		float fTime = 1000.f * nDelta / nTicksPerSecond;
+// 		double HandlesPerMs = nHandleConsumption / fTime;
+// 		double HandlesPerYear = (0x8000000000000000 / (365llu * 24 * 60 * 60 * 60 * 1000)) / HandlesPerMs;
 
 
-	uint64_t nJob = JqAdd( [](int begin, int end)
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
-		g_nLowCount++;
-	}, 3, JOB_COUNT_LOW);
-	g_nExternalStats ++;
-	JqWait(nJob);
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
-		JobSpinWork(500);
-	}
-	uint64_t nStart = JqTick();	
-	#if 1
-	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
-	{
-		g_nJobCount = 0;
-		g_nJobCount0 = 0;
-		g_nJobCount1 = 0;
-		g_nJobCount2 = 0;
+// 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
+// 		(void)WrapTime;
+// 		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %8d/%8d|%8lld|%12.2f|%6.2fs|%2d,%c,%c     ",
+// 			bUseWrapping ? '\r' : ' ',
+// 			Stats.nNumAdded / (float)fTime,
+// 			Stats.nNumFinished / (float)fTime,
+// 			Stats.nNumCancelled / (float)fTime,
+// 			Stats.nNumAddedSub / (float)fTime,
+// 			Stats.nNumFinishedSub / (float)fTime,
+// 			Stats.nNumLocks / (float)fTime,
+// 			Stats.nNumWaitCond / (float)fTime,
+// 			Stats.nNumWaitKicks / (float)fTime,
+// 			Stats.nNumAdded,
+// 			Stats.nNumFinished,
+// 			Stats.nNumAddedSub,
+// 			Stats.nNumFinishedSub,
+// 			nHandleConsumption,
+// 			HandlesPerYear,
+// 			fTime / 1000.f,
+// 			JqGetNumWorkers(),
+// 			g_DontSleep?'d':' ',
+// 			g_FewJobs?'f':' '
+
+// 			); 
+// 		fflush(stdout);
+
+// 		frames = 0;
+// 		if(!bIncremental)
+// 		{
+// 			TickLast = JqTick();
+// 		}
+
+// 		if (fTime / 1000.f > 60.f)
+// 		{
+// 			g_nNumWorkers++;
+// 			g_Reset = true;
+// 		}
+// 	}
+
+// 	++frames;
+// 	{
+// 		MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST_WAIT_ALL", 0xff00ff);
+// 		JqWaitAll();
+// 	}
+// 	MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST", 0xff00ff);
+
+// 	g_nLowCount = 0;
 
 
-		uint64_t nJobMedium = JqAdd(JobTree, 0, JOB_COUNT);
-		g_nExternalStats ++;
-		{
-			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
-			JqWait(nJobMedium);
+// 	uint64_t nJob = JqAdd( [](int begin, int end)
+// 	{
+// 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
+// 		g_nLowCount++;
+// 	}, 3, JOB_COUNT_LOW);
+// 	g_nExternalStats ++;
+// 	JqWait(nJob);
+// 	{
+// 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
+// 		JobSpinWork(500);
+// 	}
+// 	uint64_t nStart = JqTick();	
+// 	#if 1
+// 	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
+// 	{
+// 		g_nJobCount = 0;
+// 		g_nJobCount0 = 0;
+// 		g_nJobCount1 = 0;
+// 		g_nJobCount2 = 0;
 
-		}
 
-		DEMO_ASSERT(g_nJobCount == JOB_COUNT);
-		DEMO_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
-		DEMO_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
-		DEMO_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
-	}
-	#endif
-}
+// 		uint64_t nJobMedium = JqAdd(JobTree, 0, JOB_COUNT);
+// 		g_nExternalStats ++;
+// 		{
+// 			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
+// 			JqWait(nJobMedium);
+
+// 		}
+
+// 		DEMO_ASSERT(g_nJobCount == JOB_COUNT);
+// 		DEMO_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
+// 		DEMO_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+// 		DEMO_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
+// 	}
+// 	#endif
+// }
 
 
 
-#define JQ_NODE_TEST 0
+// #define JQ_NODE_TEST 0
 
 #define JQ_TEST_WORKERS 5
 
@@ -462,9 +461,6 @@ int main(int argc, char* argv[])
 #endif
 	static uint32_t nNumWorkers = g_nNumWorkers;
 	(void)nNumWorkers;
-#if JQ_STRESS_TEST
-	JqStart(nNumWorkers, 0, nullptr);
-#else
 	uint8_t nPipeConfig[JQ_NUM_PIPES * JQ_TEST_WORKERS] = 
 	{
 		0, 1, 2, 3,				4, 5, 6, 0xff,
@@ -483,10 +479,6 @@ int main(int argc, char* argv[])
 	};
 
 	JqSetThreadPipeConfig(MyPipeConfig);
-#endif
-	//JqStartSentinel(20);
-	//I feel like im gonna burn someday for this code, but its the only way i know how to write it.
-
 #ifdef _WIN32
 	std::atomic<int> keypressed;
 	std::thread	foo(
@@ -500,68 +492,8 @@ int main(int argc, char* argv[])
 		}
 		g_nQuit = 1;
 	});
-#else
-
-	#if 1 == JQ_STRESS_TEST
-	WINDOW* w = initscr();
-	cbreak();
-	nodelay(w, TRUE);
-	atexit([]{endwin();});
-	#endif
 #endif
 
-
-#if JQ_NODE_TEST
-	JqNode A(
-		[]
-		{
-			printf("NODE A %d-%d\n",0,0);
-		}, 1, 3);
-	JqNode B(
-		[](int b, int e)
-		{
-			printf("NODE B %d-%d\n",b,e);
-		}, 1, 50);
-	JqNode B1(
-		[](int b, int e)
-		{
-			printf("NODE B1 %d-%d\n",b,e);
-		}, 1, 2);
-	JqNode C(
-		[](int b, int e)
-		{
-			printf("NODE C %d-%d\n",b,e);
-		}, 1, 5);
-	JqNode D(
-		[](int b)
-		{
-			printf("NODE D %d\n",b);
-		}, 1, 10);
-	JqNode X(
-		[](int b, int e)
-		{
-			printf("NODE X %d-%d\n",b,e);
-		}, 1, 1);
-
-	B.After(A);
-	B1.After(A);
-	C.After(B1);
-	D.After(B1);
-	X.After(C,D,A,B1);
-
-	A.Run();
-	A.Wait();
-
-	printf("XXX RUN 1 DONE\n");
-
-
-	A.Reset();
-	A.Run();
-	A.Wait();
-	printf("YYY RUN 2 DONE\n");
-	g_nQuit = 1;
-	//exit(0);
-#endif
 
 	while(!g_nQuit)
 	{
@@ -599,28 +531,17 @@ int main(int argc, char* argv[])
 			}
 		}
 
-#if JQ_STRESS_TEST
-		if(g_nNumWorkers != nNumWorkers)
-		{
-			nNumWorkers = g_nNumWorkers;
-			printf("\n");
-			JqStop();
-			JqStart(1 + nNumWorkers % 12, 0, nullptr);
-		}
-#endif
+// #if JQ_STRESS_TEST
+// 		if(g_nNumWorkers != nNumWorkers)
+// 		{
+// 			nNumWorkers = g_nNumWorkers;
+// 			printf("\n");
+// 			JqStop();
+// 			JqStart(1 + nNumWorkers % 12, 0, nullptr);
+// 		}
+// #endif
 		MicroProfileFlip(0);
-		{
-#if JQ_STRESS_TEST
-			JqTest();
-#else
-			JqTestPrio();
-#endif
-		}
-
-#if JQ_CANCEL_TEST
 		JqTestCancel();
-#endif
-
 
 	}
 #ifdef _WIN32 

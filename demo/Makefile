@@ -17,7 +17,7 @@ CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
 #define JQ_ASSERT_LOCKS
 
 
-CPP_SOURCES = demo.cpp microprofile.cpp pipe.cpp jq.cpp
+CPP_SOURCES = microprofile.cpp pipe.cpp jq.cpp
 C_SOURCES =
 
 TARGET=demo
@@ -28,10 +28,20 @@ LD=clang++
 CPP_OBJS = $(patsubst %.cpp,%.o,$(CPP_SOURCES))
 C_OBJS = $(patsubst %.c,%.o,$(C_SOURCES))
 
-all: $(TARGET)
+all: demo_priority demo_stress demo_node demo_cancel
 
-$(TARGET): $(C_OBJS) $(CPP_OBJS)
-	$(LD) -o $(TARGET) $(C_OBJS) $(CPP_OBJS) $(LDFLAGS) $(CPPFLAGS)
+demo_stress: demo_stress.o $(C_OBJS) $(CPP_OBJS)
+	$(LD) -o demo_stress demo_stress.o $(C_OBJS) $(CPP_OBJS) $(LDFLAGS) $(CPPFLAGS)
+
+demo_priority: demo_priority.o $(C_OBJS) $(CPP_OBJS)
+	$(LD) -o demo_priority demo_priority.o $(C_OBJS) $(CPP_OBJS) $(LDFLAGS) $(CPPFLAGS)
+
+demo_node: demo_node.o $(C_OBJS) $(CPP_OBJS)
+	$(LD) -o demo_node demo_node.o $(C_OBJS) $(CPP_OBJS) $(LDFLAGS) $(CPPFLAGS)
+
+demo_cancel: demo_cancel.o $(C_OBJS) $(CPP_OBJS)
+	$(LD) -o demo_cancel demo_cancel.o $(C_OBJS) $(CPP_OBJS) $(LDFLAGS) $(CPPFLAGS)
+
 
 -include .depend
 
