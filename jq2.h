@@ -1608,7 +1608,7 @@ bool JqCancel(uint64_t nJob)
 	}
 	JqPipeHandle PipeHandle = JqState.m_Jobs2[nIndex].PipeHandle.load();
 	JqJobFinish Finish = JqState.m_Jobs2[nIndex].Handle.load();
-	if(JQ_GT_WRAP(Finish.nFinished, nJob))
+	if(JQ_GE_WRAP(Finish.nFinished, nJob) || PipeHandle.HandleInt == 0)
 	{
 		return false;
 	}
