@@ -92,6 +92,20 @@
 #define JQ_MAX_THREADS 64
 #endif
 
+#ifndef JQ_STACKSIZE_SMALL
+#define JQ_STACKSIZE_SMALL (16<<10)
+#endif
+
+#ifndef JQ_STACKSIZE_LARGE
+#define JQ_STACKSIZE_LARGE (128<<10)
+#endif
+
+#ifndef JQ_USE_SEPERATE_STACK
+#define JQ_USE_SEPERATE_STACK 1
+#endif
+
+
+
 
 #define JQ_ASSERT_SANITY 0
 
@@ -170,9 +184,8 @@ class JqFunction {
 public:
 	template <typename F>
 	JqFunction(F f) {
-#if _MSC_VER < 1900	//HACK: msvc 2015 ALWAYS hits this :/
-		static_assert(std::is_trivially_copyable<F>::value, "Only captures of trivial types supported. Use std::function if you think you need non-trivial types");
-#endif
+		static_assert(std::is_trivially_copy_constructible<F>::value, "Only captures of trivial types supported.");
+		static_assert(std::is_trivially_destructible<F>::value, "Only captures of trivial types supported.");
 		static_assert(sizeof(JqCallable<F>) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
 #ifdef _WIN32
 		static_assert(__alignof(F) <= __alignof(void*), "Alignment requirements too high");
@@ -197,15 +210,21 @@ public:
 
 
 //  what to execute while wailing
-#define JQ_WAITFLAG_EXECUTE_SUCCESSORS 0x1
-#define JQ_WAITFLAG_EXECUTE_ANY 0x2
-#define JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS 0x3
+#define JQ_WAITFLAG_EXECUTE_SUCCESSORS 			0x1
+#define JQ_WAITFLAG_EXECUTE_ANY 				0x2
+#define JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS 	0x3
 //  what to do when out of jobs
-#define JQ_WAITFLAG_BLOCK 0x4
-#define JQ_WAITFLAG_SLEEP 0x8
-#define JQ_WAITFLAG_SPIN 0x10
-#define JQ_WAITFLAG_IGNORE_CHILDREN 0x20
+#define JQ_WAITFLAG_BLOCK 						0x4
+#define JQ_WAITFLAG_SLEEP 						0x8
+#define JQ_WAITFLAG_SPIN 						0x10
+#define JQ_WAITFLAG_IGNORE_CHILDREN 			0x20
 
+//Job flags 
+#define JQ_JOBFLAG_LARGE_STACK 					0x1 // create with large stack
+#define JQ_JOBFLAG_DETACHED 					0x2 // dont create as child of current job 
+
+
+struct JqJobStack;
 
 
 struct JqStatsInternal
@@ -264,7 +283,7 @@ struct JqStats
 #define JQ_DEFAULT_WAIT_FLAG (JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SPIN)
 
 JQ_API uint64_t		JqSelf();
-JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs = 1, int nRange = -1, uint64_t nParent = JqSelf());
+JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
 JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPipe, int nNumJobs = 1, int nRange = -1, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG);
 JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API void			JqWaitAll();
@@ -481,6 +500,7 @@ struct JqJob2
 	std::atomic<JqJobFinish> 	Handle;
 	std::atomic<JqPipeHandle> 	PipeHandle;
 	std::atomic<uint64_t> 		nRoot;
+	uint32_t 					nJobFlags;
 	int Reserved;
 	enum
 	{
@@ -565,6 +585,11 @@ struct JqSemaphore
 
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS //note: This is just arbitrary: given a suffiently random priority setup you might need to bump this.
 
+struct JqJobStackLink
+{
+	JqJobStack* pHead;
+	uint32_t 	nCounter;
+};
 
 struct JQ_ALIGN_CACHELINE JqState_t
 {
@@ -615,6 +640,10 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	JqPipe 			m_Pipes[JQ_NUM_PIPES];
 	JqJob2 			m_Jobs2[JQ_TREE_BUFFER_SIZE2];
 
+	std::atomic<JqJobStackLink> m_StackSmall;
+	std::atomic<JqJobStackLink> m_StackLarge;
+	
+
 	JqState_t()
 		:nNumWorkers(0)
 	{
@@ -658,6 +687,192 @@ struct JqMutexLock
 		bIsLocked = false;
 	}
 };
+
+#include "jqfcontext.h"
+
+struct JqJobStack
+{
+	uint64_t GUARD[2];
+	JqFContext ContextReturn;
+	JqFContext pContextJob;
+
+	JqJobStack* pLink;//when in use: Previous. When freed, next element in free list
+
+	uint32_t nExternalId;
+	uint32_t nFlags;
+	int nBegin;
+	int nEnd;
+	int nStackSize;
+	void* StackBottom()
+	{
+		intptr_t t = (intptr_t)this;
+		t += Offset();
+		t -= nStackSize;
+		return (void*)t;
+
+	}
+	void* StackTop()
+	{
+		intptr_t t = (intptr_t)this;
+		t -= 16;
+		return (void*)this;
+	}
+	int StackSize()
+	{
+		return (int)((intptr_t)StackTop() - (intptr_t)StackBottom());
+	}
+	static size_t Offset()
+	{
+		return (sizeof(JqJobStack) + 15) & (~15);
+	}
+	static JqJobStack* Init(void* pStack, int nStackSize, uint32_t nFlags)
+	{
+		intptr_t t = (intptr_t)pStack;
+		t += nStackSize;
+		t -= Offset();
+		JqJobStack* pJobStack = (JqJobStack*)t;
+		new (pJobStack) JqJobStack;
+		pJobStack->pLink = 0;
+		pJobStack->nExternalId = 0;
+		pJobStack->nFlags = nFlags;
+		pJobStack->nStackSize = nStackSize;
+		pJobStack->GUARD[0] = 0xececececececececll;
+		pJobStack->GUARD[1] = 0xececececececececll;
+		return pJobStack;
+	}
+};
+
+JQ_THREAD_LOCAL JqJobStack* g_pJqJobStacks = 0;
+
+
+
+#ifdef _WIN32
+void* JqAllocStackInternal(uint32_t nStackSize)
+{
+	JQ_BREAK();
+}
+void JqFreeStackInternal(void* pStack)
+{
+	//never called
+	JQ_BREAK();
+}
+#else
+#include <stdlib.h>
+#include <sys/mman.h>
+void* JqAllocStackInternal(uint32_t nStackSize)
+{
+	int nPageSize = sysconf(_SC_PAGE_SIZE);
+	int nSize = (nStackSize + nPageSize - 1) & ~(nPageSize-1);
+	void* pAlloc = mmap(nullptr, nSize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
+	return pAlloc;
+}
+
+void JqFreeStackInternal(void* p, uint32_t nStackSize)
+{
+	//never called.
+	munmap(p, nStackSize);
+}
+#endif
+
+JqJobStack* JqAllocStack(uint32_t nFlags)
+{
+	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+	uint32_t nStackSize = bSmall ? JQ_STACKSIZE_SMALL : JQ_STACKSIZE_LARGE;
+	auto& FreeList = bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
+	do{
+		JqJobStackLink Value = FreeList.load();
+		JqJobStack* pHead = Value.pHead;
+
+		if(!pHead)
+			break;
+
+		JqJobStack* pNext = pHead->pLink;
+		JqJobStackLink NewValue = {pNext, Value.nCounter+1 };
+		if(FreeList.compare_exchange_strong(Value, NewValue))
+		{
+			JQ_ASSERT((nFlags&JQ_JOBFLAG_LARGE_STACK) == (pHead->nFlags&JQ_JOBFLAG_LARGE_STACK));
+			pHead->pLink = nullptr;
+			return pHead;
+		}
+	}while(1);
+
+	if(bSmall)
+	{
+		MICROPROFILE_COUNTER_ADD("jq/stack/small/count", 1);
+		MICROPROFILE_COUNTER_ADD("jq/stack/small/bytes", nStackSize);
+	}
+	else
+	{
+		MICROPROFILE_COUNTER_ADD("jq/stack/large/count", 1);
+		MICROPROFILE_COUNTER_ADD("jq/stack/large/bytes", nStackSize);
+	}
+	void* pStack = JqAllocStackInternal(nStackSize);
+	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags&JQ_JOBFLAG_LARGE_STACK);
+	return pJobStack;
+}
+
+void JqFreeStack(JqJobStack* pStack, uint32_t nFlags)
+{
+	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+	uint32_t nStackSize = bSmall ? JQ_STACKSIZE_SMALL : JQ_STACKSIZE_LARGE;
+	(void)nStackSize;
+
+	auto& FreeList = bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
+	JQ_ASSERT(pStack->pLink == nullptr);
+	do
+	{
+		JqJobStackLink Value = FreeList.load();
+		JqJobStack* pHead = Value.pHead;
+		pStack->pLink = pHead;
+		JqJobStackLink NewValue = {pStack, Value.nCounter + 1};
+		if(FreeList.compare_exchange_strong(Value, NewValue))
+		{
+			return;
+		}
+
+	}while(1);
+}
+
+void JqContextRun(JqTransfer T)
+{
+	JqJobStack * pJobData = (JqJobStack*)T.data;
+	JqState.m_Jobs2[pJobData->nExternalId].Function(pJobData->nBegin, pJobData->nEnd);
+	jump_fcontext(T.fctx, (void*)447);
+	JQ_BREAK();
+}
+
+
+void JqRunInternal(uint32_t nExternalId, int nBegin, int nEnd)
+{
+#if JQ_USE_SEPERATE_STACK
+	{
+		{
+			uint32_t nFlags = JqState.m_Jobs2[nExternalId].nJobFlags;
+			JqJobStack* pJobData = JqAllocStack(nFlags);
+			void* pHest = g_pJqJobStacks;
+			JQ_ASSERT(pJobData->pLink == nullptr);
+			pJobData->pLink = g_pJqJobStacks;
+			pJobData->nBegin = nBegin;
+			pJobData->nEnd = nEnd;
+			pJobData->nExternalId = nExternalId;
+			g_pJqJobStacks = pJobData;
+			pJobData->pContextJob = make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
+			JqTransfer T = jump_fcontext(pJobData->pContextJob, (void*) pJobData);
+			JQ_ASSERT( T.data == (void*)447);
+			g_pJqJobStacks = pJobData->pLink;
+			pJobData->pLink = nullptr;
+			JQ_ASSERT(pHest == g_pJqJobStacks);
+			JQ_ASSERT(pJobData->GUARD[0] == 0xececececececececll);
+			JQ_ASSERT(pJobData->GUARD[1] == 0xececececececececll);
+			JqFreeStack(pJobData, nFlags);
+		}
+	}
+#else
+	JqState.m_Jobs2[nExternalId].Function(nBegin, nEnd);
+#endif
+}
+
+
 
 void JqCheckFinished(uint64_t nJob)
 {
@@ -757,7 +972,7 @@ void JqRunJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId, uint16_t nSub
 	int nRemainder = nRange - nFraction * nNumJobs;	
 	int nStart = JqGetRangeStart(nSubIndex, nFraction, nRemainder);
 	int nEnd = JqGetRangeStart(nSubIndex+1, nFraction, nRemainder);
-	JqState.m_Jobs2[nExternalId].Function(nStart, nEnd);
+	JqRunInternal(nExternalId, nStart, nEnd);
 	JqSelfPop(nHandle);
 }
 
@@ -1628,8 +1843,9 @@ bool JqCancel(uint64_t nJob)
 }
 
 
-uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs, int nRange, uint64_t nParent)
+uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs, int nRange, uint32_t nJobFlags)
 {
+	uint64_t nParent = 0 != (nJobFlags & JQ_JOBFLAG_DETACHED) ? 0 : JqSelf();
 	JqBlockWhileFrozen();
 	JQ_ASSERT(nPipe < JQ_NUM_PIPES);
 	JQ_ASSERT(JqState.nNumWorkers);
@@ -1652,6 +1868,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs, int nRange, uint
 		JQ_ASSERT(pEntry->TreeState.load().nParent == 0);
 		JQ_ASSERT(pEntry->TreeState.load().nSibling == 0);
 		pEntry->Function = JobFunc;
+		pEntry->nJobFlags = nJobFlags;
 		JqJobFinish F = pEntry->Handle.load();
 		JqJobFinish FOld = F;
 		F.nStarted = nHandle;
