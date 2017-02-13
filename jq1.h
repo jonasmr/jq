@@ -173,9 +173,8 @@ class JqFunction {
 public:
 	template <typename F>
 	JqFunction(F f) {
-#if _MSC_VER < 1900	//HACK: msvc 2015 ALWAYS hits this :/
-		static_assert(std::is_trivially_copyable<F>::value, "Only captures of trivial types supported. Use std::function if you think you need non-trivial types");
-#endif
+		static_assert(std::is_trivially_copy_constructible<F>::value, "Only captures of trivial types supported.");
+		static_assert(std::is_trivially_destructible<F>::value, "Only captures of trivial types supported.");
 		static_assert(sizeof(JqCallable<F>) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
 #ifdef _WIN32
 		static_assert(__alignof(F) <= __alignof(void*), "Alignment requirements too high");
@@ -208,6 +207,9 @@ public:
 #define JQ_WAITFLAG_SLEEP 0x8
 #define JQ_WAITFLAG_SPIN 0x10
 #define JQ_WAITFLAG_IGNORE_CHILDREN 0x20
+//Job flags 
+#define JQ_JOBFLAG_LARGE_STACK 					0x1 // create with large stack
+#define JQ_JOBFLAG_DETACHED 					0x2 // dont create as child of current job 
 
 
 
@@ -240,7 +242,7 @@ struct JqStats
 };
 
 JQ_API uint64_t		JqSelf();
-JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1, uint64_t nParent = JqSelf());
+JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
 JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPrio, int nNumJobs = 1, int nRange = -1, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK);
 JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API void 		JqWaitAll();
@@ -438,6 +440,7 @@ struct JqJob
 	uint64_t nFinishedHandle;
 
 	int32_t nRange;
+	uint32_t nJobFlags;
 
 	uint16_t nNumJobs;
 	uint16_t nNumStarted;
@@ -1324,8 +1327,9 @@ bool JqCancel(uint64_t nJob)
 
 
 
-uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint64_t nParent)
+uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint32_t nJobFlags)
 {
+	uint64_t nParent = 0 != (nJobFlags & JQ_JOBFLAG_DETACHED) ? 0 : JqSelf();
 	JQ_ASSERT(nPrio < JQ_PRIORITY_SIZE);
 	JQ_ASSERT(JqState.nNumWorkers);
 	JQ_ASSERT(nNumJobs);
@@ -1351,6 +1355,8 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint
 		pEntry->nNumStarted = 0;
 		pEntry->nNumFinished = 0;
 		pEntry->nRange = nRange;
+		pEntry->nJobFlags = nJobFlags;
+
 		uint64_t nParentHandle = nParent;
 		pEntry->nParent = nParentHandle % JQ_WORK_BUFFER_SIZE;
 		if(pEntry->nParent)

@@ -19,6 +19,7 @@ CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
 
 CPP_SOURCES = microprofile.cpp pipe.cpp jq.cpp
 C_SOURCES =
+ASM_SOURCES = ../boost_context/jump_x86_64_sysv_macho_gas.S ../boost_context/make_x86_64_sysv_macho_gas.S
 
 TARGET=demo
 CC=clang
@@ -27,20 +28,22 @@ LD=clang++
 
 CPP_OBJS = $(patsubst %.cpp,%.o,$(CPP_SOURCES))
 C_OBJS = $(patsubst %.c,%.o,$(C_SOURCES))
+ASM_OBJS = $(patsubst %.S,%.o,$(ASM_SOURCES))
+OBJS = $(C_OBJS) $(CPP_OBJS) $(ASM_OBJS)
 
 all: demo_priority demo_stress demo_node demo_cancel
 
-demo_stress: demo_stress.o $(C_OBJS) $(CPP_OBJS)
-	$(LD) -o demo_stress demo_stress.o $(C_OBJS) $(CPP_OBJS) $(LDFLAGS) $(CPPFLAGS)
+demo_stress: demo_stress.o $(OBJS)
+	$(LD) -o demo_stress demo_stress.o $(OBJS) $(LDFLAGS) $(CPPFLAGS)
 
-demo_priority: demo_priority.o $(C_OBJS) $(CPP_OBJS)
-	$(LD) -o demo_priority demo_priority.o $(C_OBJS) $(CPP_OBJS) $(LDFLAGS) $(CPPFLAGS)
+demo_priority: demo_priority.o $(OBJS)
+	$(LD) -o demo_priority demo_priority.o $(OBJS) $(LDFLAGS) $(CPPFLAGS)
 
-demo_node: demo_node.o $(C_OBJS) $(CPP_OBJS)
-	$(LD) -o demo_node demo_node.o $(C_OBJS) $(CPP_OBJS) $(LDFLAGS) $(CPPFLAGS)
+demo_node: demo_node.o $(OBJS) 
+	$(LD) -o demo_node demo_node.o $(OBJS) $(LDFLAGS) $(CPPFLAGS)
 
-demo_cancel: demo_cancel.o $(C_OBJS) $(CPP_OBJS)
-	$(LD) -o demo_cancel demo_cancel.o $(C_OBJS) $(CPP_OBJS) $(LDFLAGS) $(CPPFLAGS)
+demo_cancel: demo_cancel.o $(OBJS)
+	$(LD) -o demo_cancel demo_cancel.o $(OBJS) $(LDFLAGS) $(CPPFLAGS)
 
 
 -include .depend
@@ -51,6 +54,8 @@ demo_cancel: demo_cancel.o $(C_OBJS) $(CPP_OBJS)
 .c.o:
 	$(CC) -c $< $(CFLAGS) -o $@
 
+.S.o:
+	$(CC) -c $< -o $@
 
 clean: depend
 	rm -f *.o $(TARGET)
