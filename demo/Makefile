@@ -10,6 +10,7 @@ CPPFLAGS+=-stdlib=libc++ -std=c++11
 #CPPFLAGS+=-DJQ_MICROPROFILE
 #CPPFLAGS+=-DJQ_MICROPROFILE_VERBOSE
 CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
+CPPFLAGS+=-DJQ_USE_LOCKLESS
 #CPPFLAGS+=-DJQ_ASSERT_LOCKS
 #define JQ_IMPL
 #define JQ_MICROPROFILE
@@ -17,7 +18,7 @@ CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
 #define JQ_ASSERT_LOCKS
 
 
-CPP_SOURCES = microprofile.cpp pipe.cpp jq.cpp
+CPP_SOURCES = microprofile.cpp ../jqpipe.cpp ../jq1.cpp ../jq2.cpp ../jqinternal.cpp ../jqnode.cpp
 C_SOURCES =
 ASM_SOURCES = ../boost_context/jump_x86_64_sysv_macho_gas.S ../boost_context/make_x86_64_sysv_macho_gas.S
 
