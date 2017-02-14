@@ -81,6 +81,9 @@
 
 
 #include <type_traits>
+#include <stddef.h>
+#include <stdint.h>
+
 //template stuff to make the job function accept to 0-2 arguments
 template <typename T>
 struct JqAdapt : public JqAdapt<decltype(&T::operator())>{};
