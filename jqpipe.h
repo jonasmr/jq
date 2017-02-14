@@ -25,41 +25,9 @@
 // Lockless Job pipe
 
 //only config option
-#ifndef JQ_PIPE_BUFFER_SIZE
-#define JQ_PIPE_BUFFER_SIZE (2048)
-#endif
 
-#ifndef JQ_CACHE_LINE_SIZE
-#define JQ_CACHE_LINE_SIZE 64
-#endif
-
-#ifndef JQ_API
-#define JQ_API
-#endif
-
-#ifndef JG_LT_WRAP
-#define JQ_LT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<0)
-#define JQ_LE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<=0)
-#define JQ_GE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>=0)
-#define JQ_GT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>0)
-#define JQ_LT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<0)
-#define JQ_LE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<=0)
-#define JQ_GE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>=0)
-#define JQ_GT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>0)
-#endif
 
 //hack
-#ifdef _WIN32
-#define JQ_BREAK() __debugbreak()
-#else
-#define JQ_BREAK() __builtin_trap()
-#endif
-
-#ifdef JQ_NO_ASSERT
-#define JQ_ASSERT(a) do{}while(0)
-#else
-#define JQ_ASSERT(a) do{if(!(a)){JqDump(); JQ_BREAK();} }while(0)
-#endif
 
 #include <stddef.h>
 #include <stdint.h>
