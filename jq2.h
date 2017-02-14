@@ -64,168 +64,149 @@
 /// Configuration
 
 
-#ifndef JQ_NUM_PIPES
-#define JQ_NUM_PIPES 8
-#endif
+// #include "jqpipe.h"
 
-#ifndef JQ_MAX_JOB_STACK
-#define JQ_MAX_JOB_STACK 8
-#endif
+// #include <type_traits>
 
-#ifndef JQ_DEFAULT_WAIT_TIME_US
-#define JQ_DEFAULT_WAIT_TIME_US 10
-#endif
+// //template stuff to make the job function accept to 0-2 arguments
+// template <typename T>
+// struct JqAdapt : public JqAdapt<decltype(&T::operator())>{};
+// template <typename C>
+// struct JqAdapt<void (C::*)(int, int) const>
+// {
+// 	template<typename T>
+// 	void call(T& t, int a, int b){ t(a,b);}
+// };
+// template <typename C>
+// struct JqAdapt<void (C::*)(int) const>
+// {
+// 	template<typename T>
+// 	void call(T& t, int a, int b){ t(a); }
+// };
+// template <typename C>
+// struct JqAdapt<void (C::*)() const>
+// {
+// 	template<typename T>
+// 	void call(T& t, int a, int b){ t();}
+// };
 
-#ifndef JQ_CACHE_LINE_SIZE
-#define JQ_CACHE_LINE_SIZE 64
-#endif
-
-#ifndef JQ_API
-#define JQ_API
-#endif
-
-#ifndef JQ_FUNCTION_SIZE
-#define JQ_FUNCTION_SIZE 32
-#endif
-
-#ifndef JQ_MAX_THREADS
-#define JQ_MAX_THREADS 64
-#endif
-
-#ifndef JQ_STACKSIZE_SMALL
-#define JQ_STACKSIZE_SMALL (16<<10)
-#endif
-
-#ifndef JQ_STACKSIZE_LARGE
-#define JQ_STACKSIZE_LARGE (128<<10)
-#endif
-
-#ifndef JQ_USE_SEPERATE_STACK
-#define JQ_USE_SEPERATE_STACK 1
-#endif
-
-
-
-
-#define JQ_ASSERT_SANITY 0
-
-#include "jqpipe.h"
-
-#include <type_traits>
-
-//template stuff to make the job function accept to 0-2 arguments
-template <typename T>
-struct JqAdapt : public JqAdapt<decltype(&T::operator())>{};
-template <typename C>
-struct JqAdapt<void (C::*)(int, int) const>
-{
-	template<typename T>
-	void call(T& t, int a, int b){ t(a,b);}
-};
-template <typename C>
-struct JqAdapt<void (C::*)(int) const>
-{
-	template<typename T>
-	void call(T& t, int a, int b){ t(a); }
-};
-template <typename C>
-struct JqAdapt<void (C::*)() const>
-{
-	template<typename T>
-	void call(T& t, int a, int b){ t();}
-};
-
-template <>
-struct JqAdapt<void (*)(int, int)>
-{
-	template<typename T>
-	void call(T& t, int a, int b){ t(a,b);}
-};
-template <>
-struct JqAdapt<void (*)(int)>
-{
-	template<typename T>
-	void call(T& t, int a, int b){ t(a); }
-};
-template <>
-struct JqAdapt<void (*)()>
-{
-	template<typename T>
-	void call(T& t, int a, int b){ t();}
-};
+// template <>
+// struct JqAdapt<void (*)(int, int)>
+// {
+// 	template<typename T>
+// 	void call(T& t, int a, int b){ t(a,b);}
+// };
+// template <>
+// struct JqAdapt<void (*)(int)>
+// {
+// 	template<typename T>
+// 	void call(T& t, int a, int b){ t(a); }
+// };
+// template <>
+// struct JqAdapt<void (*)()>
+// {
+// 	template<typename T>
+// 	void call(T& t, int a, int b){ t();}
+// };
 
 
 
-//minimal lambda implementation without support for non-trivial types
-//and fixed memory footprint
-struct JqCallableBase {
-	virtual void operator()(int begin, int end) = 0;
-};
-template <typename F>
-struct JqCallable : JqCallableBase {
-	F functor;
-	JqCallable(F functor) : functor(functor) {}
-	virtual void operator()(int a, int b) 
-	{ 
-		JqAdapt<F> X;
-		X.call(functor, a, b);
-	}
-};
-class JqFunction {
-	union
-	{
-		char buffer[JQ_FUNCTION_SIZE];
-		void* vptr;//alignment helper and a way to clear the vptr
-	};
-	JqCallableBase* Base()
-	{
-		return (JqCallableBase*)&buffer[0];
-	}
-public:
-	template <typename F>
-	JqFunction(F f) {
-		static_assert(std::is_trivially_copy_constructible<F>::value, "Only captures of trivial types supported.");
-		static_assert(std::is_trivially_destructible<F>::value, "Only captures of trivial types supported.");
-		static_assert(sizeof(JqCallable<F>) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
-#ifdef _WIN32
-		static_assert(__alignof(F) <= __alignof(void*), "Alignment requirements too high");
-#else
-		static_assert(alignof(F) <= alignof(void*), "Alignment requirements too high");
-#endif
-		new (Base()) JqCallable<F>(f);
-	}
-	JqFunction(){}
-	void Clear(){ vptr = 0;}
-	void operator()(int a, int b) { (*Base())(a, b); }
-};
-#define JQ_CLEAR_FUNCTION(f) do{f.Clear();}while(0)
+// //minimal lambda implementation without support for non-trivial types
+// //and fixed memory footprint
+// struct JqCallableBase {
+// 	virtual void operator()(int begin, int end) = 0;
+// };
+// template <typename F>
+// struct JqCallable : JqCallableBase {
+// 	F functor;
+// 	JqCallable(F functor) : functor(functor) {}
+// 	virtual void operator()(int a, int b) 
+// 	{ 
+// 		JqAdapt<F> X;
+// 		X.call(functor, a, b);
+// 	}
+// };
+// class JqFunction {
+// 	union
+// 	{
+// 		char buffer[JQ_FUNCTION_SIZE];
+// 		void* vptr;//alignment helper and a way to clear the vptr
+// 	};
+// 	JqCallableBase* Base()
+// 	{
+// 		return (JqCallableBase*)&buffer[0];
+// 	}
+// public:
+// 	template <typename F>
+// 	JqFunction(F f) {
+// 		static_assert(std::is_trivially_copy_constructible<F>::value, "Only captures of trivial types supported.");
+// 		static_assert(std::is_trivially_destructible<F>::value, "Only captures of trivial types supported.");
+// 		static_assert(sizeof(JqCallable<F>) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
+// #ifdef _WIN32
+// 		static_assert(__alignof(F) <= __alignof(void*), "Alignment requirements too high");
+// #else
+// 		static_assert(alignof(F) <= alignof(void*), "Alignment requirements too high");
+// #endif
+// 		new (Base()) JqCallable<F>(f);
+// 	}
+// 	JqFunction(){}
+// 	void Clear(){ vptr = 0;}
+// 	void operator()(int a, int b) { (*Base())(a, b); }
+// };
+// #define JQ_CLEAR_FUNCTION(f) do{f.Clear();}while(0)
 
 
 
 #include <stddef.h>
 #include <stdint.h>
 
-///////////////////////////////////////////////////////////////////////////////////////////
-/// Interface
-
-
-//  what to execute while wailing
-#define JQ_WAITFLAG_EXECUTE_SUCCESSORS 			0x1
-#define JQ_WAITFLAG_EXECUTE_ANY 				0x2
-#define JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS 	0x3
-//  what to do when out of jobs
-#define JQ_WAITFLAG_BLOCK 						0x4
-#define JQ_WAITFLAG_SLEEP 						0x8
-#define JQ_WAITFLAG_SPIN 						0x10
-#define JQ_WAITFLAG_IGNORE_CHILDREN 			0x20
-
-//Job flags 
-#define JQ_JOBFLAG_LARGE_STACK 					0x1 // create with large stack
-#define JQ_JOBFLAG_DETACHED 					0x2 // dont create as child of current job 
 
 
 struct JqJobStack;
 
+
+
+// struct JqStats
+// {
+// 	uint32_t nNumAdded;
+// 	uint32_t nNumFinished;
+// 	uint32_t nNumAddedSub;
+// 	uint32_t nNumFinishedSub;
+// 	uint32_t nNumCancelled;
+// 	uint32_t nNumCancelledSub;
+// 	uint32_t nNumLocks;
+// 	uint32_t nNumWaitKicks;
+// 	uint32_t nNumWaitCond;
+// 	uint32_t nMemoryUsed;
+// 	uint64_t nNextHandle;
+// 	uint32_t nSkips;
+// 	uint32_t nAttempts;
+// 	uint32_t nNextHandleCalled;
+// 	void Add(JqStats& Other)
+// 	{
+// 		nNumAdded += Other.nNumAdded;
+// 		nNumFinished += Other.nNumFinished;
+// 		nNumAddedSub += Other.nNumAddedSub;
+// 		nNumFinishedSub += Other.nNumFinishedSub;
+// 		nNumCancelled += Other.nNumCancelled;
+// 		nNumCancelledSub += Other.nNumCancelledSub;
+// 		nNumLocks += Other.nNumLocks;
+// 		nNumWaitKicks += Other.nNumWaitKicks;
+// 		nNumWaitCond += Other.nNumWaitCond;
+// 		nMemoryUsed += Other.nMemoryUsed;
+// 		nNextHandle += Other.nNextHandle;
+// 		nSkips += Other.nSkips;
+// 		nAttempts += Other.nAttempts;
+// 		nNextHandleCalled += Other.nNextHandleCalled;
+// 	}
+// };
+
+
+///////////////////////////////////////////////////////////////////////////////////////////
+/// Implementation
+
+#ifdef JQ_IMPL
+#include "jqinternal.h"
 
 struct JqStatsInternal
 {
@@ -244,183 +225,77 @@ struct JqStatsInternal
 	std::atomic<uint32_t> nSkips;
 };
 
-struct JqStats
-{
-	uint32_t nNumAdded;
-	uint32_t nNumFinished;
-	uint32_t nNumAddedSub;
-	uint32_t nNumFinishedSub;
-	uint32_t nNumCancelled;
-	uint32_t nNumCancelledSub;
-	uint32_t nNumLocks;
-	uint32_t nNumWaitKicks;
-	uint32_t nNumWaitCond;
-	uint32_t nMemoryUsed;
-	uint64_t nNextHandle;
-	uint32_t nSkips;
-	uint32_t nAttempts;
-	uint32_t nNextHandleCalled;
-	void Add(JqStats& Other)
-	{
-		nNumAdded += Other.nNumAdded;
-		nNumFinished += Other.nNumFinished;
-		nNumAddedSub += Other.nNumAddedSub;
-		nNumFinishedSub += Other.nNumFinishedSub;
-		nNumCancelled += Other.nNumCancelled;
-		nNumCancelledSub += Other.nNumCancelledSub;
-		nNumLocks += Other.nNumLocks;
-		nNumWaitKicks += Other.nNumWaitKicks;
-		nNumWaitCond += Other.nNumWaitCond;
-		nMemoryUsed += Other.nMemoryUsed;
-		nNextHandle += Other.nNextHandle;
-		nSkips += Other.nSkips;
-		nAttempts += Other.nAttempts;
-		nNextHandleCalled += Other.nNextHandleCalled;
-	}
-};
+// #if defined(__APPLE__)
+// #include <mach/mach_time.h>
+// #include <unistd.h>
+// #define JQ_BREAK() __builtin_trap()
+// #define JQ_THREAD_LOCAL __thread
+// #define JQ_STRCASECMP strcasecmp
+// typedef uint64_t ThreadIdType;
+// #define JQ_USLEEP(us) usleep(us);
+// int64_t JqTicksPerSecond()
+// {
+// 	static int64_t nTicksPerSecond = 0;	
+// 	if(nTicksPerSecond == 0) 
+// 	{
+// 		mach_timebase_info_data_t sTimebaseInfo;	
+// 		mach_timebase_info(&sTimebaseInfo);
+// 		nTicksPerSecond = 1000000000ll * sTimebaseInfo.denom / sTimebaseInfo.numer;
+// 	}
+// 	return nTicksPerSecond;
+// }
+// int64_t JqTick()
+// {
+// 	return mach_absolute_time();
+// }
+// #elif defined(_WIN32)
+// #define JQ_BREAK() __debugbreak()
+// #define JQ_THREAD_LOCAL __declspec(thread)
+// #define JQ_STRCASECMP _stricmp
+// typedef uint32_t ThreadIdType;
+// #define JQ_USLEEP(us) JqUsleep(us);
+// #define snprintf _snprintf
+// #include <windows.h>
+// int64_t JqTicksPerSecond()
+// {
+// 	static int64_t nTicksPerSecond = 0;	
+// 	if(nTicksPerSecond == 0) 
+// 	{
+// 		QueryPerformanceFrequency((LARGE_INTEGER*)&nTicksPerSecond);
+// 	}
+// 	return nTicksPerSecond;
+// }
+// int64_t JqTick()
+// {
+// 	int64_t ticks;
+// 	QueryPerformanceCounter((LARGE_INTEGER*)&ticks);
+// 	return ticks;
+// }
+// void JqUsleep(__int64 usec) 
+// { 
+// 	if(usec > 20000)
+// 	{
+// 		Sleep((DWORD)(usec/1000));
+// 	}
+// 	else if(usec >= 1000)
+// 	{
+// #ifdef _DURANGO
+// 		Sleep((DWORD)(usec/1000));
+// #else
+// 		timeBeginPeriod(1);
+// 		Sleep((DWORD)(usec/1000));
+// 		timeEndPeriod(1);
+// #endif
+// 	}
+// 	else
+// 	{
+// 		Sleep(0);
+// 	}
+// }
+// #endif
 
-
-#define JQ_DEFAULT_WAIT_FLAG (JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SPIN)
-
-JQ_API uint64_t		JqSelf();
-JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
-JQ_API void			JqSpawn(JqFunction JobFunc, uint8_t nPipe, int nNumJobs = 1, int nRange = -1, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG);
-JQ_API void 		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API void			JqWaitAll();
-JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API uint64_t		JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API bool 		JqCancel(uint64_t nJob);
-JQ_API void			JqExecuteChildren(uint64_t nJob);
-JQ_API uint64_t 	JqGroupBegin(); //add a non-executing job to group all jobs added between begin/end
-JQ_API void 		JqGroupEnd();
-JQ_API bool 		JqIsDone(uint64_t nJob);
-JQ_API bool 		JqIsDoneExt(uint64_t nJob, uint32_t nWaitFlag);
-JQ_API void 		JqStart(int nNumWorkers);
-JQ_API void 		JqStart(int nNumWorkers, uint32_t nPipeConfigSize, uint8_t* pPipeConfig);
-JQ_API void			JqSetThreadPipeConfig(uint8_t PipeConfig[JQ_NUM_PIPES]);
-JQ_API int			JqNumWorkers();
-JQ_API void 		JqStop();
-JQ_API uint32_t		JqSelfJobIndex();
-JQ_API int 			JqGetNumWorkers();
-JQ_API void 		JqConsumeStats(JqStats* pStatsOut);
-JQ_API bool			JqExecuteOne(int nShortOnly);
-JQ_API void 		JqStartSentinel(int nTimeout);
-JQ_API void 		JqCrashAndDump();
-JQ_API void 		JqDump();
-///////////////////////////////////////////////////////////////////////////////////////////
-/// Implementation
-
-#ifdef JQ_IMPL
-#if defined(__APPLE__)
-#include <mach/mach_time.h>
-#include <unistd.h>
-#define JQ_BREAK() __builtin_trap()
-#define JQ_THREAD_LOCAL __thread
-#define JQ_STRCASECMP strcasecmp
-typedef uint64_t ThreadIdType;
-#define JQ_USLEEP(us) usleep(us);
-int64_t JqTicksPerSecond()
-{
-	static int64_t nTicksPerSecond = 0;	
-	if(nTicksPerSecond == 0) 
-	{
-		mach_timebase_info_data_t sTimebaseInfo;	
-		mach_timebase_info(&sTimebaseInfo);
-		nTicksPerSecond = 1000000000ll * sTimebaseInfo.denom / sTimebaseInfo.numer;
-	}
-	return nTicksPerSecond;
-}
-int64_t JqTick()
-{
-	return mach_absolute_time();
-}
-#elif defined(_WIN32)
-#define JQ_BREAK() __debugbreak()
-#define JQ_THREAD_LOCAL __declspec(thread)
-#define JQ_STRCASECMP _stricmp
-typedef uint32_t ThreadIdType;
-#define JQ_USLEEP(us) JqUsleep(us);
-#define snprintf _snprintf
-#include <windows.h>
-int64_t JqTicksPerSecond()
-{
-	static int64_t nTicksPerSecond = 0;	
-	if(nTicksPerSecond == 0) 
-	{
-		QueryPerformanceFrequency((LARGE_INTEGER*)&nTicksPerSecond);
-	}
-	return nTicksPerSecond;
-}
-int64_t JqTick()
-{
-	int64_t ticks;
-	QueryPerformanceCounter((LARGE_INTEGER*)&ticks);
-	return ticks;
-}
-void JqUsleep(__int64 usec) 
-{ 
-	if(usec > 20000)
-	{
-		Sleep((DWORD)(usec/1000));
-	}
-	else if(usec >= 1000)
-	{
-#ifdef _DURANGO
-		Sleep((DWORD)(usec/1000));
-#else
-		timeBeginPeriod(1);
-		Sleep((DWORD)(usec/1000));
-		timeEndPeriod(1);
-#endif
-	}
-	else
-	{
-		Sleep(0);
-	}
-}
-#endif
-
-#ifndef JQ_THREAD
-#include <thread>
-#define JQ_THREAD std::thread
-#define JQ_THREAD_CREATE(pThread) do{} while(0)
-#define JQ_THREAD_DESTROY(pThread) do{} while(0)
-#define JQ_THREAD_START(pThread, entry, index) do{ *pThread = std::thread(entry, index); } while(0)
-#define JQ_THREAD_JOIN(pThread) do{(pThread)->join();}while(0)
-#endif
-
-#ifdef JQ_NO_ASSERT
-#define JQ_ASSERT(a) do{}while(0)
-#else
-#define JQ_ASSERT(a) do{if(!(a)){JqDump(); JQ_BREAK();} }while(0)
-#endif
-
-#ifdef JQ_ASSERT_LOCKS
-#define JQ_ASSERT_LOCKED() do{if(0 == JqHasLock){JQ_BREAK();}}while(0)
-#define JQ_ASSERT_NOT_LOCKED()  do{if(0 != JqHasLock){JQ_BREAK();}}while(0)
-#define JQ_ASSERT_LOCK_ENTER() do{JqHasLock++;}while(0)
-#define JQ_ASSERT_LOCK_LEAVE()  do{JqHasLock--;}while(0)
-#else
-#define JQ_ASSERT_LOCKED() do{}while(0)
-#define JQ_ASSERT_NOT_LOCKED()  do{}while(0)
-#define JQ_ASSERT_LOCK_ENTER() do{}while(0)
-#define JQ_ASSERT_LOCK_LEAVE()  do{}while(0)
-#endif
 
 #define JQ_NUM_JOBS (JQ_TREE_BUFFER_SIZE2-1)
-
-#ifdef JQ_MICROPROFILE
-#define JQ_MICROPROFILE_SCOPE(a,c) MICROPROFILE_SCOPEI("JQ",a,c)
-#else
-#define JQ_MICROPROFILE_SCOPE(a,c) do{}while(0)
-#endif
-
-#ifdef JQ_MICROPROFILE_VERBOSE
-#define JQ_MICROPROFILE_VERBOSE_SCOPE(a,c) MICROPROFILE_SCOPEI("JQ",a,c)
-#else
-#define JQ_MICROPROFILE_VERBOSE_SCOPE(a,c) do{}while(0)
-#endif
-
 #define JQ_PRIORITY_SIZE (JQ_PRIORITY_MAX+1)
 #define JQ_PRIORITY_ARRAY_SIZE (2*JQ_PRIORITY_SIZE)
 
@@ -466,16 +341,16 @@ JQ_THREAD_LOCAL int JqSpinloop = 0; //prevent optimizer from removing spin loop
 JQ_THREAD_LOCAL uint32_t g_nJqNumPipes = 0;
 JQ_THREAD_LOCAL uint8_t g_JqPipes[JQ_NUM_PIPES] = {0};
 
-#ifndef JQ_LT_WRAP
-#define JQ_LT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<0)
-#define JQ_LE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<=0)
-#define JQ_GE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>=0)
-#define JQ_GT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>0)
-#define JQ_LT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<0)
-#define JQ_LE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<=0)
-#define JQ_GE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>=0)
-#define JQ_GT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>0)
-#endif
+// #ifndef JQ_LT_WRAP
+// #define JQ_LT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<0)
+// #define JQ_LE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<=0)
+// #define JQ_GE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>=0)
+// #define JQ_GT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>0)
+// #define JQ_LT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<0)
+// #define JQ_LE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<=0)
+// #define JQ_GE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>=0)
+// #define JQ_GT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>0)
+// #endif
 
 #define JQ_TREE_BUFFER_SIZE2 (1<<JQ_PIPE_EXTERNAL_ID_BITS) // note: this should match with nExternalId size in JqPipe
 
@@ -492,7 +367,7 @@ struct JqJobFinish
 	uint64_t nStarted;
 	uint64_t nFinished;
 };
-
+#include "jqpipe.h"
 struct JqJob2
 {
 	JqFunction Function;
@@ -525,60 +400,60 @@ struct JqJob2
 #define JQ_ALIGN_16 __attribute__((__aligned__(16)))
 #endif
 
-#ifndef _WIN32
-#include <pthread.h>
-#endif
-#include <atomic>
+// #ifndef _WIN32
+// #include <pthread.h>
+// #endif
+// #include <atomic>
 
 
-struct JqMutex
-{
-	JqMutex();
-	~JqMutex();
-	void Lock();
-	void Unlock();
-#ifdef _WIN32
-	CRITICAL_SECTION CriticalSection;
-#else
-	pthread_mutex_t Mutex;
-#endif
-};
+// struct JqMutex
+// {
+// 	JqMutex();
+// 	~JqMutex();
+// 	void Lock();
+// 	void Unlock();
+// #ifdef _WIN32
+// 	CRITICAL_SECTION CriticalSection;
+// #else
+// 	pthread_mutex_t Mutex;
+// #endif
+// };
 
-struct JqConditionVariable
-{
-	JqConditionVariable();
-	~JqConditionVariable();
-	void Wait(JqMutex& Mutex);
-	void NotifyOne();
-	void NotifyAll();
-#ifdef _WIN32
-	CONDITION_VARIABLE Cond;
-#else
-	pthread_cond_t Cond;
-#endif
-};
+// struct JqConditionVariable
+// {
+// 	JqConditionVariable();
+// 	~JqConditionVariable();
+// 	void Wait(JqMutex& Mutex);
+// 	void NotifyOne();
+// 	void NotifyAll();
+// #ifdef _WIN32
+// 	CONDITION_VARIABLE Cond;
+// #else
+// 	pthread_cond_t Cond;
+// #endif
+// };
 
 
 
-struct JqSemaphore
-{
-	JqSemaphore();
-	~JqSemaphore();
-	void Signal(uint32_t nCount);
-	void Wait();
+// struct JqSemaphore
+// {
+// 	JqSemaphore();
+// 	~JqSemaphore();
+// 	void Signal(uint32_t nCount);
+// 	void Wait();
 
-	void Init(int nMaxCount);
+// 	void Init(int nMaxCount);
 
-#ifdef _WIN32
-	HANDLE Handle;
-	LONG nMaxCount;
-#else
-	JqMutex Mutex;
-	JqConditionVariable Cond;
-	std::atomic<uint32_t> nReleaseCount;
-	uint32_t nMaxCount;	
-#endif
-};
+// #ifdef _WIN32
+// 	HANDLE Handle;
+// 	LONG nMaxCount;
+// #else
+// 	JqMutex Mutex;
+// 	JqConditionVariable Cond;
+// 	std::atomic<uint32_t> nReleaseCount;
+// 	uint32_t nMaxCount;	
+// #endif
+// };
 
 
 #define JQ_STATS(a) do{a;}while(0)
@@ -654,39 +529,39 @@ struct JQ_ALIGN_CACHELINE JqState_t
 } JqState;
 
 
-struct JqMutexLock
-{
-	bool bIsLocked;
-	JqMutex& Mutex;
-	JqMutexLock(JqMutex& Mutex)
-		:Mutex(Mutex)
-	{
-		bIsLocked = false;
-		Lock();
-	}
-	~JqMutexLock()
-	{
-		if(bIsLocked)
-		{
-			Unlock();
-		}
-	}
-	void Lock()
-	{
-		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
-		Mutex.Lock();
-		JqState.Stats.nNumLocks++;
-		JQ_ASSERT_LOCK_ENTER();
-		bIsLocked = true;
-	}
-	void Unlock()
-	{
-		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
-		JQ_ASSERT_LOCK_LEAVE();
-		Mutex.Unlock();
-		bIsLocked = false;
-	}
-};
+// struct JqMutexLock
+// {
+// 	bool bIsLocked;
+// 	JqMutex& Mutex;
+// 	JqMutexLock(JqMutex& Mutex)
+// 		:Mutex(Mutex)
+// 	{
+// 		bIsLocked = false;
+// 		Lock();
+// 	}
+// 	~JqMutexLock()
+// 	{
+// 		if(bIsLocked)
+// 		{
+// 			Unlock();
+// 		}
+// 	}
+// 	void Lock()
+// 	{
+// 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
+// 		Mutex.Lock();
+// 		JqState.Stats.nNumLocks++;
+// 		JQ_ASSERT_LOCK_ENTER();
+// 		bIsLocked = true;
+// 	}
+// 	void Unlock()
+// 	{
+// 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
+// 		JQ_ASSERT_LOCK_LEAVE();
+// 		Mutex.Unlock();
+// 		bIsLocked = false;
+// 	}
+// };
 
 #include "jqfcontext.h"
 
@@ -858,7 +733,7 @@ void JqRunInternal(uint32_t nExternalId, int nBegin, int nEnd)
 			g_pJqJobStacks = pJobData;
 			pJobData->pContextJob = make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
 			JqTransfer T = jump_fcontext(pJobData->pContextJob, (void*) pJobData);
-			JQ_ASSERT( T.data == (void*)447);
+			JQ_ASSERT(T.data == (void*)447);
 			g_pJqJobStacks = pJobData->pLink;
 			pJobData->pLink = nullptr;
 			JQ_ASSERT(pHest == g_pJqJobStacks);
@@ -2065,189 +1940,5 @@ uint64_t JqSelf()
 {
 	return JqSelfPos ? JqSelfStack[JqSelfPos-1].nHandle : 0;
 }
-
-#ifdef _WIN32
-JqMutex::JqMutex()
-{
-	InitializeCriticalSection(&CriticalSection);
-}
-
-JqMutex::~JqMutex()
-{
-	DeleteCriticalSection(&CriticalSection);
-}
-
-void JqMutex::Lock()
-{
-	EnterCriticalSection(&CriticalSection);
-}
-
-void JqMutex::Unlock()
-{
-	LeaveCriticalSection(&CriticalSection);
-}
-
-
-JqConditionVariable::JqConditionVariable()
-{
-	InitializeConditionVariable(&Cond);
-}
-
-JqConditionVariable::~JqConditionVariable()
-{
-	//?
-}
-
-void JqConditionVariable::Wait(JqMutex& Mutex)
-{
-	SleepConditionVariableCS(&Cond, &Mutex.CriticalSection, INFINITE);
-}
-
-void JqConditionVariable::NotifyOne()
-{
-	WakeConditionVariable(&Cond);
-}
-
-void JqConditionVariable::NotifyAll()
-{
-	WakeAllConditionVariable(&Cond);
-}
-
-JqSemaphore::JqSemaphore()
-{
-	Handle = 0;
-}
-JqSemaphore::~JqSemaphore()
-{
-	if(Handle)
-	{
-		CloseHandle(Handle);
-	}
-
-}
-void JqSemaphore::Init(int nCount)
-{
-	if(Handle)
-	{
-		CloseHandle(Handle);
-		Handle = 0;
-	}
-	nMaxCount = nCount;
-	Handle = CreateSemaphoreEx(NULL, 0, nCount*2, NULL, 0, SEMAPHORE_ALL_ACCESS);	
-}
-
-
-void JqSemaphore::Signal(uint32_t nCount)
-{
-	if(nCount > (uint32_t)nMaxCount)
-		nCount = nMaxCount;
-	BOOL r = ReleaseSemaphore(Handle, nCount, 0);
-}
-
-void JqSemaphore::Wait()
-{
-	JQ_MICROPROFILE_SCOPE("Wait", 0xc0c0c0);
-	DWORD r = WaitForSingleObject((HANDLE)Handle, INFINITE);
-	JQ_ASSERT(WAIT_OBJECT_0 == r);
-}
-#else
-JqMutex::JqMutex()
-{
-	pthread_mutex_init(&Mutex, 0);
-}
-
-JqMutex::~JqMutex()
-{
-	pthread_mutex_destroy(&Mutex);
-}
-
-void JqMutex::Lock()
-{
-	pthread_mutex_lock(&Mutex);
-}
-
-void JqMutex::Unlock()
-{
-	pthread_mutex_unlock(&Mutex);
-}
-
-
-JqConditionVariable::JqConditionVariable()
-{
-	pthread_cond_init(&Cond, 0);
-}
-
-JqConditionVariable::~JqConditionVariable()
-{
-	pthread_cond_destroy(&Cond);
-}
-
-void JqConditionVariable::Wait(JqMutex& Mutex)
-{
-	pthread_cond_wait(&Cond, &Mutex.Mutex);
-}
-
-void JqConditionVariable::NotifyOne()
-{
-	pthread_cond_signal(&Cond);
-}
-
-void JqConditionVariable::NotifyAll()
-{
-	pthread_cond_broadcast(&Cond);
-}
-
-JqSemaphore::JqSemaphore()
-{
-	nMaxCount = 0xffffffff;
-	nReleaseCount.store(0);
-}
-JqSemaphore::~JqSemaphore()
-{
-
-}
-void JqSemaphore::Init(int nCount)
-{
-	nMaxCount = nCount;
-}
-void JqSemaphore::Signal(uint32_t nCount)
-{
-	if(nReleaseCount.load() == nMaxCount)
-	{
-		return;
-	}
-	{
-		JqMutexLock l(Mutex);
-		uint32_t nCurrent = nReleaseCount.load();
-		if(nCurrent + nCount > nMaxCount)
-			nCount = nMaxCount - nCurrent;
-		nReleaseCount.fetch_add(nCount);
-		JQ_ASSERT(nReleaseCount.load() <= nMaxCount);
-		if(nReleaseCount.load() == nMaxCount)
-		{
-			Cond.NotifyAll();
-		}
-		else
-		{
-			for(uint32_t i = 0; i < nReleaseCount; ++i)
-			{
-				Cond.NotifyOne();
-			}
-		}
-	}
-}
-
-void JqSemaphore::Wait()
-{
-	JQ_MICROPROFILE_SCOPE("Wait", 0xc0c0c0);
-	JqMutexLock l(Mutex);
-	while(!nReleaseCount)
-	{
-		Cond.Wait(Mutex);
-	}
-	nReleaseCount--;
-}
-
-#endif
 
 #endif

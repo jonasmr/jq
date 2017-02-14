@@ -1,4 +1,5 @@
 #pragma once
+#include "jqbase.h"
 #if 0
 #include "jq1.h" //locked
 #else
