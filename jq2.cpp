@@ -23,153 +23,16 @@
 //
 #ifdef JQ_USE_LOCKLESS
 
-///////////////////////////////////////////////////////////////////////////////////////////
-/// Configuration
-
-
-// #include "jqpipe.h"
-
-// #include <type_traits>
-
-// //template stuff to make the job function accept to 0-2 arguments
-// template <typename T>
-// struct JqAdapt : public JqAdapt<decltype(&T::operator())>{};
-// template <typename C>
-// struct JqAdapt<void (C::*)(int, int) const>
-// {
-// 	template<typename T>
-// 	void call(T& t, int a, int b){ t(a,b);}
-// };
-// template <typename C>
-// struct JqAdapt<void (C::*)(int) const>
-// {
-// 	template<typename T>
-// 	void call(T& t, int a, int b){ t(a); }
-// };
-// template <typename C>
-// struct JqAdapt<void (C::*)() const>
-// {
-// 	template<typename T>
-// 	void call(T& t, int a, int b){ t();}
-// };
-
-// template <>
-// struct JqAdapt<void (*)(int, int)>
-// {
-// 	template<typename T>
-// 	void call(T& t, int a, int b){ t(a,b);}
-// };
-// template <>
-// struct JqAdapt<void (*)(int)>
-// {
-// 	template<typename T>
-// 	void call(T& t, int a, int b){ t(a); }
-// };
-// template <>
-// struct JqAdapt<void (*)()>
-// {
-// 	template<typename T>
-// 	void call(T& t, int a, int b){ t();}
-// };
-
-
-
-// //minimal lambda implementation without support for non-trivial types
-// //and fixed memory footprint
-// struct JqCallableBase {
-// 	virtual void operator()(int begin, int end) = 0;
-// };
-// template <typename F>
-// struct JqCallable : JqCallableBase {
-// 	F functor;
-// 	JqCallable(F functor) : functor(functor) {}
-// 	virtual void operator()(int a, int b) 
-// 	{ 
-// 		JqAdapt<F> X;
-// 		X.call(functor, a, b);
-// 	}
-// };
-// class JqFunction {
-// 	union
-// 	{
-// 		char buffer[JQ_FUNCTION_SIZE];
-// 		void* vptr;//alignment helper and a way to clear the vptr
-// 	};
-// 	JqCallableBase* Base()
-// 	{
-// 		return (JqCallableBase*)&buffer[0];
-// 	}
-// public:
-// 	template <typename F>
-// 	JqFunction(F f) {
-// 		static_assert(std::is_trivially_copy_constructible<F>::value, "Only captures of trivial types supported.");
-// 		static_assert(std::is_trivially_destructible<F>::value, "Only captures of trivial types supported.");
-// 		static_assert(sizeof(JqCallable<F>) <= JQ_FUNCTION_SIZE, "Captured lambda is too big. Increase size or capture less");
-// #ifdef _WIN32
-// 		static_assert(__alignof(F) <= __alignof(void*), "Alignment requirements too high");
-// #else
-// 		static_assert(alignof(F) <= alignof(void*), "Alignment requirements too high");
-// #endif
-// 		new (Base()) JqCallable<F>(f);
-// 	}
-// 	JqFunction(){}
-// 	void Clear(){ vptr = 0;}
-// 	void operator()(int a, int b) { (*Base())(a, b); }
-// };
-// #define JQ_CLEAR_FUNCTION(f) do{f.Clear();}while(0)
-
-
-
 #include <stddef.h>
 #include <stdint.h>
 
-
-
 struct JqJobStack;
 
-
-
-// struct JqStats
-// {
-// 	uint32_t nNumAdded;
-// 	uint32_t nNumFinished;
-// 	uint32_t nNumAddedSub;
-// 	uint32_t nNumFinishedSub;
-// 	uint32_t nNumCancelled;
-// 	uint32_t nNumCancelledSub;
-// 	uint32_t nNumLocks;
-// 	uint32_t nNumWaitKicks;
-// 	uint32_t nNumWaitCond;
-// 	uint32_t nMemoryUsed;
-// 	uint64_t nNextHandle;
-// 	uint32_t nSkips;
-// 	uint32_t nAttempts;
-// 	uint32_t nNextHandleCalled;
-// 	void Add(JqStats& Other)
-// 	{
-// 		nNumAdded += Other.nNumAdded;
-// 		nNumFinished += Other.nNumFinished;
-// 		nNumAddedSub += Other.nNumAddedSub;
-// 		nNumFinishedSub += Other.nNumFinishedSub;
-// 		nNumCancelled += Other.nNumCancelled;
-// 		nNumCancelledSub += Other.nNumCancelledSub;
-// 		nNumLocks += Other.nNumLocks;
-// 		nNumWaitKicks += Other.nNumWaitKicks;
-// 		nNumWaitCond += Other.nNumWaitCond;
-// 		nMemoryUsed += Other.nMemoryUsed;
-// 		nNextHandle += Other.nNextHandle;
-// 		nSkips += Other.nSkips;
-// 		nAttempts += Other.nAttempts;
-// 		nNextHandleCalled += Other.nNextHandleCalled;
-// 	}
-// };
-
-
-///////////////////////////////////////////////////////////////////////////////////////////
-/// Implementation
-
-#ifdef JQ_IMPL
+#include "jqbase.h"
 #include "jqinternal.h"
+#ifdef JQ_MICROPROFILE
+#include "microprofile.h"
+#endif
 
 struct JqStatsInternal
 {
@@ -188,74 +51,6 @@ struct JqStatsInternal
 	std::atomic<uint32_t> nSkips;
 };
 
-// #if defined(__APPLE__)
-// #include <mach/mach_time.h>
-// #include <unistd.h>
-// #define JQ_BREAK() __builtin_trap()
-// #define JQ_THREAD_LOCAL __thread
-// #define JQ_STRCASECMP strcasecmp
-// typedef uint64_t ThreadIdType;
-// #define JQ_USLEEP(us) usleep(us);
-// int64_t JqTicksPerSecond()
-// {
-// 	static int64_t nTicksPerSecond = 0;	
-// 	if(nTicksPerSecond == 0) 
-// 	{
-// 		mach_timebase_info_data_t sTimebaseInfo;	
-// 		mach_timebase_info(&sTimebaseInfo);
-// 		nTicksPerSecond = 1000000000ll * sTimebaseInfo.denom / sTimebaseInfo.numer;
-// 	}
-// 	return nTicksPerSecond;
-// }
-// int64_t JqTick()
-// {
-// 	return mach_absolute_time();
-// }
-// #elif defined(_WIN32)
-// #define JQ_BREAK() __debugbreak()
-// #define JQ_THREAD_LOCAL __declspec(thread)
-// #define JQ_STRCASECMP _stricmp
-// typedef uint32_t ThreadIdType;
-// #define JQ_USLEEP(us) JqUsleep(us);
-// #define snprintf _snprintf
-// #include <windows.h>
-// int64_t JqTicksPerSecond()
-// {
-// 	static int64_t nTicksPerSecond = 0;	
-// 	if(nTicksPerSecond == 0) 
-// 	{
-// 		QueryPerformanceFrequency((LARGE_INTEGER*)&nTicksPerSecond);
-// 	}
-// 	return nTicksPerSecond;
-// }
-// int64_t JqTick()
-// {
-// 	int64_t ticks;
-// 	QueryPerformanceCounter((LARGE_INTEGER*)&ticks);
-// 	return ticks;
-// }
-// void JqUsleep(__int64 usec) 
-// { 
-// 	if(usec > 20000)
-// 	{
-// 		Sleep((DWORD)(usec/1000));
-// 	}
-// 	else if(usec >= 1000)
-// 	{
-// #ifdef _DURANGO
-// 		Sleep((DWORD)(usec/1000));
-// #else
-// 		timeBeginPeriod(1);
-// 		Sleep((DWORD)(usec/1000));
-// 		timeEndPeriod(1);
-// #endif
-// 	}
-// 	else
-// 	{
-// 		Sleep(0);
-// 	}
-// }
-// #endif
 
 
 #define JQ_NUM_JOBS (JQ_TREE_BUFFER_SIZE2-1)
@@ -304,16 +99,6 @@ JQ_THREAD_LOCAL int JqSpinloop = 0; //prevent optimizer from removing spin loop
 JQ_THREAD_LOCAL uint32_t g_nJqNumPipes = 0;
 JQ_THREAD_LOCAL uint8_t g_JqPipes[JQ_NUM_PIPES] = {0};
 
-// #ifndef JQ_LT_WRAP
-// #define JQ_LT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<0)
-// #define JQ_LE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<=0)
-// #define JQ_GE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>=0)
-// #define JQ_GT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>0)
-// #define JQ_LT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<0)
-// #define JQ_LE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<=0)
-// #define JQ_GE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>=0)
-// #define JQ_GT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>0)
-// #endif
 
 #define JQ_TREE_BUFFER_SIZE2 (1<<JQ_PIPE_EXTERNAL_ID_BITS) // note: this should match with nExternalId size in JqPipe
 
@@ -634,6 +419,7 @@ JqJobStack* JqAllocStack(uint32_t nFlags)
 		}
 	}while(1);
 
+#ifdef JQ_MICROPROFILE
 	if(bSmall)
 	{
 		MICROPROFILE_COUNTER_ADD("jq/stack/small/count", 1);
@@ -644,6 +430,7 @@ JqJobStack* JqAllocStack(uint32_t nFlags)
 		MICROPROFILE_COUNTER_ADD("jq/stack/large/count", 1);
 		MICROPROFILE_COUNTER_ADD("jq/stack/large/bytes", nStackSize);
 	}
+#endif
 	void* pStack = JqAllocStackInternal(nStackSize);
 	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags&JQ_JOBFLAG_LARGE_STACK);
 	return pJobStack;
@@ -1412,7 +1199,7 @@ void JqWorker(int nThreadId)
 			JqState.Semaphore[nSemaphoreIndex].S.Wait();
 		}
 	}
-#ifdef MICROPROFILE_ENABLED
+#if MICROPROFILE_ENABLED
 	MicroProfileOnThreadExit();
 #endif
 }
@@ -1903,7 +1690,5 @@ uint64_t JqSelf()
 {
 	return JqSelfPos ? JqSelfStack[JqSelfPos-1].nHandle : 0;
 }
-
-#endif
 
 #endif
