@@ -14,7 +14,7 @@
 #endif
 
 #ifndef JQ_DEFAULT_WAIT_TIME_US
-#define JQ_DEFAULT_WAIT_TIME_US 100
+#define JQ_DEFAULT_WAIT_TIME_US 10
 #endif
 
 #ifndef JQ_CACHE_LINE_SIZE
