@@ -33,6 +33,8 @@ struct JqJobStack;
 #ifdef JQ_MICROPROFILE
 #include "microprofile.h"
 #endif
+#include "jqfcontext.h"
+
 
 struct JqStatsInternal
 {
@@ -148,61 +150,6 @@ struct JqJob2
 #define JQ_ALIGN_16 __attribute__((__aligned__(16)))
 #endif
 
-// #ifndef _WIN32
-// #include <pthread.h>
-// #endif
-// #include <atomic>
-
-
-// struct JqMutex
-// {
-// 	JqMutex();
-// 	~JqMutex();
-// 	void Lock();
-// 	void Unlock();
-// #ifdef _WIN32
-// 	CRITICAL_SECTION CriticalSection;
-// #else
-// 	pthread_mutex_t Mutex;
-// #endif
-// };
-
-// struct JqConditionVariable
-// {
-// 	JqConditionVariable();
-// 	~JqConditionVariable();
-// 	void Wait(JqMutex& Mutex);
-// 	void NotifyOne();
-// 	void NotifyAll();
-// #ifdef _WIN32
-// 	CONDITION_VARIABLE Cond;
-// #else
-// 	pthread_cond_t Cond;
-// #endif
-// };
-
-
-
-// struct JqSemaphore
-// {
-// 	JqSemaphore();
-// 	~JqSemaphore();
-// 	void Signal(uint32_t nCount);
-// 	void Wait();
-
-// 	void Init(int nMaxCount);
-
-// #ifdef _WIN32
-// 	HANDLE Handle;
-// 	LONG nMaxCount;
-// #else
-// 	JqMutex Mutex;
-// 	JqConditionVariable Cond;
-// 	std::atomic<uint32_t> nReleaseCount;
-// 	uint32_t nMaxCount;	
-// #endif
-// };
-
 
 #define JQ_STATS(a) do{a;}while(0)
 
@@ -276,42 +223,6 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	JqStatsInternal Stats;
 } JqState;
 
-
-// struct JqMutexLock
-// {
-// 	bool bIsLocked;
-// 	JqMutex& Mutex;
-// 	JqMutexLock(JqMutex& Mutex)
-// 		:Mutex(Mutex)
-// 	{
-// 		bIsLocked = false;
-// 		Lock();
-// 	}
-// 	~JqMutexLock()
-// 	{
-// 		if(bIsLocked)
-// 		{
-// 			Unlock();
-// 		}
-// 	}
-// 	void Lock()
-// 	{
-// 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
-// 		Mutex.Lock();
-// 		JqState.Stats.nNumLocks++;
-// 		JQ_ASSERT_LOCK_ENTER();
-// 		bIsLocked = true;
-// 	}
-// 	void Unlock()
-// 	{
-// 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
-// 		JQ_ASSERT_LOCK_LEAVE();
-// 		Mutex.Unlock();
-// 		bIsLocked = false;
-// 	}
-// };
-
-#include "jqfcontext.h"
 
 struct JqJobStack
 {
@@ -546,7 +457,6 @@ void JqCheckFinished(uint64_t nJob)
 uint32_t g_TESTID = 0;
 void JqFinishJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId, int nNumJobs, int nCancel)
 {
-	//JqMutexLock L(JqState.Mutex);
 	JQ_ASSERT(nExternalId != 0);
 	JQ_ASSERT(nExternalId < JQ_TREE_BUFFER_SIZE2);
 	JqPipeHandle Null = JqPipeHandleNull();
