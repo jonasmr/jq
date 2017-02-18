@@ -1,4 +1,4 @@
-#include "jqbase.h"
+#include "jq.h"
 #include "jqinternal.h"
 #ifdef _WIN32
 JqMutex::JqMutex()
