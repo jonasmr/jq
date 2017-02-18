@@ -7,17 +7,12 @@ CFLAGS+=-g -O3 -Wno-invalid-offsetof
 
 CPPFLAGS=$(CFLAGS)
 CPPFLAGS+=-stdlib=libc++ -std=c++11
-#CPPFLAGS+=-DJQ_MICROPROFILE
-#CPPFLAGS+=-DJQ_MICROPROFILE_VERBOSE
+
 CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
+
+#CPPFLAGS+=-DJQ_USE_LOCKLESS
 CPPFLAGS+=-DJQ_USE_LOCKLESS
-CPPFLAGS+=-DJQ_USE_LOCKLESS
-#CPPFLAGS+=-DMICROPROFILE_ENABLED=0
-#CPPFLAGS+=-DJQ_ASSERT_LOCKS
-#define JQ_IMPL
-#define JQ_MICROPROFILE
-#define JQ_MICROPROFILE_VERBOSE
-#define JQ_ASSERT_LOCKS
+
 
 
 CPP_SOURCES = microprofile.cpp ../jqpipe.cpp ../jq1.cpp ../jq2.cpp ../jqinternal.cpp ../jqnode.cpp
@@ -35,7 +30,10 @@ ASM_OBJS = $(patsubst %.S,%.o,$(ASM_SOURCES))
 OBJS = $(C_OBJS) $(CPP_OBJS) $(ASM_OBJS)
 
 default:demo_priority demo_stress demo_node demo_cancel
+
 all: clean default 
+
+x: clean demo_stress
 
 demo_stress: demo_stress.o $(OBJS)
 	$(LD) -o demo_stress demo_stress.o $(OBJS) $(LDFLAGS) $(CPPFLAGS)

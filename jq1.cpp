@@ -134,6 +134,8 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	JQ_THREAD WorkerThreads[JQ_MAX_THREADS];
 
 
+	JqJobStackList m_StackSmall;
+	JqJobStackList m_StackLarge;
 
 
 	int nNumWorkers;
@@ -159,6 +161,8 @@ struct JQ_ALIGN_CACHELINE JqState_t
 JQ_THREAD_LOCAL int JqSpinloop = 0; //prevent optimizer from removing spin loop
 JQ_THREAD_LOCAL uint32_t g_nJqNumPipes = 0;
 JQ_THREAD_LOCAL uint8_t g_JqPipes[JQ_NUM_PIPES] = { 0 };
+JQ_THREAD_LOCAL JqJobStack* g_pJqJobStacks = 0;
+
 
 
 void JqStart(int nNumWorkers)
@@ -525,6 +529,58 @@ int JqGetNumWorkers()
 	return JqState.nNumWorkers;
 }
 
+
+
+
+void JqContextRun(JqTransfer T)
+{
+	JqJobStack * pJobData = (JqJobStack*)T.data;
+	JqState.Jobs[pJobData->nExternalId].Function(pJobData->nBegin, pJobData->nEnd);
+	jump_fcontext(T.fctx, (void*)447);
+	JQ_BREAK();
+}
+
+JqJobStackList& JqGetJobStackList(uint32_t nFlags)
+{
+	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+	return bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
+}
+
+void JqRunInternal(uint32_t nWorkIndex, int nBegin, int nEnd)
+{
+#if JQ_USE_SEPERATE_STACK
+	{
+		{
+			uint32_t nFlags = JqState.Jobs[nWorkIndex].nJobFlags;
+			JqJobStack* pJobData = JqAllocStack(JqGetJobStackList(nFlags), nFlags);
+			void* pVerify = g_pJqJobStacks;
+			JQ_ASSERT(pJobData->pLink == nullptr);
+			pJobData->pLink = g_pJqJobStacks;
+			pJobData->nBegin = nBegin;
+			pJobData->nEnd = nEnd;
+			pJobData->nExternalId = nWorkIndex;
+			g_pJqJobStacks = pJobData;
+			pJobData->pContextJob = make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
+			JqTransfer T = jump_fcontext(pJobData->pContextJob, (void*) pJobData);
+			JQ_ASSERT(T.data == (void*)447);
+			g_pJqJobStacks = pJobData->pLink;
+			pJobData->pLink = nullptr;
+			JQ_ASSERT(pVerify == g_pJqJobStacks);
+			JQ_ASSERT(pJobData->GUARD[0] == 0xececececececececll);
+			JQ_ASSERT(pJobData->GUARD[1] == 0xececececececececll);
+			JqFreeStack(JqGetJobStackList(nFlags), pJobData);
+		}
+	}
+#else
+	JqState.Jobs[nWorkIndex].Function(nBegin, nEnd);
+#endif
+}
+
+
+
+
+
+
 void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 {
 	JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
@@ -538,9 +594,8 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 	int nRemainder = nRange - nFraction * nNumJobs;	
 	int nStart = JqGetRangeStart(nSubIndex, nFraction, nRemainder);
 	int nEnd = JqGetRangeStart(nSubIndex+1, nFraction, nRemainder);
-	JqState.Jobs[nWorkIndex].Function(nStart, nEnd);
+	JqRunInternal(nWorkIndex, nStart, nEnd);
 	JqSelfPop(nJob);
-	//JqIncrementFinished(nJob);
 }
 
 

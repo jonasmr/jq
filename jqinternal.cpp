@@ -183,3 +183,104 @@ void JqSemaphore::Wait()
 }
 
 #endif
+
+
+
+
+#ifdef _WIN32
+void* JqAllocStackInternal(uint32_t nStackSize)
+{
+	JQ_BREAK();
+}
+void JqFreeStackInternal(void* pStack, uint32_t nStackSize)
+{
+	//never called
+	JQ_BREAK();
+}
+#else
+#include <stdlib.h>
+#include <sys/mman.h>
+void* JqAllocStackInternal(uint32_t nStackSize)
+{
+	int nPageSize = sysconf(_SC_PAGE_SIZE);
+	int nSize = (nStackSize + nPageSize - 1) & ~(nPageSize-1);
+	void* pAlloc = mmap(nullptr, nSize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
+	return pAlloc;
+}
+
+void JqFreeStackInternal(void* p, uint32_t nStackSize)
+{
+	//never called.
+	munmap(p, nStackSize);
+}
+#endif
+
+
+JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nFlags)
+{
+	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+	uint32_t nStackSize = bSmall ? JQ_STACKSIZE_SMALL : JQ_STACKSIZE_LARGE;
+	// auto& FreeList = bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
+	do{
+		JqJobStackLink Value = FreeList.load();
+		JqJobStack* pHead = Value.pHead;
+
+		if(!pHead)
+			break;
+
+		JqJobStack* pNext = pHead->pLink;
+		JqJobStackLink NewValue = {pNext, Value.nCounter+1 };
+		if(FreeList.compare_exchange_strong(Value, NewValue))
+		{
+			JQ_ASSERT((nFlags&JQ_JOBFLAG_LARGE_STACK) == (pHead->nFlags&JQ_JOBFLAG_LARGE_STACK));
+			pHead->pLink = nullptr;
+			return pHead;
+		}
+	}while(1);
+
+#ifdef JQ_MICROPROFILE
+	if(bSmall)
+	{
+		MICROPROFILE_COUNTER_ADD("jq/stack/small/count", 1);
+		MICROPROFILE_COUNTER_ADD("jq/stack/small/bytes", nStackSize);
+	}
+	else
+	{
+		MICROPROFILE_COUNTER_ADD("jq/stack/large/count", 1);
+		MICROPROFILE_COUNTER_ADD("jq/stack/large/bytes", nStackSize);
+	}
+#endif
+	void* pStack = JqAllocStackInternal(nStackSize);
+	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags&JQ_JOBFLAG_LARGE_STACK);
+	return pJobStack;
+}
+
+void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
+{
+	// bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+	// uint32_t nStackSize = bSmall ? JQ_STACKSIZE_SMALL : JQ_STACKSIZE_LARGE;
+	// (void)nStackSize;
+
+	// auto& FreeList = bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
+	JQ_ASSERT(pStack->pLink == nullptr);
+	do
+	{
+		JqJobStackLink Value = FreeList.load();
+		JqJobStack* pHead = Value.pHead;
+		pStack->pLink = pHead;
+		JqJobStackLink NewValue = {pStack, Value.nCounter + 1};
+		if(FreeList.compare_exchange_strong(Value, NewValue))
+		{
+			return;
+		}
+
+	}while(1);
+}
+
+
+
+
+
+
+
+

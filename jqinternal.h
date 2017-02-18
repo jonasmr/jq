@@ -1,4 +1,8 @@
 #pragma once
+//internal code, shared by both lockless and locked version
+
+#include "jqfcontext.h"
+
 #if defined(__APPLE__)
 #include <mach/mach_time.h>
 #include <unistd.h>
@@ -210,4 +214,76 @@ struct JqMutexLock
 		bIsLocked = false;
 	}
 };
+
+
+struct JqJobStack
+{
+	uint64_t GUARD[2];
+	JqFContext ContextReturn;
+	JqFContext pContextJob;
+
+	JqJobStack* pLink;//when in use: Previous. When freed, next element in free list
+
+	uint32_t nExternalId;
+	uint32_t nFlags;
+	int nBegin;
+	int nEnd;
+	int nStackSize;
+	void* StackBottom()
+	{
+		intptr_t t = (intptr_t)this;
+		t += Offset();
+		t -= nStackSize;
+		return (void*)t;
+
+	}
+	void* StackTop()
+	{
+		intptr_t t = (intptr_t)this;
+		t -= 16;
+		return (void*)this;
+	}
+	int StackSize()
+	{
+		return (int)((intptr_t)StackTop() - (intptr_t)StackBottom());
+	}
+	static size_t Offset()
+	{
+		return (sizeof(JqJobStack) + 15) & (~15);
+	}
+	static JqJobStack* Init(void* pStack, int nStackSize, uint32_t nFlags)
+	{
+		intptr_t t = (intptr_t)pStack;
+		t += nStackSize;
+		t -= Offset();
+		JqJobStack* pJobStack = (JqJobStack*)t;
+		new (pJobStack) JqJobStack;
+		pJobStack->pLink = 0;
+		pJobStack->nExternalId = 0;
+		pJobStack->nFlags = nFlags;
+		pJobStack->nStackSize = nStackSize;
+		pJobStack->GUARD[0] = 0xececececececececll;
+		pJobStack->GUARD[1] = 0xececececececececll;
+		return pJobStack;
+	}
+};
+
+
+struct JqJobStackLink
+{
+	JqJobStack* pHead;
+	uint32_t 	nCounter;
+};
+
+typedef std::atomic<JqJobStackLink> JqJobStackList;
+
+
+void* JqAllocStackInternal(uint32_t nStackSize);
+void JqFreeStackInternal(void* pStack, uint32_t nStackSize);
+
+JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nFlags);
+void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack);
+
+
+
 

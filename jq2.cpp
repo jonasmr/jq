@@ -33,7 +33,6 @@ struct JqJobStack;
 #ifdef JQ_MICROPROFILE
 #include "microprofile.h"
 #endif
-#include "jqfcontext.h"
 
 
 struct JqStatsInternal
@@ -100,6 +99,7 @@ JQ_THREAD_LOCAL uint32_t JqHasLock = 0;
 JQ_THREAD_LOCAL int JqSpinloop = 0; //prevent optimizer from removing spin loop
 JQ_THREAD_LOCAL uint32_t g_nJqNumPipes = 0;
 JQ_THREAD_LOCAL uint8_t g_JqPipes[JQ_NUM_PIPES] = {0};
+JQ_THREAD_LOCAL JqJobStack* g_pJqJobStacks = 0;
 
 
 #define JQ_TREE_BUFFER_SIZE2 (1<<JQ_PIPE_EXTERNAL_ID_BITS) // note: this should match with nExternalId size in JqPipe
@@ -155,11 +155,6 @@ struct JqJob2
 
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS //note: This is just arbitrary: given a suffiently random priority setup you might need to bump this.
 
-struct JqJobStackLink
-{
-	JqJobStack* pHead;
-	uint32_t 	nCounter;
-};
 
 struct JQ_ALIGN_CACHELINE JqState_t
 {
@@ -210,8 +205,8 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	JqPipe 			m_Pipes[JQ_NUM_PIPES];
 	JqJob2 			m_Jobs2[JQ_TREE_BUFFER_SIZE2];
 
-	std::atomic<JqJobStackLink> m_StackSmall;
-	std::atomic<JqJobStackLink> m_StackLarge;
+	JqJobStackList m_StackSmall;
+	JqJobStackList m_StackLarge;
 	
 
 	JqState_t()
@@ -224,150 +219,6 @@ struct JQ_ALIGN_CACHELINE JqState_t
 } JqState;
 
 
-struct JqJobStack
-{
-	uint64_t GUARD[2];
-	JqFContext ContextReturn;
-	JqFContext pContextJob;
-
-	JqJobStack* pLink;//when in use: Previous. When freed, next element in free list
-
-	uint32_t nExternalId;
-	uint32_t nFlags;
-	int nBegin;
-	int nEnd;
-	int nStackSize;
-	void* StackBottom()
-	{
-		intptr_t t = (intptr_t)this;
-		t += Offset();
-		t -= nStackSize;
-		return (void*)t;
-
-	}
-	void* StackTop()
-	{
-		intptr_t t = (intptr_t)this;
-		t -= 16;
-		return (void*)this;
-	}
-	int StackSize()
-	{
-		return (int)((intptr_t)StackTop() - (intptr_t)StackBottom());
-	}
-	static size_t Offset()
-	{
-		return (sizeof(JqJobStack) + 15) & (~15);
-	}
-	static JqJobStack* Init(void* pStack, int nStackSize, uint32_t nFlags)
-	{
-		intptr_t t = (intptr_t)pStack;
-		t += nStackSize;
-		t -= Offset();
-		JqJobStack* pJobStack = (JqJobStack*)t;
-		new (pJobStack) JqJobStack;
-		pJobStack->pLink = 0;
-		pJobStack->nExternalId = 0;
-		pJobStack->nFlags = nFlags;
-		pJobStack->nStackSize = nStackSize;
-		pJobStack->GUARD[0] = 0xececececececececll;
-		pJobStack->GUARD[1] = 0xececececececececll;
-		return pJobStack;
-	}
-};
-
-JQ_THREAD_LOCAL JqJobStack* g_pJqJobStacks = 0;
-
-
-
-#ifdef _WIN32
-void* JqAllocStackInternal(uint32_t nStackSize)
-{
-	JQ_BREAK();
-}
-void JqFreeStackInternal(void* pStack)
-{
-	//never called
-	JQ_BREAK();
-}
-#else
-#include <stdlib.h>
-#include <sys/mman.h>
-void* JqAllocStackInternal(uint32_t nStackSize)
-{
-	int nPageSize = sysconf(_SC_PAGE_SIZE);
-	int nSize = (nStackSize + nPageSize - 1) & ~(nPageSize-1);
-	void* pAlloc = mmap(nullptr, nSize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
-	return pAlloc;
-}
-
-void JqFreeStackInternal(void* p, uint32_t nStackSize)
-{
-	//never called.
-	munmap(p, nStackSize);
-}
-#endif
-
-JqJobStack* JqAllocStack(uint32_t nFlags)
-{
-	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
-	uint32_t nStackSize = bSmall ? JQ_STACKSIZE_SMALL : JQ_STACKSIZE_LARGE;
-	auto& FreeList = bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
-	do{
-		JqJobStackLink Value = FreeList.load();
-		JqJobStack* pHead = Value.pHead;
-
-		if(!pHead)
-			break;
-
-		JqJobStack* pNext = pHead->pLink;
-		JqJobStackLink NewValue = {pNext, Value.nCounter+1 };
-		if(FreeList.compare_exchange_strong(Value, NewValue))
-		{
-			JQ_ASSERT((nFlags&JQ_JOBFLAG_LARGE_STACK) == (pHead->nFlags&JQ_JOBFLAG_LARGE_STACK));
-			pHead->pLink = nullptr;
-			return pHead;
-		}
-	}while(1);
-
-#ifdef JQ_MICROPROFILE
-	if(bSmall)
-	{
-		MICROPROFILE_COUNTER_ADD("jq/stack/small/count", 1);
-		MICROPROFILE_COUNTER_ADD("jq/stack/small/bytes", nStackSize);
-	}
-	else
-	{
-		MICROPROFILE_COUNTER_ADD("jq/stack/large/count", 1);
-		MICROPROFILE_COUNTER_ADD("jq/stack/large/bytes", nStackSize);
-	}
-#endif
-	void* pStack = JqAllocStackInternal(nStackSize);
-	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags&JQ_JOBFLAG_LARGE_STACK);
-	return pJobStack;
-}
-
-void JqFreeStack(JqJobStack* pStack, uint32_t nFlags)
-{
-	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
-	uint32_t nStackSize = bSmall ? JQ_STACKSIZE_SMALL : JQ_STACKSIZE_LARGE;
-	(void)nStackSize;
-
-	auto& FreeList = bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
-	JQ_ASSERT(pStack->pLink == nullptr);
-	do
-	{
-		JqJobStackLink Value = FreeList.load();
-		JqJobStack* pHead = Value.pHead;
-		pStack->pLink = pHead;
-		JqJobStackLink NewValue = {pStack, Value.nCounter + 1};
-		if(FreeList.compare_exchange_strong(Value, NewValue))
-		{
-			return;
-		}
-
-	}while(1);
-}
 
 void JqContextRun(JqTransfer T)
 {
@@ -377,6 +228,12 @@ void JqContextRun(JqTransfer T)
 	JQ_BREAK();
 }
 
+JqJobStackList& JqGetJobStackList(uint32_t nFlags)
+{
+	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+	return bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
+}
+
 
 void JqRunInternal(uint32_t nExternalId, int nBegin, int nEnd)
 {
@@ -384,7 +241,7 @@ void JqRunInternal(uint32_t nExternalId, int nBegin, int nEnd)
 	{
 		{
 			uint32_t nFlags = JqState.m_Jobs2[nExternalId].nJobFlags;
-			JqJobStack* pJobData = JqAllocStack(nFlags);
+			JqJobStack* pJobData = JqAllocStack(JqGetJobStackList(nFlags), nFlags);
 			void* pHest = g_pJqJobStacks;
 			JQ_ASSERT(pJobData->pLink == nullptr);
 			pJobData->pLink = g_pJqJobStacks;
@@ -400,7 +257,7 @@ void JqRunInternal(uint32_t nExternalId, int nBegin, int nEnd)
 			JQ_ASSERT(pHest == g_pJqJobStacks);
 			JQ_ASSERT(pJobData->GUARD[0] == 0xececececececececll);
 			JQ_ASSERT(pJobData->GUARD[1] == 0xececececececececll);
-			JqFreeStack(pJobData, nFlags);
+			JqFreeStack(JqGetJobStackList(nFlags), pJobData);
 		}
 	}
 #else
