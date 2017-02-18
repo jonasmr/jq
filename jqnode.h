@@ -1,5 +1,5 @@
 #pragma once
-#include "jqbase.h"
+#include "jq.h"
 #include "jqinternal.h"
 #include <atomic>
 

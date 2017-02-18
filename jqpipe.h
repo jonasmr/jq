@@ -23,7 +23,7 @@
 
 // Ultra simple lockless job pipe
 
-#include "jqbase.h"
+#include "jq.h"
 #include "jqinternal.h"
 
 #include <stddef.h>

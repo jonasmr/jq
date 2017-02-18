@@ -28,7 +28,7 @@
 
 struct JqJobStack;
 
-#include "jqbase.h"
+#include "jq.h"
 #include "jqinternal.h"
 #ifdef JQ_MICROPROFILE
 #include "microprofile.h"
