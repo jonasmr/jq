@@ -15,7 +15,7 @@ CPPFLAGS+=-DJQ_USE_LOCKLESS
 
 
 
-CPP_SOURCES = microprofile.cpp ../jqpipe.cpp ../jq1.cpp ../jq2.cpp ../jqinternal.cpp ../jqnode.cpp
+CPP_SOURCES = microprofile.cpp ../jqpipe.cpp ../jqmutex.cpp ../jqlockless.cpp ../jqinternal.cpp ../jqnode.cpp
 C_SOURCES =
 ASM_SOURCES = ../boost_context/jump_x86_64_sysv_macho_gas.S ../boost_context/make_x86_64_sysv_macho_gas.S
 
