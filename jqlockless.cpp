@@ -21,8 +21,6 @@
 //
 // ***********************************************************************
 //
-#ifdef JQ_USE_LOCKLESS
-
 #include <stddef.h>
 #include <stdint.h>
 
@@ -1458,4 +1456,3 @@ uint64_t JqSelf()
 	return JqSelfPos ? JqSelfStack[JqSelfPos-1].nHandle : 0;
 }
 
-#endif

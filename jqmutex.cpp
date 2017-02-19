@@ -22,9 +22,7 @@
 // ***********************************************************************
 //
 
-#ifndef JQ_USE_LOCKLESS
-
-#include "jqbase.h"
+#include "jq.h"
 #include "jqinternal.h"
 
 
@@ -1299,4 +1297,3 @@ void JqPriorityListRemove(uint16_t nIndex)
 
 }
 
-#endif
