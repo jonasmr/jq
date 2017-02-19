@@ -17,7 +17,7 @@ DEMO_SOURCES = demo_stress.cpp demo_priority.cpp demo_node.cpp demo_cancel.cpp
 JQ_SOURCES=../jqlockless.cpp ../jqmutex.cpp
 C_SOURCES =
 ASM_SOURCES = ../boost_context/jump_x86_64_sysv_macho_gas.S ../boost_context/make_x86_64_sysv_macho_gas.S
-TARGET=demo
+
 CC=clang
 CPP=clang++
 LD=clang++
