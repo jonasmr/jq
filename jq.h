@@ -190,6 +190,10 @@ public:
 #define JQ_JOBFLAG_DETACHED 					0x2 // dont create as child of current job 
 
 
+//Init flags
+#define JQ_INIT_USE_SEPERATE_STACK 				0x1
+
+
 struct JqStats
 {
 	uint32_t nNumAdded;
@@ -239,8 +243,8 @@ JQ_API uint64_t 	JqGroupBegin(); //add a non-executing job to group all jobs add
 JQ_API void 		JqGroupEnd();
 JQ_API bool 		JqIsDone(uint64_t nJob);
 JQ_API bool 		JqIsDoneExt(uint64_t nJob, uint32_t nWaitFlag);
-JQ_API void 		JqStart(int nNumWorkers);
-JQ_API void 		JqStart(int nNumWorkers, uint32_t nPipeConfigSize, uint8_t* pPipeConfig);
+JQ_API void 		JqStart(int nNumWorkers, uint32_t nJqInitFlag = 0);
+JQ_API void 		JqStart(int nNumWorkers, uint32_t nPipeConfigSize, uint8_t* pPipeConfig, uint32_t nJqInitFlag = 0);
 JQ_API void			JqSetThreadPipeConfig(uint8_t PipeConfig[JQ_NUM_PIPES]);
 JQ_API int			JqNumWorkers();
 JQ_API void 		JqStop();

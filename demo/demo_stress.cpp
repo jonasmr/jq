@@ -331,11 +331,23 @@ int main(int argc, char* argv[])
 	printf("press 'z' to toggle microprofile drawing\n");
 	printf("press 'right shift' to pause microprofile update\n");
 	MicroProfileOnThreadCreate("Main");
+
+	uint32_t nJqInitFlags = JQ_INIT_USE_SEPERATE_STACK;
+	for(uint32_t i = 1; i < argc; ++i)
+	{
+		if(0 == strcmp("-ns", argv[i]))
+		{
+			printf("disabling seperate stack\n");
+			nJqInitFlags &= ~JQ_INIT_USE_SEPERATE_STACK;
+		}
+	}
+
+
 #ifdef _WIN32
 	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
 #endif
 	static uint32_t nNumWorkers = g_nNumWorkers;
-	JqStart(nNumWorkers, 0, nullptr);
+	JqStart(nNumWorkers, 0, nullptr, nJqInitFlags);
 
 #ifdef _WIN32
 	std::atomic<int> keypressed;

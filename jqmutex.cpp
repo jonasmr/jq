@@ -34,7 +34,7 @@
 
 struct JqMutexLock;
 
-void 		JqStart(int nNumWorkers);
+void 		JqStart(int nNumWorkers, uint32_t nJqInitFlags);
 void 		JqCheckFinished(uint64_t nJob);
 uint16_t 	JqIncrementStarted(uint64_t nJob);
 void 		JqIncrementFinished(uint64_t nJob);
@@ -123,6 +123,7 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	uint8_t m_SemaphoreClients[JQ_MAX_SEMAPHORES][JQ_MAX_THREADS];
 	uint8_t m_SemaphoreClientCount[JQ_MAX_SEMAPHORES];
 	int		m_ActiveSemaphores;
+	uint32_t m_JqInitFlags;
 
 	uint8_t m_nNumPipes[JQ_MAX_THREADS];
 	uint8_t m_PipeList[JQ_MAX_THREADS][JQ_NUM_PIPES];
@@ -163,12 +164,12 @@ JQ_THREAD_LOCAL JqJobStack* g_pJqJobStacks = 0;
 
 
 
-void JqStart(int nNumWorkers)
+void JqStart(int nNumWorkers, uint32_t nJqInitFlags)
 {
-	JqStart(nNumWorkers, 0, 0);
+	JqStart(nNumWorkers, 0, 0, nJqInitFlags);
 }
 
-void JqStart(int nNumWorkers, uint32_t nPipeConfigSize, uint8_t* pPipeConfig)
+void JqStart(int nNumWorkers, uint32_t nPipeConfigSize, uint8_t* pPipeConfig, uint32_t nJqInitFlags)
 {
 #if 0
 	//verify macros
@@ -211,6 +212,7 @@ void JqStart(int nNumWorkers, uint32_t nPipeConfigSize, uint8_t* pPipeConfig)
 	memset(JqState.m_SemaphoreClients, 0, sizeof(JqState.m_SemaphoreClients));
 	memset(JqState.m_SemaphoreClientCount, 0, sizeof(JqState.m_SemaphoreClientCount));
 	JqState.m_ActiveSemaphores = 0;
+	JqState.m_JqInitFlags = nJqInitFlags;
 
 	for (int i = 0; i < nNumWorkers; ++i)
 	{
@@ -546,32 +548,31 @@ JqJobStackList& JqGetJobStackList(uint32_t nFlags)
 
 void JqRunInternal(uint32_t nWorkIndex, int nBegin, int nEnd)
 {
-#if JQ_USE_SEPERATE_STACK
+	if(JQ_INIT_USE_SEPERATE_STACK == (JqState.m_JqInitFlags & JQ_INIT_USE_SEPERATE_STACK))
 	{
-		{
-			uint32_t nFlags = JqState.Jobs[nWorkIndex].nJobFlags;
-			JqJobStack* pJobData = JqAllocStack(JqGetJobStackList(nFlags), nFlags);
-			void* pVerify = g_pJqJobStacks;
-			JQ_ASSERT(pJobData->pLink == nullptr);
-			pJobData->pLink = g_pJqJobStacks;
-			pJobData->nBegin = nBegin;
-			pJobData->nEnd = nEnd;
-			pJobData->nExternalId = nWorkIndex;
-			g_pJqJobStacks = pJobData;
-			pJobData->pContextJob = make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
-			JqTransfer T = jump_fcontext(pJobData->pContextJob, (void*) pJobData);
-			JQ_ASSERT(T.data == (void*)447);
-			g_pJqJobStacks = pJobData->pLink;
-			pJobData->pLink = nullptr;
-			JQ_ASSERT(pVerify == g_pJqJobStacks);
-			JQ_ASSERT(pJobData->GUARD[0] == 0xececececececececll);
-			JQ_ASSERT(pJobData->GUARD[1] == 0xececececececececll);
-			JqFreeStack(JqGetJobStackList(nFlags), pJobData);
-		}
+		uint32_t nFlags = JqState.Jobs[nWorkIndex].nJobFlags;
+		JqJobStack* pJobData = JqAllocStack(JqGetJobStackList(nFlags), nFlags);
+		void* pVerify = g_pJqJobStacks;
+		JQ_ASSERT(pJobData->pLink == nullptr);
+		pJobData->pLink = g_pJqJobStacks;
+		pJobData->nBegin = nBegin;
+		pJobData->nEnd = nEnd;
+		pJobData->nExternalId = nWorkIndex;
+		g_pJqJobStacks = pJobData;
+		pJobData->pContextJob = make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
+		JqTransfer T = jump_fcontext(pJobData->pContextJob, (void*) pJobData);
+		JQ_ASSERT(T.data == (void*)447);
+		g_pJqJobStacks = pJobData->pLink;
+		pJobData->pLink = nullptr;
+		JQ_ASSERT(pVerify == g_pJqJobStacks);
+		JQ_ASSERT(pJobData->GUARD[0] == 0xececececececececll);
+		JQ_ASSERT(pJobData->GUARD[1] == 0xececececececececll);
+		JqFreeStack(JqGetJobStackList(nFlags), pJobData);
 	}
-#else
-	JqState.Jobs[nWorkIndex].Function(nBegin, nEnd);
-#endif
+	else
+	{
+		JqState.Jobs[nWorkIndex].Function(nBegin, nEnd);
+	}
 }
 
 

@@ -452,6 +452,15 @@ void JqTestCancel()
 
 int main(int argc, char* argv[])
 {
+	uint32_t nJqInitFlags = JQ_INIT_USE_SEPERATE_STACK;
+	for(uint32_t i = 1; i < argc; ++i)
+	{
+		if(0 == strcmp("-ns", argv[i]))
+		{
+			printf("disabling seperate stack\n");
+			nJqInitFlags &= ~JQ_INIT_USE_SEPERATE_STACK;
+		}
+	}
 
 	printf("press 'z' to toggle microprofile drawing\n");
 	printf("press 'right shift' to pause microprofile update\n");
@@ -471,7 +480,7 @@ int main(int argc, char* argv[])
 
 	};
 	//JQ_NUM_PIPES
-	JqStart(JQ_TEST_WORKERS, sizeof(nPipeConfig), nPipeConfig);
+	JqStart(JQ_TEST_WORKERS, sizeof(nPipeConfig), nPipeConfig, nJqInitFlags);
 
 	uint8_t MyPipeConfig[JQ_NUM_PIPES] =
 	{
