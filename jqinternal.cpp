@@ -190,12 +190,13 @@ void JqSemaphore::Wait()
 #ifdef _WIN32
 void* JqAllocStackInternal(uint32_t nStackSize)
 {
-	JQ_BREAK();
+	void* pAddr = VirtualAlloc(0, nStackSize, MEM_RESERVE, PAGE_READWRITE);
+	VirtualAlloc(pAddr, nStackSize, MEM_COMMIT, PAGE_READWRITE);
+	return pAddr;
 }
 void JqFreeStackInternal(void* pStack, uint32_t nStackSize)
 {
-	//never called
-	JQ_BREAK();
+	VirtualFree(pStack, 0, MEM_RELEASE);
 }
 #else
 #include <stdlib.h>
@@ -210,7 +211,6 @@ void* JqAllocStackInternal(uint32_t nStackSize)
 
 void JqFreeStackInternal(void* p, uint32_t nStackSize)
 {
-	//never called.
 	munmap(p, nStackSize);
 }
 #endif

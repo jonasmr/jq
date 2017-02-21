@@ -36,7 +36,6 @@ inline int64_t JqTick()
 #define JQ_STRCASECMP _stricmp
 typedef uint32_t ThreadIdType;
 #define JQ_USLEEP(us) JqUsleep(us);
-#define snprintf _snprintf
 #include <windows.h>
 inline int64_t JqTicksPerSecond()
 {

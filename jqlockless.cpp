@@ -416,7 +416,7 @@ void JqStart(JqAttributes* pAttr)
 	JqState.m_Attributes = *pAttr;
 
 
-	for(int i = 0; i < JqState.m_Attributes.nNumWorkers; ++i)
+	for(uint32_t i = 0; i < JqState.m_Attributes.nNumWorkers; ++i)
 	{
 		JqThreadConfig& C = JqState.m_Attributes.ThreadConfig[i];
 		uint8_t nNumActivePipes = 0;

@@ -333,7 +333,7 @@ int main(int argc, char* argv[])
 	MicroProfileOnThreadCreate("Main");
 
 	uint32_t nJqInitFlags = JQ_INIT_USE_SEPERATE_STACK;
-	for(uint32_t i = 1; i < argc; ++i)
+	for(int i = 1; i < argc; ++i)
 	{
 		if(0 == strcmp("-ns", argv[i]))
 		{

@@ -760,7 +760,6 @@ uint64_t MicroProfileTick()
 
 #ifdef _WIN32
 #include <windows.h>
-#define snprintf _snprintf
 
 #pragma warning(push)
 #pragma warning(disable: 4244)

@@ -112,7 +112,7 @@ JqJobState JqJobStateLoad(JqPipeJob* pJob)
 inline 
 bool JqJobStateCompareAndSwap(JqPipeJob* pJob, JqJobState& New, JqJobState& Old)
 {
-	bool bR = 1 == _InterlockedCompareExchange128((int64_t*)&pJob->StateArray[0], (int64_t)New.Atomic[1], (int64_t)New.Atomic[0], (int64_t*)&Old.Atomic[0]);
+	bool bR = 1 == InterlockedCompareExchange128((int64_t*)&pJob->StateArray[0], (int64_t)New.Atomic[1], (int64_t)New.Atomic[0], (int64_t*)&Old.Atomic[0]);
 	return bR;
 }
 #else
