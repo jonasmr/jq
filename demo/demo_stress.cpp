@@ -347,7 +347,12 @@ int main(int argc, char* argv[])
 	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
 #endif
 	static uint32_t nNumWorkers = g_nNumWorkers;
-	JqStart(nNumWorkers, 0, nullptr, nJqInitFlags);
+	static JqAttributes Attr;
+	JqInitAttributes(&Attr, nNumWorkers);
+	Attr.Flags = nJqInitFlags;
+	// Attr.nStackSizeSmall = 4<<10;
+	// Attr.nStackSizeLarge = 16<<10;
+	JqStart(&Attr);
 
 #ifdef _WIN32
 	std::atomic<int> keypressed;
@@ -413,7 +418,8 @@ int main(int argc, char* argv[])
 			nNumWorkers = g_nNumWorkers;
 			printf("\n");
 			JqStop();
-			JqStart(1 + nNumWorkers % 12, 0, nullptr);
+			Attr.nNumWorkers = 1 + nNumWorkers % 12;
+			JqStart(&Attr);
 		}
 		MicroProfileFlip(0);
 		{

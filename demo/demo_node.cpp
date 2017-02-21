@@ -80,26 +80,18 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
 #endif
-	static uint32_t nNumWorkers = g_nNumWorkers;
-	(void)nNumWorkers;
-	uint8_t nPipeConfig[JQ_NUM_PIPES * JQ_TEST_WORKERS] = 
-	{
-		0, 1, 2, 3,				4, 5, 6, 0xff,
-		3, 2, 1, 0xff,			0xff, 0xff, 0xff, 0xff,
-		5, 1, 0xff, 0xff,		0xff, 0xff, 0xff, 0xff,
-		1, 5, 0xff, 0xff,		0xff, 0xff, 0xff, 0xff,
-		7, 0xff, 0xff, 0xff,		0xff, 0xff, 0xff, 0xff,
+	static JqAttributes Attr;
+	JqInitAttributes(&Attr, JQ_TEST_WORKERS);
+	Attr.Flags = nJqInitFlags;
+	Attr.ThreadConfig[0] = JqThreadConfig{ 7, {0, 1, 2, 3, 4, 5, 6, 0xff} };
+	Attr.ThreadConfig[1] = JqThreadConfig{ 3, {3, 2, 1, 0xff, 0xff, 0xff, 0xff, 0xff} };
+	Attr.ThreadConfig[2] = JqThreadConfig{ 2, {5, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
+	Attr.ThreadConfig[3] = JqThreadConfig{ 2, {1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
+	Attr.ThreadConfig[4] = JqThreadConfig{ 1, {7, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,} };
 
-	};
-	//JQ_NUM_PIPES
-	JqStart(JQ_TEST_WORKERS, sizeof(nPipeConfig), nPipeConfig, nJqInitFlags);
-
-	uint8_t MyPipeConfig[JQ_NUM_PIPES] =
-	{
-		0,5, 0xff, 0xff,	0xff, 0xff, 0xff, 0xff,
-	};
-
-	JqSetThreadPipeConfig(MyPipeConfig);
+	JqStart(&Attr);
+	JqThreadConfig MyPipeConfig = JqThreadConfig{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }};
+	JqSetThreadPipeConfig(&MyPipeConfig);
 
 	JqNode A(
 		[]

@@ -2,6 +2,10 @@
 //internal code, shared by both lockless and locked version
 
 #include "jqfcontext.h"
+#ifdef JQ_MICROPROFILE
+#include "microprofile.h"
+#endif
+
 
 #if defined(__APPLE__)
 #include <mach/mach_time.h>
@@ -281,7 +285,7 @@ typedef std::atomic<JqJobStackLink> JqJobStackList;
 void* JqAllocStackInternal(uint32_t nStackSize);
 void JqFreeStackInternal(void* pStack, uint32_t nStackSize);
 
-JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nFlags);
+JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags);
 void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack);
 
 

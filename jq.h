@@ -4,6 +4,10 @@
 #define JQ_WORK_BUFFER_SIZE (2048)
 #endif
 
+#ifndef JQ_PIPE_BUFFER_SIZE
+#define JQ_PIPE_BUFFER_SIZE (2048)
+#endif
+
 #ifndef JQ_PRIORITY_MAX
 #define JQ_PRIORITY_MAX 8
 #endif
@@ -44,25 +48,14 @@
 #define JQ_API
 #endif
 
-#ifndef JQ_STACKSIZE_SMALL
-#define JQ_STACKSIZE_SMALL (16<<10)
+#ifndef JQ_DEFAULT_STACKSIZE_SMALL
+#define JQ_DEFAULT_STACKSIZE_SMALL (16<<10)
 #endif
 
-#ifndef JQ_STACKSIZE_LARGE
-#define JQ_STACKSIZE_LARGE (128<<10)
+#ifndef JQ_DEFAULT_STACKSIZE_LARGE
+#define JQ_DEFAULT_STACKSIZE_LARGE (128<<10)
 #endif
 
-#ifndef JQ_USE_SEPERATE_STACK
-#define JQ_USE_SEPERATE_STACK 1
-#endif
-
-#ifndef JQ_PIPE_BUFFER_SIZE
-#define JQ_PIPE_BUFFER_SIZE (2048)
-#endif
-
-#ifndef JQ_CACHE_LINE_SIZE
-#define JQ_CACHE_LINE_SIZE 64
-#endif
 
 #ifdef _WIN32
 #define JQ_BREAK() __debugbreak()
@@ -229,6 +222,22 @@ struct JqStats
 	}
 };
 
+struct JqThreadConfig
+{
+	uint8_t nNumPipes;
+	uint8_t nPipes[JQ_NUM_PIPES];
+};
+
+struct JqAttributes
+{
+	uint32_t 		Flags;
+	uint32_t 		nNumWorkers;
+	uint32_t 		nStackSizeSmall;
+	uint32_t 		nStackSizeLarge;
+	JqThreadConfig 	ThreadConfig[JQ_MAX_THREADS];
+};
+
+
 
 JQ_API uint64_t		JqSelf();
 JQ_API uint64_t 	JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
@@ -243,9 +252,9 @@ JQ_API uint64_t 	JqGroupBegin(); //add a non-executing job to group all jobs add
 JQ_API void 		JqGroupEnd();
 JQ_API bool 		JqIsDone(uint64_t nJob);
 JQ_API bool 		JqIsDoneExt(uint64_t nJob, uint32_t nWaitFlag);
-JQ_API void 		JqStart(int nNumWorkers, uint32_t nJqInitFlag = 0);
-JQ_API void 		JqStart(int nNumWorkers, uint32_t nPipeConfigSize, uint8_t* pPipeConfig, uint32_t nJqInitFlag = 0);
-JQ_API void			JqSetThreadPipeConfig(uint8_t PipeConfig[JQ_NUM_PIPES]);
+JQ_API void 		JqStart(int nNumWorkers);
+JQ_API void 		JqStart(JqAttributes* pAttributes);
+JQ_API void			JqSetThreadPipeConfig(JqThreadConfig* pConfig);
 JQ_API int			JqNumWorkers();
 JQ_API void 		JqStop();
 JQ_API uint32_t		JqSelfJobIndex();
@@ -255,3 +264,4 @@ JQ_API bool			JqExecuteOne(int nShortOnly);
 JQ_API void 		JqStartSentinel(int nTimeout);
 JQ_API void 		JqCrashAndDump();
 JQ_API void 		JqDump();
+JQ_API void 		JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumWorkers);

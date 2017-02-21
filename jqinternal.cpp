@@ -216,11 +216,8 @@ void JqFreeStackInternal(void* p, uint32_t nStackSize)
 #endif
 
 
-JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nFlags)
+JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)
 {
-	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
-	uint32_t nStackSize = bSmall ? JQ_STACKSIZE_SMALL : JQ_STACKSIZE_LARGE;
-	// auto& FreeList = bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
 	do{
 		JqJobStackLink Value = FreeList.load();
 		JqJobStack* pHead = Value.pHead;
@@ -239,6 +236,7 @@ JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nFlags)
 	}while(1);
 
 #ifdef JQ_MICROPROFILE
+	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
 	if(bSmall)
 	{
 		MICROPROFILE_COUNTER_ADD("jq/stack/small/count", 1);
@@ -257,11 +255,6 @@ JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nFlags)
 
 void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
 {
-	// bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
-	// uint32_t nStackSize = bSmall ? JQ_STACKSIZE_SMALL : JQ_STACKSIZE_LARGE;
-	// (void)nStackSize;
-
-	// auto& FreeList = bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
 	JQ_ASSERT(pStack->pLink == nullptr);
 	do
 	{
@@ -278,7 +271,31 @@ void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
 }
 
 
+void JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumWorkers)
+{
+	JQ_ASSERT(nNumWorkers <= JQ_MAX_THREADS);
+	memset(pAttributes, 0, sizeof(*pAttributes));
+	pAttributes->nNumWorkers = nNumWorkers;
+	pAttributes->nStackSizeSmall = JQ_DEFAULT_STACKSIZE_SMALL;
+	pAttributes->nStackSizeLarge = JQ_DEFAULT_STACKSIZE_LARGE;
+	for(uint32_t i = 0; i < nNumWorkers; ++i)
+	{
+		JqThreadConfig& C = pAttributes->ThreadConfig[i];
+		memset(&C.nPipes[0], 0xff, sizeof(C.nPipes));
+		for(uint32_t i = 0; i < JQ_NUM_PIPES; ++i)
+		{
+			C.nNumPipes = JQ_NUM_PIPES;
+			C.nPipes[i] = i;
+		}
+	}
+}
 
+void JqStart(int nNumWorkers)
+{
+	JqAttributes Attr;
+	JqInitAttributes(&Attr, nNumWorkers);
+	JqStart(&Attr);
+}
 
 
 
