@@ -418,7 +418,8 @@ int main(int argc, char* argv[])
 			nNumWorkers = g_nNumWorkers;
 			printf("\n");
 			JqStop();
-			Attr.nNumWorkers = 1 + nNumWorkers % 12;
+			JqInitAttributes(&Attr, 1 + nNumWorkers % 12);
+			Attr.Flags = nJqInitFlags;
 			JqStart(&Attr);
 		}
 		MicroProfileFlip(0);

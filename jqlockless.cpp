@@ -419,7 +419,6 @@ void JqStart(JqAttributes* pAttr)
 	for(int i = 0; i < JqState.m_Attributes.nNumWorkers; ++i)
 	{
 		JqThreadConfig& C = JqState.m_Attributes.ThreadConfig[i];
-		// uint8_t* pPipes = pPipeConfig + JQ_NUM_PIPES * i;
 		uint8_t nNumActivePipes = 0;
 		uint64_t PipeMask = 0; 
 		static_assert(JQ_NUM_PIPES < 64, "wont fit in 64bit mask");
@@ -431,14 +430,6 @@ void JqStart(JqAttributes* pAttr)
 				PipeMask |= 1llu << C.nPipes[j];
 			}
 		}
-		// else
-		// {
-		// 	for (uint32_t j = 0; j < JQ_NUM_PIPES; ++j)
-		// 	{
-		// 		JqState.m_PipeList[i][nNumActivePipes++] = j;
-		// 		PipeMask |= 1llu << j;
-		// 	}
-		// }
 		JQ_ASSERT(nNumActivePipes); // worker without active pipes.
 		JqState.m_nNumPipes[i] = nNumActivePipes;
 		int nSelectedSemaphore = -1;
@@ -580,11 +571,10 @@ void JqStop()
 		JqState.nStopSentinel = 1;
 		JQ_THREAD_JOIN(&JqState.SentinelThread);
 		JQ_THREAD_DESTROY(&JqState.SentinelThread);
-
-
 	}
+	JqFreeAllStacks(JqState.m_StackSmall);
+	JqFreeAllStacks(JqState.m_StackLarge);
 	JqState.nNumWorkers = 0;
-	//todo: free stack list..
 }
 
 void JqConsumeStats(JqStats* pStats)

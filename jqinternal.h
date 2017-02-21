@@ -287,6 +287,7 @@ void JqFreeStackInternal(void* pStack, uint32_t nStackSize);
 
 JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags);
 void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack);
+void JqFreeAllStacks(JqJobStackList& FreeList);
 
 
 

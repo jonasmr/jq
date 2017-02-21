@@ -226,14 +226,6 @@ void JqStart(JqAttributes* pAttr)
 				PipeMask |= 1llu << C.nPipes[j];
 			}
 		}
-		// else
-		// {
-		// 	for (uint32_t j = 0; j < JQ_NUM_PIPES; ++j)
-		// 	{
-		// 		JqState.m_PipeList[i][nNumActivePipes++] = j;
-		// 		PipeMask |= 1llu << j;
-		// 	}
-		// }
 		JQ_ASSERT(nNumActivePipes); // worker without active pipes.
 		JqState.m_nNumPipes[i] = nNumActivePipes;
 		int nSelectedSemaphore = -1;
@@ -347,6 +339,10 @@ void JqStop()
 		JQ_THREAD_JOIN(&JqState.WorkerThreads[i]);
 		JQ_THREAD_DESTROY(&JqState.WorkerThreads[i]);
 	}
+	JqFreeAllStacks(JqState.m_StackSmall);
+	JqFreeAllStacks(JqState.m_StackLarge);
+
+
 	JqState.nNumWorkers = 0;
 }
 
