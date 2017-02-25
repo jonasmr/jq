@@ -279,26 +279,15 @@ void JqTest()
 		MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST_WAIT_ALL", 0xff00ff);
 		JqWaitAll();
 	}
-	MICROPROFILE_SCOPEI("JQDEMO", "JQ_TEST", 0xff00ff);
-
-	g_nLowCount = 0;
-
-
-	uint64_t nJob = JqAdd( [](int begin, int end)
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
-		g_nLowCount++;
-	}, 3, JOB_COUNT_LOW);
-	g_nExternalStats ++;
-	JqWait(nJob);
-	{
-		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
-		JobSpinWork(500);
-	}
 	uint64_t nStart = JqTick();	
-	#if 1
-	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
+#if 0
+	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 2)
 	{
+		uint64_t nJobMedium = JqAdd([]{}, 0, 10);
+	}
+#else
+	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
+    {
 		g_nJobCount = 0;
 		g_nJobCount0 = 0;
 		g_nJobCount1 = 0;
@@ -310,15 +299,13 @@ void JqTest()
 		{
 			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
 			JqWait(nJobMedium);
-
 		}
-
 		DEMO_ASSERT(g_nJobCount == JOB_COUNT);
 		DEMO_ASSERT(g_nJobCount0 == JOB_COUNT_0 * JOB_COUNT);
 		DEMO_ASSERT(g_nJobCount1 == JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
 		DEMO_ASSERT(g_nJobCount2 == JOB_COUNT_2 * JOB_COUNT_1 * JOB_COUNT_0 * JOB_COUNT);
-	}
-	#endif
+    }
+#endif
 }
 
 
@@ -341,7 +328,6 @@ int main(int argc, char* argv[])
 			nJqInitFlags &= ~JQ_INIT_USE_SEPERATE_STACK;
 		}
 	}
-
 
 #ifdef _WIN32
 	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);

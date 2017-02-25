@@ -463,6 +463,7 @@ void JqStart(JqAttributes* pAttr)
 	{
 		JqState.m_Pipes[i].nPut.store(1);
 		JqState.m_Pipes[i].nGet.store(1);
+		JqState.m_Pipes[i].nHandle.store(1);
 		JqState.m_Pipes[i].StartJobFunc = JqRunJobHelper;
 		JqState.m_Pipes[i].FinishJobFunc = JqFinishJobHelper;
 		JqState.m_Pipes[i].nPipeId = (uint8_t)i;

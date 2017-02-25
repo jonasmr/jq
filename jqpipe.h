@@ -160,6 +160,7 @@ struct JqPipe
 {
 	std::atomic<uint64_t>	nPut;
 	std::atomic<uint64_t>	nGet;
+	std::atomic<uint64_t>	nHandle;
 	uint8_t					nPipeId;
 	JqPipeJob				Jobs[JQ_PIPE_BUFFER_SIZE];
 

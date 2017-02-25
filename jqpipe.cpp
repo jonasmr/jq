@@ -45,9 +45,13 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 	JQ_ASSERT(nNumJobs > 0);
 	uint64_t nNextHandle = 0;
 	uint64_t nHandleRetries = 0;
+	JqPipeHandle H;
+	int Success = 0;
 	do
 	{
-		nNextHandle = pPipe->nPut.fetch_add(1);
+		
+		nNextHandle = pPipe->nHandle.fetch_add(1);
+		uint64_t HandleU = nNextHandle;
 		nNextHandle &= 0xffffffff;
 		if(nNextHandle)
 		{
@@ -55,7 +59,6 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 			uint16_t nJobIndex = nNextHandle % JQ_PIPE_BUFFER_SIZE;
 			JqPipeJob* pJob = &pPipe->Jobs[nJobIndex];
 			JqJobState State;
-			do
 			{
 				State = JqJobStateLoad(pJob);
 				if(State.nStartedHandle == State.nFinishedHandle &&
@@ -72,32 +75,32 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 					New.nFinishedHandle =  State.nFinishedHandle;
 					if(JqJobStateCompareAndSwap(pJob, New, State))
 					{
-						JqPipeHandle H;
+						Success = 1;
 						H.Handle = nNextHandle;
 						H.Invalid = 0;
 						H.Pipe = pPipe->nPipeId;
 
-						uint64_t nMaxRetries;
-						JQ_ASSERT(nHandleRetries < JQ_PIPE_BUFFER_SIZE * 2); // if you hit this, bump buffer size
-						do
-						{
-							nMaxRetries = pPipe->Stats.nMaxHandleRetries.load();
-							if(nMaxRetries > nHandleRetries)
-							{
-								break;
-							}
-						}while(!pPipe->Stats.nMaxHandleRetries.compare_exchange_weak(nMaxRetries, nHandleRetries));
-
-
-
-						return H;
 					}
 				}
-				else
+			}
+		}
+		//unfortunately this is the best way i can come up with solving the reused handle problem.
+		while(1)
+		{
+			uint64_t H = pPipe->nPut.load();
+			if(H == HandleU)
+			{
+				uint64_t nNext = HandleU+1;
+				if(pPipe->nPut.compare_exchange_strong(H, nNext))
 				{
-					break;//still running, bail out and take next
+					break;
 				}
-			}while(1);
+			}
+
+		}
+		if(Success)
+		{
+			return H;
 		}
 	}while(1);
 }
