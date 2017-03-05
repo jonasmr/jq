@@ -1,15 +1,7 @@
 #pragma once
 
-#ifndef JQ_WORK_BUFFER_SIZE
-#define JQ_WORK_BUFFER_SIZE (2048)
-#endif
-
 #ifndef JQ_PIPE_BUFFER_SIZE
 #define JQ_PIPE_BUFFER_SIZE (2048)
-#endif
-
-#ifndef JQ_MAX_JOB_STACK
-#define JQ_MAX_JOB_STACK 8
 #endif
 
 #ifndef JQ_DEFAULT_WAIT_TIME_US
@@ -256,7 +248,7 @@ JQ_API void 		JqStop();
 JQ_API uint32_t		JqSelfJobIndex();
 JQ_API int 			JqGetNumWorkers();
 JQ_API void 		JqConsumeStats(JqStats* pStatsOut);
-JQ_API bool			JqExecuteOne(int nShortOnly);
+JQ_API bool			JqExecuteOne();
 JQ_API void 		JqStartSentinel(int nTimeout);
 JQ_API void 		JqCrashAndDump();
 JQ_API void 		JqDump();
