@@ -14,7 +14,7 @@ CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
 
 CPP_SOURCES = microprofile.cpp ../jqpipe.cpp  ../jqinternal.cpp ../jqnode.cpp
 DEMO_SOURCES = demo_stress.cpp demo_priority.cpp demo_node.cpp demo_cancel.cpp
-JQ_SOURCES=../jqlockless.cpp ../jqmutex.cpp
+JQ_SOURCES=../jqlockless.cpp ../jqlocked.cpp
 C_SOURCES =
 ASM_SOURCES = ../boost_context/jump_x86_64_sysv_macho_gas.S ../boost_context/make_x86_64_sysv_macho_gas.S
 
@@ -27,7 +27,7 @@ C_OBJS = $(patsubst %.c,%.o,$(C_SOURCES))
 ASM_OBJS = $(patsubst %.S,%.o,$(ASM_SOURCES))
 OBJS = $(C_OBJS) $(CPP_OBJS) $(ASM_OBJS)
 OLL = ../jqlockless.o
-OM = ../jqmutex.o
+OM = ../jqlocked.o
 
 default: ll m
 
