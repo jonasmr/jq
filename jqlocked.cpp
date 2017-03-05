@@ -27,8 +27,6 @@
 
 
 #define JQ_NUM_JOBS (JQ_WORK_BUFFER_SIZE-1)
-#define JQ_PRIORITY_SIZE (JQ_PRIORITY_MAX+1)
-#define JQ_PRIORITY_ARRAY_SIZE (JQ_PRIORITY_SIZE)
 
 
 
@@ -145,8 +143,8 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	uint32_t nFreeJobs;
 
 	JqJob Jobs[JQ_WORK_BUFFER_SIZE];
-	uint16_t nPrioListHead[JQ_PRIORITY_ARRAY_SIZE];
-	uint16_t nPrioListTail[JQ_PRIORITY_ARRAY_SIZE];
+	uint16_t nPrioListHead[JQ_NUM_PIPES];
+	uint16_t nPrioListTail[JQ_NUM_PIPES];
 
 	JqState_t()
 		:nNumWorkers(0)
@@ -606,7 +604,7 @@ uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumPrio, uint8_t* pPrio)
 	}
 	else
 	{
-		for(int i = 0; i < JQ_PRIORITY_ARRAY_SIZE; ++i)
+		for(int i = 0; i < JQ_NUM_PIPES; ++i)
 		{
 			uint16_t nIndex = JqState.nPrioListHead[i];
 			if(nIndex)
@@ -926,7 +924,7 @@ bool JqCancel(uint64_t nJob)
 uint64_t JqAdd(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint32_t nJobFlags)
 {
 	uint64_t nParent = 0 != (nJobFlags & JQ_JOBFLAG_DETACHED) ? 0 : JqSelf();
-	JQ_ASSERT(nPrio < JQ_PRIORITY_SIZE);
+	JQ_ASSERT(nPrio < JQ_NUM_PIPES);
 	JQ_ASSERT(JqState.nNumWorkers);
 	JQ_ASSERT(nNumJobs);
 	if(nRange < 0)

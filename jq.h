@@ -8,10 +8,6 @@
 #define JQ_PIPE_BUFFER_SIZE (2048)
 #endif
 
-#ifndef JQ_PRIORITY_MAX
-#define JQ_PRIORITY_MAX 8
-#endif
-
 #ifndef JQ_MAX_JOB_STACK
 #define JQ_MAX_JOB_STACK 8
 #endif
