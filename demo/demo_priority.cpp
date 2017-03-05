@@ -245,7 +245,7 @@ void JqTestCancel()
 	SCancelJobState* Cancel = new SCancelJobState[nNumJobs];
 	g_CancelFinished = 0;
 	//start a bunch of jobs, cancel half of them
-	uint64_t nGroup = JqGroupBegin();
+	uint64_t nGroup = JqGroupBegin(0);
 	for(uint32_t i = 0; i < nNumJobs; ++i)
 	{
 		SCancelJobState* pState = &Cancel[i];

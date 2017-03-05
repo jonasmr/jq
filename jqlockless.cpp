@@ -1400,7 +1400,7 @@ uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint3
 }
 
 
-uint64_t JqGroupBegin()
+uint64_t JqGroupBegin(uint8_t nPriority)
 {
 	uint64_t nHandle = JqNextHandle();
 	uint16_t nIndex = nHandle % JQ_TREE_BUFFER_SIZE2;

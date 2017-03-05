@@ -136,6 +136,7 @@ inline void JqUsleep(__int64 usec)
 #endif
 #include <atomic>
 
+struct JqPipe;
 struct JqMutex
 {
 	JqMutex();
@@ -226,6 +227,7 @@ struct JqJobStack
 	JqFContext pContextJob;
 
 	JqJobStack* pLink;//when in use: Previous. When freed, next element in free list
+	JqPipe* pPipe;
 
 	uint32_t nExternalId;
 	uint32_t nFlags;
