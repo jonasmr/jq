@@ -9,17 +9,17 @@ Finally there is an experimental lockless verision.
 
 # Functions
 
-`JqStart`: Start Jq.
-`JqStop`: Stop Jq.
-`JqAdd`: Add a Job.
-`JqWait`: Wait for a job.
-`JqWaitAll': Wait for all jobs to finish.
-`JqExecuteOne`: can be called from any thread to execute a job. 
-`JqExecuteChildren`: Execute one child job of job passed in.
-`JqSetThreadPipeConfig`: can be called to set how non worker threads select jobs, when fetching jobs through `JqExecuteOne` and `JqWait`
-`JqSpawn`: Adds a job and immediately waits for it.
-`JqCancel`: Attempt to cancel a job. Fails if started or finished. Note that the only way to find out if a job is cancelled is by the return value of this function.
-`JqConsumeStats`: Consume various internal stats.
+* `JqStart`: Start Jq.
+* `JqStop`: Stop Jq.
+* `JqAdd`: Add a Job.
+* `JqWait`: Wait for a job.
+* `JqWaitAll': Wait for all jobs to finish.
+* `JqExecuteOne`: can be called from any thread to execute a job. 
+* `JqExecuteChildren`: Execute one child job of job passed in.
+* `JqSetThreadPipeConfig`: can be called to set how non worker threads select jobs, when fetching jobs through `JqExecuteOne` and `JqWait`
+* `JqSpawn`: Adds a job and immediately waits for it.
+* `JqCancel`: Attempt to cancel a job. Fails if started or finished. Note that the only way to find out if a job is cancelled is by the return value of this function.
+* `JqConsumeStats`: Consume various internal stats.
 
 # Usage
 
@@ -94,13 +94,13 @@ range 50 100
 
 `JqWait` takes as argument some flags that controls two things
 * How to find jobs when the job we are waiting for is not finished
-** `JQ_WAITFLAG_EXECUTE_SUCCESSORS`: Only execute jobs that are children of the current job
-** `JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS`: Prefer child jobs, but allow other jobs to run in case of no child jobs available
-** `JQ_WAITFLAG_EXECUTE_ANY`: Execute any job
+	* `JQ_WAITFLAG_EXECUTE_SUCCESSORS`: Only execute jobs that are children of the current job
+	* `JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS`: Prefer child jobs, but allow other jobs to run in case of no child jobs available
+	* `JQ_WAITFLAG_EXECUTE_ANY`: Execute any job
 * What to do when the jobs is not done, and there isnt an available candidate job to run instead
-** `JQ_WAITFLAG_BLOCK`: Wait on a semaphore which is signalled by job when done
-** `JQ_WAITFLAG_SLEEP`: Sleep for the amount specified when calling
-** `JQ_WAITFLAG_SPIN`: Spin untill done.
+	* `JQ_WAITFLAG_BLOCK`: Wait on a semaphore which is signalled by job when done
+	* `JQ_WAITFLAG_SLEEP`: Sleep for the amount specified when calling
+	* `JQ_WAITFLAG_SPIN`: Spin untill done.
 
 
 
@@ -152,10 +152,10 @@ If you prefer adding your jobs as nodes declared via objects, you can use JqNode
 
 #demo programs
 
-*`demo_cancel.cpp`: demonstrate and test JqCancel
-*`demo_priority.cpp`: demonstrate and test priority system
-*`demo_stress.cpp`: stress test of how many jobs can be added and executed.
-*`demo_node.cpp`: demostrate and test JqNode
+* `demo_cancel.cpp`: demonstrate and test JqCancel
+* `demo_priority.cpp`: demonstrate and test priority system
+* `demo_stress.cpp`: stress test of how many jobs can be added and executed.
+* `demo_node.cpp`: demostrate and test JqNode
 
 # License
 Licensed using unlicense.org
