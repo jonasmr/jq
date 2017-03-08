@@ -13,7 +13,7 @@ Finally there is an experimental lockless verision.
 * `JqStop`: Stop Jq.
 * `JqAdd`: Add a Job.
 * `JqWait`: Wait for a job.
-* `JqWaitAll': Wait for all jobs to finish.
+* `JqWaitAll`: Wait for all jobs to finish.
 * `JqExecuteOne`: can be called from any thread to execute a job. 
 * `JqExecuteChildren`: Execute one child job of job passed in.
 * `JqSetThreadPipeConfig`: can be called to set how non worker threads select jobs, when fetching jobs through `JqExecuteOne` and `JqWait`
