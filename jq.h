@@ -52,6 +52,9 @@
 #define JQ_DEFAULT_STACKSIZE_LARGE (128<<10)
 #endif
 
+#ifndef JQ_LOCK_STATS
+#define JQ_LOCK_STATS 1
+#endif
 
 #ifdef _WIN32
 #define JQ_BREAK() __debugbreak()
@@ -192,7 +195,8 @@ struct JqStats
 	uint32_t nNumCancelled;
 	uint32_t nNumCancelledSub;
 	uint32_t nNumLocks;
-	uint32_t nNumWaitKicks;
+	uint32_t nNumSema;
+	uint32_t nNumLocklessPops;
 	uint32_t nNumWaitCond;
 	uint32_t nMemoryUsed;
 	uint64_t nNextHandle;
@@ -208,8 +212,8 @@ struct JqStats
 		nNumCancelled += Other.nNumCancelled;
 		nNumCancelledSub += Other.nNumCancelledSub;
 		nNumLocks += Other.nNumLocks;
-		nNumWaitKicks += Other.nNumWaitKicks;
-		nNumWaitCond += Other.nNumWaitCond;
+		nNumSema += Other.nNumSema;
+		nNumLocklessPops += Other.nNumLocklessPops;
 		nMemoryUsed += Other.nMemoryUsed;
 		nNextHandle += Other.nNextHandle;
 		nSkips += Other.nSkips;

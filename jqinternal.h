@@ -136,6 +136,19 @@ inline void JqUsleep(__int64 usec)
 #endif
 #include <atomic>
 
+#if JQ_LOCK_STATS
+#define JQLSC(exp) exp
+extern std::atomic<uint32_t> g_JqLockOps;
+extern std::atomic<uint32_t> g_JqCondWait;
+extern std::atomic<uint32_t> g_JqCondSignal;
+extern std::atomic<uint32_t> g_JqSemaSignal;
+extern std::atomic<uint32_t> g_JqSemaWait;
+extern std::atomic<uint32_t> g_JqLocklessPops;
+#else
+#define JQLSC(exp) do{}while(0)
+#endif
+
+
 struct JqPipe;
 struct JqMutex
 {

@@ -348,7 +348,7 @@ void JqTest()
 		printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|%7s|%7s\n", 
 			"JobAdd", "JobFin","JobCancel",
 			"SubAdd", "SubFin",
-			"Locks", "Waits", "Kicks", 
+			"Locks", "Sema", "LLPop", 
 			"JobAdd", "JobFin", "SubAdd", "SubFin","Handles", "WrapTime", "Time", "Workers");
 		}
 
@@ -369,8 +369,8 @@ void JqTest()
 			Stats.nNumAddedSub / (float)fTime,
 			Stats.nNumFinishedSub / (float)fTime,
 			Stats.nNumLocks / (float)fTime,
-			Stats.nNumWaitCond / (float)fTime,
-			Stats.nNumWaitKicks / (float)fTime,
+			Stats.nNumSema / (float)fTime,
+			Stats.nNumLocklessPops / (float)fTime,
 			Stats.nNumAdded,
 			Stats.nNumFinished,
 			Stats.nNumAddedSub,
