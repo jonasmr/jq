@@ -283,7 +283,7 @@ void JqTest()
 #if 0
 	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 2)
 	{
-		uint64_t nJobMedium = JqAdd([]{}, 0, 10);
+		JqAdd([]{}, 0, 10);
 	}
 #else
 	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)

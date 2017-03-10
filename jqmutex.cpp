@@ -685,8 +685,6 @@ void JqExecuteJob(JqPipe& Pipe, uint64_t nJob, uint16_t nSubIndex)
 
 uint16_t JqTakeJob(JqPipe** pPipe, uint16_t* pSubIndex, uint32_t nNumPrio, uint8_t* pPrio)
 {
-	//TODO: SUPPORT PEEKING
-	JQ_ASSERT_LOCKED();
 	if(nNumPrio)
 	{
 		for(uint32_t i = 0; i < nNumPrio; i++)
@@ -925,14 +923,7 @@ bool JqExecuteOne()
 	if(!nWork)
 		return false;
 	JqExecuteJob(*pPipe, pPipe->Jobs[nWork].nStartedHandle, nSubIndex);
-	{
-		JqIncrementFinishedHelper(*pPipe, pPipe->Jobs[nWork].nStartedHandle);
-		// if(!JqIncrementFinishedLockless(*pPipe, )
-		// {
-		// 	JqMutexLock lock(pPipe->Mutex);
-		// 	JqIncrementFinished(*pPipe, pPipe->Jobs[nWork].nStartedHandle);
-		// }
-	}
+	JqIncrementFinishedHelper(*pPipe, pPipe->Jobs[nWork].nStartedHandle);
 	return true;
 }
 
@@ -993,22 +984,21 @@ uint64_t JqNextHandle(uint64_t nJob)
 uint64_t JqFindHandle(JqPipe& Pipe)
 {
 	JQ_ASSERT_LOCKED();
-	JQ_ASSERT(Pipe.nFreeJobs);//if you hit this, you should bump queue size
 	while(!Pipe.nFreeJobs)
 	{
 		if(JqSelfPos < JQ_MAX_JOB_STACK)
 		{
-			JQ_BREAK(); //todo
-			// JQ_MICROPROFILE_SCOPE("AddExecute", 0xff); // if this starts happening the job queue size should be increased..
-			// uint16_t nSubIndex = 0;
-			// uint16_t nIndex = JqTakeJob(&nSubIndex, 0, nullptr);
-			// if(nIndex)
-			// {
-			// 	Lock.Unlock();
-			// 	JqExecuteJob(JqState.Jobs[nIndex].nStartedHandle, nSubIndex);
-			// 	Lock.Lock();
-			// 	JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);
-			// }
+			Pipe.Mutex.Unlock();
+			JQ_MICROPROFILE_SCOPE("AddExecute", 0xff); // if this starts happening the job queue size should be increased..
+			JqPipe* pJobPipe = 0;
+			uint16_t nSubIndex = 0;			
+			uint16_t nIndex = JqTakeJob(&pJobPipe, &nSubIndex, 0, nullptr);
+			if(nIndex)
+			{
+				JqExecuteJob(*pJobPipe, pJobPipe->Jobs[nIndex].nStartedHandle, nSubIndex);
+				JqIncrementFinishedHelper(*pJobPipe, pJobPipe->Jobs[nIndex].nStartedHandle);
+			}
+			Pipe.Mutex.Lock();
 		}
 		else
 		{
