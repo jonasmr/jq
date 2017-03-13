@@ -1,5 +1,15 @@
 #include "jq.h"
 #include "jqinternal.h"
+
+#if JQ_LOCK_STATS
+std::atomic<uint32_t> g_JqLockOps;
+std::atomic<uint32_t> g_JqCondWait;
+std::atomic<uint32_t> g_JqCondSignal;
+std::atomic<uint32_t> g_JqSemaSignal;
+std::atomic<uint32_t> g_JqSemaWait;
+std::atomic<uint32_t> g_JqLocklessPops;
+#endif
+
 #ifdef _WIN32
 JqMutex::JqMutex()
 {
@@ -14,11 +24,13 @@ JqMutex::~JqMutex()
 void JqMutex::Lock()
 {
 	EnterCriticalSection(&CriticalSection);
+	JQLSC(g_JqLockOps.fetch_add(1));
 }
 
 void JqMutex::Unlock()
 {
 	LeaveCriticalSection(&CriticalSection);
+	JQLSC(g_JqLockOps.fetch_add(1));
 }
 
 
@@ -34,16 +46,19 @@ JqConditionVariable::~JqConditionVariable()
 
 void JqConditionVariable::Wait(JqMutex& Mutex)
 {
+	JQLSC(g_JqCondWait.fetch_add(1));
 	SleepConditionVariableCS(&Cond, &Mutex.CriticalSection, INFINITE);
 }
 
 void JqConditionVariable::NotifyOne()
 {
+	JQLSC(g_JqCondSignal.fetch_add(1));
 	WakeConditionVariable(&Cond);
 }
 
 void JqConditionVariable::NotifyAll()
 {
+	JQLSC(g_JqCondSignal.fetch_add(1));	
 	WakeAllConditionVariable(&Cond);
 }
 
@@ -76,14 +91,88 @@ void JqSemaphore::Signal(uint32_t nCount)
 	if(nCount > (uint32_t)nMaxCount)
 		nCount = nMaxCount;
 	BOOL r = ReleaseSemaphore(Handle, nCount, 0);
+	JQLSC(g_JqSemaSignal.fetch_add(1));
 }
 
 void JqSemaphore::Wait()
 {
+	JQLSC(g_JqSemaWait.fetch_add(1));
 	JQ_MICROPROFILE_SCOPE("Wait", 0xc0c0c0);
 	DWORD r = WaitForSingleObject((HANDLE)Handle, INFINITE);
 	JQ_ASSERT(WAIT_OBJECT_0 == r);
 }
+#else
+
+#if defined(__APPLE__)
+JqMutex::JqMutex()
+{
+	UnfairLock = OS_UNFAIR_LOCK_INIT;
+}
+
+JqMutex::~JqMutex()
+{
+}
+
+void JqMutex::Lock()
+{
+	uint64_t tid;
+	pthread_threadid_np(NULL, &tid);
+	JQ_ASSERT(tid != 0);
+	if(Owner == tid)
+	{
+		Count++;
+	}
+	else
+	{
+		os_unfair_lock_lock(&UnfairLock);
+		JQ_ASSERT(Owner == 0);
+		JQ_ASSERT(Count == 0);
+		Count++;
+		Owner = tid;
+	}
+	// pthread_mutex_lock(&Mutex);
+	JQLSC(g_JqLockOps.fetch_add(1));
+
+}
+
+void JqMutex::Unlock()
+{
+	uint64_t tid;
+	pthread_threadid_np(NULL, &tid);
+	JQ_ASSERT(Owner == tid);
+	Count--;
+	if(0 == Count)
+	{
+		Owner = 0;
+		os_unfair_lock_unlock(&UnfairLock);
+	}
+
+	JQLSC(g_JqLockOps.fetch_add(1));
+}
+
+JqCondMutex::JqCondMutex()
+{
+	pthread_mutex_init(&Mutex, 0);
+}
+
+JqCondMutex::~JqCondMutex()
+{
+	pthread_mutex_destroy(&Mutex);
+}
+
+void JqCondMutex::Lock()
+{
+	pthread_mutex_lock(&Mutex);
+	JQLSC(g_JqLockOps.fetch_add(1));
+
+}
+
+void JqCondMutex::Unlock()
+{
+	pthread_mutex_unlock(&Mutex);
+	JQLSC(g_JqLockOps.fetch_add(1));
+}
+
 #else
 JqMutex::JqMutex()
 {
@@ -98,13 +187,16 @@ JqMutex::~JqMutex()
 void JqMutex::Lock()
 {
 	pthread_mutex_lock(&Mutex);
+	JQLSC(g_JqLockOps.fetch_add(1));
+
 }
 
 void JqMutex::Unlock()
 {
 	pthread_mutex_unlock(&Mutex);
+	JQLSC(g_JqLockOps.fetch_add(1));
 }
-
+#endif
 
 JqConditionVariable::JqConditionVariable()
 {
@@ -116,19 +208,25 @@ JqConditionVariable::~JqConditionVariable()
 	pthread_cond_destroy(&Cond);
 }
 
-void JqConditionVariable::Wait(JqMutex& Mutex)
+void JqConditionVariable::Wait(JqCondMutex& Mutex)
 {
 	pthread_cond_wait(&Cond, &Mutex.Mutex);
+
+	JQLSC(g_JqCondWait.fetch_add(1));
+
 }
 
 void JqConditionVariable::NotifyOne()
 {
 	pthread_cond_signal(&Cond);
+	JQLSC(g_JqCondSignal.fetch_add(1));
 }
 
 void JqConditionVariable::NotifyAll()
 {
 	pthread_cond_broadcast(&Cond);
+	JQLSC(g_JqCondSignal.fetch_add(1));
+
 }
 
 JqSemaphore::JqSemaphore()
@@ -146,12 +244,14 @@ void JqSemaphore::Init(int nCount)
 }
 void JqSemaphore::Signal(uint32_t nCount)
 {
+	JQLSC(g_JqSemaSignal.fetch_add(1));
+
 	if(nReleaseCount.load() == nMaxCount)
 	{
 		return;
 	}
 	{
-		JqMutexLock l(Mutex);
+		JqCondMutexLock l(Mutex);
 		uint32_t nCurrent = nReleaseCount.load();
 		if(nCurrent + nCount > nMaxCount)
 			nCount = nMaxCount - nCurrent;
@@ -173,8 +273,10 @@ void JqSemaphore::Signal(uint32_t nCount)
 
 void JqSemaphore::Wait()
 {
+	JQLSC(g_JqSemaWait.fetch_add(1));
+
 	JQ_MICROPROFILE_SCOPE("Wait", 0xc0c0c0);
-	JqMutexLock l(Mutex);
+	JqCondMutexLock l(Mutex);
 	while(!nReleaseCount)
 	{
 		Cond.Wait(Mutex);

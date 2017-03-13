@@ -42,8 +42,8 @@ struct JqStatsInternal
 	std::atomic<uint32_t> nNumCancelled;
 	std::atomic<uint32_t> nNumCancelledSub;
 	std::atomic<uint32_t> nNumLocks;
-	std::atomic<uint32_t> nNumWaitKicks;
-	std::atomic<uint32_t> nNumWaitCond;
+	std::atomic<uint32_t> nNumSema;
+	std::atomic<uint32_t> nNumLocklessPops;
 	std::atomic<uint32_t> nMemoryUsed;
 	std::atomic<uint32_t> nAttempts;
 	std::atomic<uint32_t> nNextHandleCalled;
@@ -587,9 +587,10 @@ void JqConsumeStats(JqStats* pStats)
 	pStats->nNumFinishedSub = JqState.Stats.nNumFinishedSub.exchange(0);
 	pStats->nNumCancelled = JqState.Stats.nNumCancelled.exchange(0);
 	pStats->nNumCancelledSub = JqState.Stats.nNumCancelledSub.exchange(0);
-	pStats->nNumLocks = JqState.Stats.nNumLocks.exchange(0);
-	pStats->nNumWaitKicks = JqState.Stats.nNumWaitKicks.exchange(0);
-	pStats->nNumWaitCond = JqState.Stats.nNumWaitCond.exchange(0);
+
+	pStats->nNumLocks = g_JqLockOps.exchange(0);
+	pStats->nNumSema = g_JqSemaSignal.exchange(0) + g_JqCondSignal.exchange(0) + g_JqSemaWait.exchange(0) + g_JqCondWait.exchange(0);
+	pStats->nNumLocklessPops = g_JqLocklessPops.exchange(0);
 	pStats->nNextHandle = JqState.nNextHandle.load();
 	pStats->nAttempts = JqState.Stats.nAttempts.exchange(0);
 	pStats->nSkips = JqState.Stats.nSkips.exchange(0);
@@ -1276,6 +1277,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs, int nRange, uint
 		int nSemaIndex = JqState.m_PipeToSemaphore[nPipe][i];
 		JqState.Semaphore[nSemaIndex].S.Signal(nNumJobs);
 	}
+	JQLSC(g_JqLocklessPops++);
 	return nHandle;
 }
 
@@ -1400,7 +1402,7 @@ uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint3
 }
 
 
-uint64_t JqGroupBegin()
+uint64_t JqGroupBegin(uint8_t nPriority)
 {
 	uint64_t nHandle = JqNextHandle();
 	uint16_t nIndex = nHandle % JQ_TREE_BUFFER_SIZE2;

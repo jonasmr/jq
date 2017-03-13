@@ -28,6 +28,10 @@
 #define JQ_ASSERT_SANITY 0
 #endif
 
+#ifndef JQ_MAX_JOB_STACK
+#define JQ_MAX_JOB_STACK 8
+#endif
+
 #ifndef JQ_NUM_PIPES
 #define JQ_NUM_PIPES 8
 #endif
@@ -44,6 +48,9 @@
 #define JQ_DEFAULT_STACKSIZE_LARGE (128<<10)
 #endif
 
+#ifndef JQ_LOCK_STATS
+#define JQ_LOCK_STATS 1
+#endif
 
 #ifdef _WIN32
 #define JQ_BREAK() __debugbreak()
@@ -184,7 +191,8 @@ struct JqStats
 	uint32_t nNumCancelled;
 	uint32_t nNumCancelledSub;
 	uint32_t nNumLocks;
-	uint32_t nNumWaitKicks;
+	uint32_t nNumSema;
+	uint32_t nNumLocklessPops;
 	uint32_t nNumWaitCond;
 	uint32_t nMemoryUsed;
 	uint64_t nNextHandle;
@@ -200,8 +208,8 @@ struct JqStats
 		nNumCancelled += Other.nNumCancelled;
 		nNumCancelledSub += Other.nNumCancelledSub;
 		nNumLocks += Other.nNumLocks;
-		nNumWaitKicks += Other.nNumWaitKicks;
-		nNumWaitCond += Other.nNumWaitCond;
+		nNumSema += Other.nNumSema;
+		nNumLocklessPops += Other.nNumLocklessPops;
 		nMemoryUsed += Other.nMemoryUsed;
 		nNextHandle += Other.nNextHandle;
 		nSkips += Other.nSkips;
@@ -236,7 +244,7 @@ JQ_API void 		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag =
 JQ_API uint64_t		JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API bool 		JqCancel(uint64_t nJob);
 JQ_API void			JqExecuteChildren(uint64_t nJob);
-JQ_API uint64_t 	JqGroupBegin(); //add a non-executing job to group all jobs added between begin/end
+JQ_API uint64_t 	JqGroupBegin(uint8_t nPipe); //add a non-executing job to group all jobs added between begin/end
 JQ_API void 		JqGroupEnd();
 JQ_API bool 		JqIsDone(uint64_t nJob);
 JQ_API bool 		JqIsDoneExt(uint64_t nJob, uint32_t nWaitFlag);

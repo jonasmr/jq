@@ -224,7 +224,7 @@ void JqTest()
 		printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|%7s|%7s\n", 
 			"JobAdd", "JobFin","JobCancel",
 			"SubAdd", "SubFin",
-			"Locks", "Waits", "Kicks", 
+			"Locks", "Sema", "LLPop", 
 			"JobAdd", "JobFin", "SubAdd", "SubFin","Handles", "WrapTime", "Time", "Workers");
 		}
 
@@ -245,8 +245,8 @@ void JqTest()
 			Stats.nNumAddedSub / (float)fTime,
 			Stats.nNumFinishedSub / (float)fTime,
 			Stats.nNumLocks / (float)fTime,
-			Stats.nNumWaitCond / (float)fTime,
-			Stats.nNumWaitKicks / (float)fTime,
+			Stats.nNumSema / (float)fTime,
+			Stats.nNumLocklessPops / (float)fTime,
 			Stats.nNumAdded,
 			Stats.nNumFinished,
 			Stats.nNumAddedSub,
@@ -283,7 +283,7 @@ void JqTest()
 #if 0
 	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 2)
 	{
-		uint64_t nJobMedium = JqAdd([]{}, 0, 10);
+		JqAdd([]{}, 0, 10);
 	}
 #else
 	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
