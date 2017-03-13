@@ -102,6 +102,78 @@ void JqSemaphore::Wait()
 	JQ_ASSERT(WAIT_OBJECT_0 == r);
 }
 #else
+
+#if defined(__APPLE__)
+JqMutex::JqMutex()
+{
+	UnfairLock = OS_UNFAIR_LOCK_INIT;
+}
+
+JqMutex::~JqMutex()
+{
+}
+
+void JqMutex::Lock()
+{
+	uint64_t tid;
+	pthread_threadid_np(NULL, &tid);
+	JQ_ASSERT(tid != 0);
+	if(Owner == tid)
+	{
+		Count++;
+	}
+	else
+	{
+		os_unfair_lock_lock(&UnfairLock);
+		JQ_ASSERT(Owner == 0);
+		JQ_ASSERT(Count == 0);
+		Count++;
+		Owner = tid;
+	}
+	// pthread_mutex_lock(&Mutex);
+	JQLSC(g_JqLockOps.fetch_add(1));
+
+}
+
+void JqMutex::Unlock()
+{
+	uint64_t tid;
+	pthread_threadid_np(NULL, &tid);
+	JQ_ASSERT(Owner == tid);
+	Count--;
+	if(0 == Count)
+	{
+		Owner = 0;
+		os_unfair_lock_unlock(&UnfairLock);
+	}
+
+	JQLSC(g_JqLockOps.fetch_add(1));
+}
+
+JqCondMutex::JqCondMutex()
+{
+	pthread_mutex_init(&Mutex, 0);
+}
+
+JqCondMutex::~JqCondMutex()
+{
+	pthread_mutex_destroy(&Mutex);
+}
+
+void JqCondMutex::Lock()
+{
+	pthread_mutex_lock(&Mutex);
+	JQLSC(g_JqLockOps.fetch_add(1));
+
+}
+
+void JqCondMutex::Unlock()
+{
+	pthread_mutex_unlock(&Mutex);
+	JQLSC(g_JqLockOps.fetch_add(1));
+}
+
+#else
 JqMutex::JqMutex()
 {
 	pthread_mutex_init(&Mutex, 0);
@@ -124,7 +196,7 @@ void JqMutex::Unlock()
 	pthread_mutex_unlock(&Mutex);
 	JQLSC(g_JqLockOps.fetch_add(1));
 }
-
+#endif
 
 JqConditionVariable::JqConditionVariable()
 {
@@ -136,7 +208,7 @@ JqConditionVariable::~JqConditionVariable()
 	pthread_cond_destroy(&Cond);
 }
 
-void JqConditionVariable::Wait(JqMutex& Mutex)
+void JqConditionVariable::Wait(JqCondMutex& Mutex)
 {
 	pthread_cond_wait(&Cond, &Mutex.Mutex);
 
@@ -179,7 +251,7 @@ void JqSemaphore::Signal(uint32_t nCount)
 		return;
 	}
 	{
-		JqMutexLock l(Mutex);
+		JqCondMutexLock l(Mutex);
 		uint32_t nCurrent = nReleaseCount.load();
 		if(nCurrent + nCount > nMaxCount)
 			nCount = nMaxCount - nCurrent;
@@ -204,7 +276,7 @@ void JqSemaphore::Wait()
 	JQLSC(g_JqSemaWait.fetch_add(1));
 
 	JQ_MICROPROFILE_SCOPE("Wait", 0xc0c0c0);
-	JqMutexLock l(Mutex);
+	JqCondMutexLock l(Mutex);
 	while(!nReleaseCount)
 	{
 		Cond.Wait(Mutex);

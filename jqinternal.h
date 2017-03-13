@@ -9,6 +9,8 @@
 
 #if defined(__APPLE__)
 #include <mach/mach_time.h>
+//#include <libkern/OSAtomic.h>
+#include <os/lock.h>
 #include <unistd.h>
 #define JQ_BREAK() __builtin_trap()
 #define JQ_THREAD_LOCAL __thread
@@ -159,15 +161,34 @@ struct JqMutex
 #ifdef _WIN32
 	CRITICAL_SECTION CriticalSection;
 #else
+#if defined(__APPLE__)
+	os_unfair_lock UnfairLock;
+	std::atomic<uint64_t> Owner;
+	std::atomic<uint32_t> Count;
+#else	
 	pthread_mutex_t Mutex;
 #endif
+#endif
 };
+
+#if defined(__APPLE__)
+struct JqCondMutex
+{
+	JqCondMutex();
+	~JqCondMutex();
+	void Lock();
+	void Unlock();
+	pthread_mutex_t Mutex;
+};
+#else
+typedef JqMutex JqCondMutex;
+#endif
 
 struct JqConditionVariable
 {
 	JqConditionVariable();
 	~JqConditionVariable();
-	void Wait(JqMutex& Mutex);
+	void Wait(JqCondMutex& Mutex);
 	void NotifyOne();
 	void NotifyAll();
 #ifdef _WIN32
@@ -192,7 +213,7 @@ struct JqSemaphore
 	HANDLE Handle;
 	LONG nMaxCount;
 #else
-	JqMutex Mutex;
+	JqCondMutex Mutex;
 	JqConditionVariable Cond;
 	std::atomic<uint32_t> nReleaseCount;
 	uint32_t nMaxCount;	
@@ -231,6 +252,42 @@ struct JqMutexLock
 		bIsLocked = false;
 	}
 };
+
+
+
+struct JqCondMutexLock
+{
+	bool bIsLocked;
+	JqCondMutex& Mutex;
+	JqCondMutexLock(JqCondMutex& Mutex)
+		:Mutex(Mutex)
+	{
+		bIsLocked = false;
+		Lock();
+	}
+	~JqCondMutexLock()
+	{
+		if(bIsLocked)
+		{
+			Unlock();
+		}
+	}
+	void Lock()
+	{
+		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
+		Mutex.Lock();
+		JQ_ASSERT_LOCK_ENTER();
+		bIsLocked = true;
+	}
+	void Unlock()
+	{
+		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
+		JQ_ASSERT_LOCK_LEAVE();
+		Mutex.Unlock();
+		bIsLocked = false;
+	}
+};
+
 
 
 struct JqJobStack
