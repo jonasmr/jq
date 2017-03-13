@@ -20,10 +20,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\jqinternal.cpp" />
-    <ClCompile Include="..\..\jqlocked.cpp" />
+    <ClCompile Include="..\..\jqmultilocked.cpp" />
     <ClCompile Include="..\..\jqnode.cpp" />
     <ClCompile Include="..\..\jqpipe.cpp" />
-    <ClCompile Include="..\demo_priority.cpp" />
+    <ClCompile Include="..\demo_node.cpp" />
     <ClCompile Include="..\microprofile.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -40,11 +40,11 @@
     <MASM Include="..\..\boost_context\make_x86_64_ms_pe_masm.asm" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{C340960F-F9CA-4F19-A2DD-A93039C9D5AB}</ProjectGuid>
+    <ProjectGuid>{C1D07DC0-2ECD-495A-B59E-2E1250B376BD}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>jq</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
-    <ProjectName>jq_demo_priority_m</ProjectName>
+    <ProjectName>jq_demo_node_mm</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

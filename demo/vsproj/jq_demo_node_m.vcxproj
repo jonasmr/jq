@@ -20,7 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\jqinternal.cpp" />
-    <ClCompile Include="..\..\jqmutex.cpp" />
+    <ClCompile Include="..\..\jqlocked.cpp" />
     <ClCompile Include="..\..\jqnode.cpp" />
     <ClCompile Include="..\..\jqpipe.cpp" />
     <ClCompile Include="..\demo_node.cpp" />

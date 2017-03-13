@@ -1057,7 +1057,7 @@ uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs, int nRange, uint
 	uint64_t nParent = 0 != (nJobFlags & JQ_JOBFLAG_DETACHED) ? 0 : JqSelf();
 	JqJobHandle HParent;
 	HParent.nRawHandle = nParent;
-	nPipe = nParent == 0 ? nPipe : HParent.nPipe;
+	nPipe = (uint8_t)(nParent == 0 ? nPipe : HParent.nPipe);
 	JQ_ASSERT(nPipe < JQ_NUM_PIPES);
 	JQ_ASSERT(JqState.nNumWorkers);
 	JQ_ASSERT(nNumJobs);
