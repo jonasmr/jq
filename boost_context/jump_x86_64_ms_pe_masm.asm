@@ -84,7 +84,7 @@
 
 .code
 
-jump_fcontext PROC EXPORT FRAME
+jq_jump_fcontext PROC EXPORT FRAME
     .endprolog
 
     ; prepare stack
@@ -197,5 +197,5 @@ jump_fcontext PROC EXPORT FRAME
 
     ; indirect jump to context
     jmp  r10
-jump_fcontext ENDP
+jq_jump_fcontext ENDP
 END

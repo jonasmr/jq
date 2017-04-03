@@ -513,7 +513,7 @@ void JqContextRun(JqTransfer T)
 {
 	JqJobStack * pJobData = (JqJobStack*)T.data;
 	JqState.Jobs[pJobData->nExternalId].Function(pJobData->nBegin, pJobData->nEnd);
-	jump_fcontext(T.fctx, (void*)447);
+	jq_jump_fcontext(T.fctx, (void*)447);
 	JQ_BREAK();
 }
 
@@ -538,8 +538,8 @@ void JqRunInternal(uint32_t nWorkIndex, int nBegin, int nEnd)
 		pJobData->nEnd = nEnd;
 		pJobData->nExternalId = nWorkIndex;
 		g_pJqJobStacks = pJobData;
-		pJobData->pContextJob = make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
-		JqTransfer T = jump_fcontext(pJobData->pContextJob, (void*) pJobData);
+		pJobData->pContextJob = jq_make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
+		JqTransfer T = jq_jump_fcontext(pJobData->pContextJob, (void*) pJobData);
 		JQ_ASSERT(T.data == (void*)447);
 		g_pJqJobStacks = pJobData->pLink;
 		pJobData->pLink = nullptr;
