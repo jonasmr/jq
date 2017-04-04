@@ -151,7 +151,7 @@
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <DisableSpecificWarnings>4127;4100;4324;4189;4201</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4127;4100;4189;4201</DisableSpecificWarnings>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -210,7 +210,7 @@
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <DisableSpecificWarnings>4127;4100;4324;4189;4201</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4127;4100;4189;4201</DisableSpecificWarnings>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>

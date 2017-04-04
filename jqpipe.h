@@ -84,6 +84,10 @@ static_assert(sizeof(JqPipeHandle) == 8, "invalid size");
 #else
 #define JQ_PIPE_ALIGN_16 
 #endif
+#ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable:4324)
+#endif
 
 
 struct JQ_PIPE_ALIGN_16 JqPipeJob
@@ -169,6 +173,9 @@ struct JqPipe
 	JqPipeStats				Stats;
 };
 
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 enum EJqPipeExecuteResult
 {

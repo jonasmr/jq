@@ -112,6 +112,12 @@ struct JqJob
 #include <pthread.h>
 #endif
 #include <atomic>
+#ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable:4324)
+#endif
+
+
 
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 //note: This is just arbitrary: given a suffiently random priority setup you might need to bump this.
@@ -187,6 +193,10 @@ struct JQ_ALIGN_CACHELINE JqState_t
 
 	JqStats Stats;
 } JqState;
+
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 
 JQ_THREAD_LOCAL int JqSpinloop = 0; //prevent optimizer from removing spin loop
