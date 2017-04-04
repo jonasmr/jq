@@ -233,13 +233,13 @@ void JqStart(JqAttributes* pAttr)
 				if (PipeMask & (1llu << j))
 				{
 					JQ_ASSERT(JqState.m_PipeNumSemaphores[j] < JQ_MAX_SEMAPHORES);
-					JqState.m_PipeToSemaphore[j][JqState.m_PipeNumSemaphores[j]++] = nSelectedSemaphore;
+					JqState.m_PipeToSemaphore[j][JqState.m_PipeNumSemaphores[j]++] = (uint8_t)nSelectedSemaphore;
 				}
 			}
 		}
 		JQ_ASSERT(JqState.m_SemaphoreClientCount[nSelectedSemaphore] < JQ_MAX_SEMAPHORES);
-		JqState.m_SemaphoreClients[nSelectedSemaphore][JqState.m_SemaphoreClientCount[nSelectedSemaphore]++] = i;
-		JqState.m_SemaphoreIndex[i] = nSelectedSemaphore;
+		JqState.m_SemaphoreClients[nSelectedSemaphore][JqState.m_SemaphoreClientCount[nSelectedSemaphore]++] = (uint8_t)i;
+		JqState.m_SemaphoreIndex[i] = (uint8_t)nSelectedSemaphore;
 	}
 
 	for (uint32_t i = 0; i < JQ_MAX_SEMAPHORES; ++i)

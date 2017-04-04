@@ -46,6 +46,7 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 	uint64_t nNextHandle = 0;
 	uint64_t nHandleRetries = 0;
 	JqPipeHandle H;
+	H.Handle = 0;
 	int Success = 0;
 	do
 	{
@@ -87,11 +88,11 @@ JqPipeHandle JqPipeAdd(JqPipe* pPipe, uint32_t nExternalId, int nNumJobs, int nR
 		//unfortunately this is the best way i can come up with solving the reused handle problem.
 		while(1)
 		{
-			uint64_t H = pPipe->nPut.load();
-			if(H == HandleU)
+			uint64_t P = pPipe->nPut.load();
+			if(P == HandleU)
 			{
 				uint64_t nNext = HandleU+1;
-				if(pPipe->nPut.compare_exchange_strong(H, nNext))
+				if(pPipe->nPut.compare_exchange_strong(P, nNext))
 				{
 					break;
 				}
@@ -174,6 +175,7 @@ bool JqPipeFinishInternal(JqPipe* pPipe, uint32_t nHandleInternal)
 
 EJqPipeExecuteResult JqPipeExecuteInternal(JqPipe* pPipe, JqPipeHandle* pFinishedHandleOut, uint32_t nHandleInternal)
 {
+	(void)pFinishedHandleOut;
 	uint16_t nSubJob;
 	bool bIsLast = false;
 	if(JqPipeStartInternal(pPipe, nHandleInternal, &nSubJob, &bIsLast))

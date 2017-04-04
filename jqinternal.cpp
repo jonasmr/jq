@@ -91,6 +91,7 @@ void JqSemaphore::Signal(uint32_t nCount)
 	if(nCount > (uint32_t)nMaxCount)
 		nCount = nMaxCount;
 	BOOL r = ReleaseSemaphore(Handle, nCount, 0);
+	(void)r;
 	JQLSC(g_JqSemaSignal.fetch_add(1));
 }
 
@@ -298,6 +299,7 @@ void* JqAllocStackInternal(uint32_t nStackSize)
 }
 void JqFreeStackInternal(void* pStack, uint32_t nStackSize)
 {
+	(void)nStackSize;
 	VirtualFree(pStack, 0, MEM_RELEASE);
 }
 #else
@@ -397,10 +399,10 @@ void JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumWorkers)
 	{
 		JqThreadConfig& C = pAttributes->ThreadConfig[i];
 		memset(&C.nPipes[0], 0xff, sizeof(C.nPipes));
-		for(uint32_t i = 0; i < JQ_NUM_PIPES; ++i)
+		for(uint32_t j = 0; j < JQ_NUM_PIPES; ++j)
 		{
 			C.nNumPipes = JQ_NUM_PIPES;
-			C.nPipes[i] = i;
+			C.nPipes[j] = (uint8_t)j;
 		}
 	}
 }

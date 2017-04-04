@@ -337,8 +337,8 @@ struct JqJobStack
 		pJobStack->nExternalId = 0;
 		pJobStack->nFlags = nFlags;
 		pJobStack->nStackSize = nStackSize;
-		pJobStack->GUARD[0] = 0xececececececececll;
-		pJobStack->GUARD[1] = 0xececececececececll;
+		pJobStack->GUARD[0] = (uint64_t)0xececececececececll;
+		pJobStack->GUARD[1] = (uint64_t)0xececececececececll;
 		return pJobStack;
 	}
 };

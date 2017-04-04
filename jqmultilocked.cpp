@@ -276,13 +276,13 @@ void JqStart(JqAttributes* pAttr)
 				if (PipeMask & (1llu << j))
 				{
 					JQ_ASSERT(JqState.m_PipeNumSemaphores[j] < JQ_MAX_SEMAPHORES);
-					JqState.m_PipeToSemaphore[j][JqState.m_PipeNumSemaphores[j]++] = nSelectedSemaphore;
+					JqState.m_PipeToSemaphore[j][JqState.m_PipeNumSemaphores[j]++] = (uint8_t)nSelectedSemaphore;
 				}
 			}
 		}
 		JQ_ASSERT(JqState.m_SemaphoreClientCount[nSelectedSemaphore] < JQ_MAX_SEMAPHORES);
-		JqState.m_SemaphoreClients[nSelectedSemaphore][JqState.m_SemaphoreClientCount[nSelectedSemaphore]++] = i;
-		JqState.m_SemaphoreIndex[i] = nSelectedSemaphore;
+		JqState.m_SemaphoreClients[nSelectedSemaphore][JqState.m_SemaphoreClientCount[nSelectedSemaphore]++] = (uint8_t)i;
+		JqState.m_SemaphoreIndex[i] = (uint8_t)nSelectedSemaphore;
 	}
 
 	for (uint32_t i = 0; i < JQ_MAX_SEMAPHORES; ++i)
@@ -506,7 +506,7 @@ uint16_t JqIncrementStarted(JqPipe& Pipe, uint64_t nJob)
 	uint16_t nIndex = nJob % JQ_PIPE_BUFFER_SIZE; 
 	JqJob* pJob = &Pipe.Jobs[nIndex];
 	JQ_ASSERT(pJob->nNumJobs.load() > pJob->nNumStarted.load());
-	uint16_t nSubIndex = pJob->nNumStarted.fetch_add(1);
+	uint16_t nSubIndex = (uint16_t)pJob->nNumStarted.fetch_add(1);
 	if(pJob->nNumStarted == pJob->nNumJobs)
 	{
 		JqPriorityListRemove(Pipe, nIndex);
@@ -673,7 +673,7 @@ void JqExecuteJob(JqPipe& Pipe, uint64_t nJob, uint16_t nSubIndex)
 	JQ_ASSERT(JqSelfPos < JQ_MAX_JOB_STACK);
 	JqSelfPush(nJob, nSubIndex);
 	uint16_t nWorkIndex = nJob % JQ_PIPE_BUFFER_SIZE;
-	uint16_t nNumJobs = Pipe.Jobs[nWorkIndex].nNumJobs;
+	uint16_t nNumJobs = (uint16_t)Pipe.Jobs[nWorkIndex].nNumJobs;
 	int nRange = Pipe.Jobs[nWorkIndex].nRange;
 	int nFraction = nRange / nNumJobs;
 	int nRemainder = nRange - nFraction * nNumJobs;	
