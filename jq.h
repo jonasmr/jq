@@ -178,7 +178,7 @@ public:
 #define JQ_DEFAULT_WAIT_FLAG (JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SPIN)
 
 //Job flags 
-#define JQ_JOBFLAG_LARGE_STACK 					0x1 // create with large stack
+#define JQ_JOBFLAG_SMALL_STACK 					0x1 // create with small stack
 #define JQ_JOBFLAG_DETACHED 					0x2 // dont create as child of current job 
 
 

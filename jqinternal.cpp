@@ -334,7 +334,7 @@ JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t
 		JqJobStackLink NewValue = {pNext, Value.nCounter+1 };
 		if(FreeList.compare_exchange_strong(Value, NewValue))
 		{
-			JQ_ASSERT((nFlags&JQ_JOBFLAG_LARGE_STACK) == (pHead->nFlags&JQ_JOBFLAG_LARGE_STACK));
+			JQ_ASSERT((nFlags&JQ_JOBFLAG_SMALL_STACK) == (pHead->nFlags&JQ_JOBFLAG_SMALL_STACK));
 			pHead->pLink = nullptr;
 			return pHead;
 		}
@@ -345,7 +345,7 @@ JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t
 	MICROPROFILE_COUNTER_ADD("jq/stack/bytes", nStackSize);
 #endif
 	void* pStack = JqAllocStackInternal(nStackSize);
-	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags&JQ_JOBFLAG_LARGE_STACK);
+	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags&JQ_JOBFLAG_SMALL_STACK);
 	return pJobStack;
 }
 void JqFreeAllStacks(JqJobStackList& FreeList)

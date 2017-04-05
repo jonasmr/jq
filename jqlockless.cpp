@@ -228,7 +228,7 @@ void JqContextRun(JqTransfer T)
 
 JqJobStackList& JqGetJobStackList(uint32_t nFlags)
 {
-	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+	bool bSmall = 0 != (nFlags&JQ_JOBFLAG_SMALL_STACK);
 	return bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
 }
 
@@ -238,7 +238,7 @@ void JqRunInternal(uint32_t nExternalId, int nBegin, int nEnd)
 	if(JQ_INIT_USE_SEPERATE_STACK == (JqState.m_Attributes.Flags & JQ_INIT_USE_SEPERATE_STACK))
 	{
 		uint32_t nFlags = JqState.m_Jobs2[nExternalId].nJobFlags;
-		bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+		bool bSmall = 0 != (nFlags&JQ_JOBFLAG_SMALL_STACK);
 		uint32_t nStackSize = bSmall ? JqState.m_Attributes.nStackSizeSmall : JqState.m_Attributes.nStackSizeLarge;
 		JqJobStack* pJobData = JqAllocStack(JqGetJobStackList(nFlags), nStackSize, nFlags);
 		void* pHest = g_pJqJobStacks;
