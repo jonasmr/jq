@@ -302,7 +302,7 @@ void JqTest()
 		}
 		if(JqExecuteOne(0))
 		{
-			OutputDebugString("HJEJ\n");
+			//OutputDebugString("HJEJ\n");
 		}
 #endif
 

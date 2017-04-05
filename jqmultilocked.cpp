@@ -1324,9 +1324,9 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 		}
 		else
 		{
-			JqExecuteJob(*pPipe, Pipe.Jobs[nIndex].nStartedHandle, nSubIndex);
+			JqExecuteJob(*pPipe, pPipe->Jobs[nIndex].nStartedHandle, nSubIndex);
 			// JqMutexLock L(pPipe->Mutex);
-			JqIncrementFinishedHelper(*pPipe, Pipe.Jobs[nIndex].nStartedHandle);
+			JqIncrementFinishedHelper(*pPipe, pPipe->Jobs[nIndex].nStartedHandle);
 		}
 	}
 
