@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef JQ_USE_CONFIG_H
+#include "jq.config.h"
+#endif
+
 #ifndef JQ_PIPE_BUFFER_SIZE
 #define JQ_PIPE_BUFFER_SIZE (2048)
 #endif

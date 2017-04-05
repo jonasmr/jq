@@ -289,7 +289,7 @@ void JqSemaphore::Wait()
 
 
 
-
+#ifndef JQ_ALLOC_STACK_INTERNAL_IMPL
 #ifdef _WIN32
 void* JqAllocStackInternal(uint32_t nStackSize)
 {
@@ -317,6 +317,7 @@ void JqFreeStackInternal(void* p, uint32_t nStackSize)
 {
 	munmap(p, nStackSize);
 }
+#endif
 #endif
 
 
