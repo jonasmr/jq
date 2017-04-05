@@ -921,15 +921,23 @@ uint16_t JqTakeChildJob(JqPipe& Pipe, uint64_t nJob, uint16_t* pSubIndexOut)
 	return 0;
 }
 
-
-
 bool JqExecuteOne()
+{
+	return JqExecuteOne(g_JqPipes, (uint8_t)g_nJqNumPipes);
+}
+
+bool JqExecuteOne(uint8_t nPipe)
+{
+	return JqExecuteOne(&nPipe, 1);
+}
+
+bool JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes)
 {
 	uint16_t nSubIndex = 0;
 	uint16_t nWork;
 	JqPipe* pPipe = nullptr;
 	{
-		nWork = JqTakeJob(&pPipe, &nSubIndex, g_nJqNumPipes, g_JqPipes);
+		nWork = JqTakeJob(&pPipe, &nSubIndex, nNumPipes, pPipes);
 	}
 	if(!nWork)
 		return false;

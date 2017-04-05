@@ -80,7 +80,6 @@ bool 		JqPendingJobs(uint64_t nJob);
 void 		JqSelfPush(uint64_t nHandle, uint32_t nJobIndex);
 void 		JqSelfPop(uint64_t nHandle);
 uint64_t 	JqFindHandle(JqMutexLock& Lock);
-bool		JqExecuteOne(int nShortOnly);
 int JqGetRangeStart(int nIndex, int nFraction, int nRemainder);
 
 
@@ -834,6 +833,11 @@ bool JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes);
 bool JqExecuteOne()
 {
 	return JqExecuteOne(g_JqPipes, (uint8_t)g_nJqNumPipes);
+}
+
+bool JqExecuteOne(uint8_t nPipe)
+{
+	return JqExecuteOne(&nPipe, 1);
 }
 
 bool JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes)

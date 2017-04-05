@@ -257,6 +257,8 @@ JQ_API uint32_t		JqSelfJobIndex();
 JQ_API int 			JqGetNumWorkers();
 JQ_API void 		JqConsumeStats(JqStats* pStatsOut);
 JQ_API bool			JqExecuteOne();
+JQ_API bool			JqExecuteOne(uint8_t nPipe);
+JQ_API bool			JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes);
 JQ_API void 		JqStartSentinel(int nTimeout);
 JQ_API void 		JqCrashAndDump();
 JQ_API void 		JqDump();
