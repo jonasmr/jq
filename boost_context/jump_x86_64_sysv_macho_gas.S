@@ -25,9 +25,9 @@
  ****************************************************************************************/
 
 .text
-.globl _jump_fcontext
+.globl _jq_jump_fcontext
 .align 8
-_jump_fcontext:
+_jq_jump_fcontext:
     leaq  -0x38(%rsp), %rsp /* prepare stack */
 
     stmxcsr  (%rsp)     /* save MMX control- and status-word */

@@ -74,14 +74,14 @@
  *******************************************************/
 
 .text
-.globl make_fcontext
+.globl jq_make_fcontext
 .align 2
-.type make_fcontext,@function
-make_fcontext:
+.type jq_make_fcontext,@function
+jq_make_fcontext:
     # save return address into R6
     mflr  %r6
 
-    # first arg of make_fcontext() == top address of context-function
+    # first arg of jq_make_fcontext() == top address of context-function
     # shift address in R3 to lower 16 byte boundary
     clrrwi  %r3, %r3, 4
 
@@ -89,7 +89,7 @@ make_fcontext:
     # including 64 byte of linkage + parameter area (R1 % 16 == 0)
     subi  %r3, %r3, 336
 
-    # third arg of make_fcontext() == address of context-function
+    # third arg of jq_make_fcontext() == address of context-function
     stw  %r5, 240(%r3)
 
     # set back-chain to zero
@@ -136,7 +136,7 @@ finish:
     li  %r3, 0
     # exit application
     bl  _exit@plt
-.size make_fcontext, .-make_fcontext
+.size jq_make_fcontext, .-jq_make_fcontext
 
 /* Mark that we don't need executable stack.  */
 .section .note.GNU-stack,"",%progbits

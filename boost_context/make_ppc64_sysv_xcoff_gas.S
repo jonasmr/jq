@@ -1,13 +1,13 @@
-	.globl	make_fcontext[DS]
-	.globl .make_fcontext[PR]
+	.globl	jq_make_fcontext[DS]
+	.globl .jq_make_fcontext[PR]
 	.align 2 
-	.csect .make_fcontext[PR], 3
-	.globl _make_fcontext
-#._make_fcontext:
+	.csect .jq_make_fcontext[PR], 3
+	.globl _jq_make_fcontext
+#._jq_make_fcontext:
     # save return address into R6
     mflr  6
 
-    # first arg of make_fcontext() == top address of context-function
+    # first arg of jq_make_fcontext() == top address of context-function
     # shift address in R3 to lower 16 byte boundary
     clrrwi  3, 3, 4
 
@@ -15,7 +15,7 @@
     # including 64 byte of linkage + parameter area (R1 % 16 == 0)
     subi  3, 3, 248
 
-    # third arg of make_fcontext() == address of context-function
+    # third arg of jq_make_fcontext() == address of context-function
     stw  5, 176(3)
 
     # set back-chain to zero

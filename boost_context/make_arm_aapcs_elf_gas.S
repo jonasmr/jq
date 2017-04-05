@@ -39,17 +39,17 @@
  *******************************************************/
 
 .text
-.globl make_fcontext
+.globl jq_make_fcontext
 .align 2
-.type make_fcontext,%function
-make_fcontext:
+.type jq_make_fcontext,%function
+jq_make_fcontext:
     @ shift address in A1 to lower 16 byte boundary
     bic  a1, a1, #15
 
     @ reserve space for context-data on context-stack
     sub  a1, a1, #128
 
-    @ third arg of make_fcontext() == address of context-function
+    @ third arg of jq_make_fcontext() == address of context-function
     str  a3, [a1, #104]
 
     @ compute address of returned transfer_t
@@ -73,7 +73,7 @@ finish:
     mov  a1, #0
     @ exit application
     bl  _exit@PLT
-.size make_fcontext,.-make_fcontext
+.size jq_make_fcontext,.-jq_make_fcontext
 
 @ Mark that we don't need executable stack.
 .section .note.GNU-stack,"",%progbits

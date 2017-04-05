@@ -66,8 +66,8 @@
  *                                                     *
 
 .text
-.globl _make_fcontext
-_make_fcontext:
+.globl _jq_make_fcontext
+_jq_make_fcontext:
     ; save return address into R6
     mflr  r6
 

@@ -66,39 +66,39 @@
  *                                                     *
  *******************************************************/
 
-.globl make_fcontext
+.globl jq_make_fcontext
 #if _CALL_ELF == 2
 	.text
 	.align 2
-make_fcontext:
-	addis	%r2, %r12, .TOC.-make_fcontext@ha
-	addi	%r2, %r2, .TOC.-make_fcontext@l
-	.localentry make_fcontext, . - make_fcontext
+jq_make_fcontext:
+	addis	%r2, %r12, .TOC.-jq_make_fcontext@ha
+	addi	%r2, %r2, .TOC.-jq_make_fcontext@l
+	.localentry jq_make_fcontext, . - jq_make_fcontext
 #else
 	.section ".opd","aw"
 	.align 3
-make_fcontext:
+jq_make_fcontext:
 # ifdef _CALL_LINUX
-	.quad	.L.make_fcontext,.TOC.@tocbase,0
-	.type	make_fcontext,@function
+	.quad	.L.jq_make_fcontext,.TOC.@tocbase,0
+	.type	jq_make_fcontext,@function
 	.text
 	.align 2
-.L.make_fcontext:
+.L.jq_make_fcontext:
 # else
-	.hidden	.make_fcontext
-	.globl	.make_fcontext
-	.quad	.make_fcontext,.TOC.@tocbase,0
-	.size	make_fcontext,24
-	.type	.make_fcontext,@function
+	.hidden	.jq_make_fcontext
+	.globl	.jq_make_fcontext
+	.quad	.jq_make_fcontext,.TOC.@tocbase,0
+	.size	jq_make_fcontext,24
+	.type	.jq_make_fcontext,@function
 	.text
 	.align 2
-.make_fcontext:
+.jq_make_fcontext:
 # endif
 #endif
     # save return address into R6
     mflr  %r6
 
-    # first arg of make_fcontext() == top address of context-stack
+    # first arg of jq_make_fcontext() == top address of context-stack
     # shift address in R3 to lower 16 byte boundary
     clrrdi  %r3, %r3, 4
 
@@ -106,7 +106,7 @@ make_fcontext:
     # including 64 byte of linkage + parameter area (R1 % 16 == 0)
     subi  %r3, %r3, 248
 
-    # third arg of make_fcontext() == address of context-function
+    # third arg of jq_make_fcontext() == address of context-function
     # entry point (ELFv2) or descriptor (ELFv1)
 #if _CALL_ELF == 2
     # save address of context-function entry point
@@ -163,12 +163,12 @@ finish:
     bl  _exit
     nop
 #if _CALL_ELF == 2
-	.size make_fcontext, .-make_fcontext
+	.size jq_make_fcontext, .-jq_make_fcontext
 #else
 # ifdef _CALL_LINUX
-	.size .make_fcontext, .-.L.make_fcontext
+	.size .jq_make_fcontext, .-.L.jq_make_fcontext
 # else
-	.size .make_fcontext, .-.make_fcontext
+	.size .jq_make_fcontext, .-.jq_make_fcontext
 # endif
 #endif
 

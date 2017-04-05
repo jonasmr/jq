@@ -26,9 +26,9 @@
 .file	"jump_i386_ms_pe_gas.asm"
 .text
 .p2align 4,,15
-.globl	_jump_fcontext
-.def	_jump_fcontext;	.scl	2;	.type	32;	.endef
-_jump_fcontext:
+.globl	_jq_jump_fcontext
+.def	_jq_jump_fcontext;	.scl	2;	.type	32;	.endef
+_jq_jump_fcontext:
     /* prepare stack */
     leal  -0x2c(%esp), %esp
 

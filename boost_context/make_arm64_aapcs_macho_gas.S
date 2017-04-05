@@ -52,10 +52,10 @@
  *******************************************************/
 
 .text
-.globl _make_fcontext
+.globl _jq_make_fcontext
 .balign 16
 
-_make_fcontext:
+_jq_make_fcontext:
     ; shift address in x0 (allocated stack) to lower 16 byte boundary
     and x0, x0, ~0xF
 

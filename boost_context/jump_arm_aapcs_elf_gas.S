@@ -39,10 +39,10 @@
  *******************************************************/
 
 .text
-.globl jump_fcontext
+.globl jq_jump_fcontext
 .align 2
-.type jump_fcontext,%function
-jump_fcontext:
+.type jq_jump_fcontext,%function
+jq_jump_fcontext:
     @ save LR as PC
     push {lr}
     @ save hidden,V1-V8,LR
@@ -80,7 +80,7 @@ jump_fcontext:
 
     @ restore PC
     pop {pc}
-.size jump_fcontext,.-jump_fcontext
+.size jq_jump_fcontext,.-jq_jump_fcontext
 
 @ Mark that we don't need executable stack.
 .section .note.GNU-stack,"",%progbits

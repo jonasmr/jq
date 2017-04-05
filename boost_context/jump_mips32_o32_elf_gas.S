@@ -39,11 +39,11 @@
  * *****************************************************/
 
 .text
-.globl jump_fcontext
+.globl jq_jump_fcontext
 .align 2
-.type jump_fcontext,@function
-.ent jump_fcontext
-jump_fcontext:
+.type jq_jump_fcontext,@function
+.ent jq_jump_fcontext
+jq_jump_fcontext:
     # reserve space on stack
     addiu $sp, $sp, -112
 
@@ -111,8 +111,8 @@ jump_fcontext:
 
     # jump to context
     jr  $t9
-.end jump_fcontext
-.size jump_fcontext, .-jump_fcontext
+.end jq_jump_fcontext
+.size jq_jump_fcontext, .-jq_jump_fcontext
 
 /* Mark that we don't need executable stack.  */
 .section .note.GNU-stack,"",%progbits

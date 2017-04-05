@@ -25,10 +25,10 @@
  ****************************************************************************************/
 
 .text
-.globl jump_fcontext
+.globl jq_jump_fcontext
 .align 2
-.type jump_fcontext,@function
-jump_fcontext:
+.type jq_jump_fcontext,@function
+jq_jump_fcontext:
     leal  -0x18(%esp), %esp  /* prepare stack */
 
     stmxcsr  (%esp)     /* save MMX control- and status-word */
@@ -42,10 +42,10 @@ jump_fcontext:
     /* store ESP (pointing to context-data) in ECX */
     movl  %esp, %ecx
 
-    /* first arg of jump_fcontext() == fcontext to jump to */
+    /* first arg of jq_jump_fcontext() == fcontext to jump to */
     movl  0x20(%esp), %eax
 
-    /* second arg of jump_fcontext() == data to be transferred */
+    /* second arg of jq_jump_fcontext() == data to be transferred */
     movl  0x24(%esp), %edx
 
     /* restore ESP (pointing to context-data) from EAX */
@@ -72,7 +72,7 @@ jump_fcontext:
 
     /* jump to context */
     jmp *%ecx
-.size jump_fcontext,.-jump_fcontext
+.size jq_jump_fcontext,.-jq_jump_fcontext
 
 /* Mark that we don't need executable stack.  */
 .section .note.GNU-stack,"",%progbits
