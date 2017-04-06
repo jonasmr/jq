@@ -56,16 +56,20 @@
 #define JQ_LOCK_STATS 1
 #endif
 
+#ifndef JQ_BREAK
 #ifdef _WIN32
 #define JQ_BREAK() __debugbreak()
 #else
 #define JQ_BREAK() __builtin_trap()
 #endif
+#endif
 
+#ifndef JQ_ASSERT
 #ifdef JQ_NO_ASSERT
 #define JQ_ASSERT(a) do{}while(0)
 #else
 #define JQ_ASSERT(a) do{if(!(a)){JqDump(); JQ_BREAK();} }while(0)
+#endif
 #endif
 
 

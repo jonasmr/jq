@@ -11,6 +11,9 @@ std::atomic<uint32_t> g_JqLocklessPops;
 #endif
 
 #ifdef _WIN32
+#ifndef CreateSemaphoreEx 
+#define CreateSemaphoreEx CreateSemaphoreExW
+#endif
 JqMutex::JqMutex()
 {
 	InitializeCriticalSection(&CriticalSection);
