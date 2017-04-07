@@ -22,6 +22,7 @@
 // ***********************************************************************
 //
 
+#define JQ_IMPL
 #include "jq.h"
 #include "jqinternal.h"
 
@@ -93,6 +94,13 @@ struct JqJob
 #endif
 #include <atomic>
 
+#ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable:4324)
+#endif
+
+
+
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 //note: This is just arbitrary: given a suffiently random priority setup you might need to bump this.
 
@@ -143,6 +151,9 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	JqStats Stats;
 } JqState;
 
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 JQ_THREAD_LOCAL int JqSpinloop = 0; //prevent optimizer from removing spin loop
 JQ_THREAD_LOCAL uint32_t g_nJqNumPipes = 0;
@@ -233,13 +244,13 @@ void JqStart(JqAttributes* pAttr)
 				if (PipeMask & (1llu << j))
 				{
 					JQ_ASSERT(JqState.m_PipeNumSemaphores[j] < JQ_MAX_SEMAPHORES);
-					JqState.m_PipeToSemaphore[j][JqState.m_PipeNumSemaphores[j]++] = nSelectedSemaphore;
+					JqState.m_PipeToSemaphore[j][JqState.m_PipeNumSemaphores[j]++] = (uint8_t)nSelectedSemaphore;
 				}
 			}
 		}
 		JQ_ASSERT(JqState.m_SemaphoreClientCount[nSelectedSemaphore] < JQ_MAX_SEMAPHORES);
-		JqState.m_SemaphoreClients[nSelectedSemaphore][JqState.m_SemaphoreClientCount[nSelectedSemaphore]++] = i;
-		JqState.m_SemaphoreIndex[i] = nSelectedSemaphore;
+		JqState.m_SemaphoreClients[nSelectedSemaphore][JqState.m_SemaphoreClientCount[nSelectedSemaphore]++] = (uint8_t)i;
+		JqState.m_SemaphoreIndex[i] = (uint8_t)nSelectedSemaphore;
 	}
 
 	for (uint32_t i = 0; i < JQ_MAX_SEMAPHORES; ++i)
@@ -513,13 +524,13 @@ void JqContextRun(JqTransfer T)
 {
 	JqJobStack * pJobData = (JqJobStack*)T.data;
 	JqState.Jobs[pJobData->nExternalId].Function(pJobData->nBegin, pJobData->nEnd);
-	jump_fcontext(T.fctx, (void*)447);
+	jq_jump_fcontext(T.fctx, (void*)447);
 	JQ_BREAK();
 }
 
 JqJobStackList& JqGetJobStackList(uint32_t nFlags)
 {
-	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+	bool bSmall = 0 != (nFlags&JQ_JOBFLAG_SMALL_STACK);
 	return bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
 }
 
@@ -528,7 +539,7 @@ void JqRunInternal(uint32_t nWorkIndex, int nBegin, int nEnd)
 	if(JQ_INIT_USE_SEPERATE_STACK == (JqState.m_Attributes.Flags & JQ_INIT_USE_SEPERATE_STACK))
 	{
 		uint32_t nFlags = JqState.Jobs[nWorkIndex].nJobFlags;
-		bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+		bool bSmall = 0 != (nFlags&JQ_JOBFLAG_SMALL_STACK);
 		uint32_t nStackSize = bSmall ? JqState.m_Attributes.nStackSizeSmall : JqState.m_Attributes.nStackSizeLarge;
 		JqJobStack* pJobData = JqAllocStack(JqGetJobStackList(nFlags), nStackSize, nFlags);
 		void* pVerify = g_pJqJobStacks;
@@ -538,8 +549,8 @@ void JqRunInternal(uint32_t nWorkIndex, int nBegin, int nEnd)
 		pJobData->nEnd = nEnd;
 		pJobData->nExternalId = nWorkIndex;
 		g_pJqJobStacks = pJobData;
-		pJobData->pContextJob = make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
-		JqTransfer T = jump_fcontext(pJobData->pContextJob, (void*) pJobData);
+		pJobData->pContextJob = jq_make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
+		JqTransfer T = jq_jump_fcontext(pJobData->pContextJob, (void*) pJobData);
 		JQ_ASSERT(T.data == (void*)447);
 		g_pJqJobStacks = pJobData->pLink;
 		pJobData->pLink = nullptr;
@@ -771,15 +782,24 @@ uint16_t JqTakeChildJob(uint64_t nJob, uint16_t* pSubIndexOut)
 	return 0;
 }
 
-
-
 bool JqExecuteOne()
+{
+	return JqExecuteOne(g_JqPipes, (uint8_t)g_nJqNumPipes);
+}
+
+bool JqExecuteOne(uint8_t nPipe)
+{
+	return JqExecuteOne(&nPipe, 1);
+}
+
+
+bool JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes)
 {
 	uint16_t nSubIndex = 0;
 	uint16_t nWork;
 	{
 		JqMutexLock lock(JqState.Mutex);
-		nWork = JqTakeJob(&nSubIndex, g_nJqNumPipes, g_JqPipes);
+		nWork = JqTakeJob(&nSubIndex, nNumPipes, pPipes);
 	}
 	if(!nWork)
 		return false;

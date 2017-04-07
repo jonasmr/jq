@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef JQ_USE_CONFIG_H
+#include "jq.config.h"
+#endif
+
 #ifndef JQ_PIPE_BUFFER_SIZE
 #define JQ_PIPE_BUFFER_SIZE (2048)
 #endif
@@ -52,16 +56,20 @@
 #define JQ_LOCK_STATS 1
 #endif
 
+#ifndef JQ_BREAK
 #ifdef _WIN32
 #define JQ_BREAK() __debugbreak()
 #else
 #define JQ_BREAK() __builtin_trap()
 #endif
+#endif
 
+#ifndef JQ_ASSERT
 #ifdef JQ_NO_ASSERT
 #define JQ_ASSERT(a) do{}while(0)
 #else
 #define JQ_ASSERT(a) do{if(!(a)){JqDump(); JQ_BREAK();} }while(0)
+#endif
 #endif
 
 
@@ -174,7 +182,7 @@ public:
 #define JQ_DEFAULT_WAIT_FLAG (JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SPIN)
 
 //Job flags 
-#define JQ_JOBFLAG_LARGE_STACK 					0x1 // create with large stack
+#define JQ_JOBFLAG_SMALL_STACK 					0x1 // create with small stack
 #define JQ_JOBFLAG_DETACHED 					0x2 // dont create as child of current job 
 
 
@@ -257,6 +265,8 @@ JQ_API uint32_t		JqSelfJobIndex();
 JQ_API int 			JqGetNumWorkers();
 JQ_API void 		JqConsumeStats(JqStats* pStatsOut);
 JQ_API bool			JqExecuteOne();
+JQ_API bool			JqExecuteOne(uint8_t nPipe);
+JQ_API bool			JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes);
 JQ_API void 		JqStartSentinel(int nTimeout);
 JQ_API void 		JqCrashAndDump();
 JQ_API void 		JqDump();

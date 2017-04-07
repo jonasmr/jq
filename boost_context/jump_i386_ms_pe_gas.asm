@@ -26,9 +26,9 @@
 .file	"jump_i386_ms_pe_gas.asm"
 .text
 .p2align 4,,15
-.globl	_jump_fcontext
-.def	_jump_fcontext;	.scl	2;	.type	32;	.endef
-_jump_fcontext:
+.globl	_jq_jump_fcontext
+.def	_jq_jump_fcontext;	.scl	2;	.type	32;	.endef
+_jq_jump_fcontext:
     /* prepare stack */
     leal  -0x2c(%esp), %esp
 
@@ -63,7 +63,7 @@ _jump_fcontext:
     /* store ESP (pointing to context-data) in EAX */
     movl  %esp, %eax
 
-    /* firstarg of jump_fcontext() == fcontext to jump to */
+    /* firstarg of jq_jump_fcontext() == fcontext to jump to */
     movl  0x30(%esp), %ecx
     
     /* restore ESP (pointing to context-data) from ECX */
@@ -110,4 +110,4 @@ _jump_fcontext:
     jmp *%ecx
 
 .section .drectve
-.ascii " -export:\"jump_fcontext\""
+.ascii " -export:\"jq_jump_fcontext\""

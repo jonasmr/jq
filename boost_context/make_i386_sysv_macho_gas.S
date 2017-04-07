@@ -25,9 +25,9 @@
  ****************************************************************************************/
 
 .text
-.globl _make_fcontext
+.globl _jq_make_fcontext
 .align 2
-_make_fcontext:
+_jq_make_fcontext:
     /* first arg of make_fcontext() == top of context-stack */
     movl  0x4(%esp), %eax
 

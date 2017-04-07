@@ -74,10 +74,10 @@
  *******************************************************/
 
 .text
-.globl jump_fcontext
+.globl jq_jump_fcontext
 .align 2
-.type jump_fcontext,@function
-jump_fcontext:
+.type jq_jump_fcontext,@function
+jq_jump_fcontext:
     # reserve space on stack
     subi  %r1, %r1, 244
 
@@ -200,7 +200,7 @@ jump_fcontext:
 
     # jump to context
     bctr
-.size jump_fcontext, .-jump_fcontext
+.size jq_jump_fcontext, .-jq_jump_fcontext
 
 /* Mark that we don't need executable stack.  */
 .section .note.GNU-stack,"",%progbits

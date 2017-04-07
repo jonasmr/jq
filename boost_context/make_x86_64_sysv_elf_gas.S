@@ -25,11 +25,11 @@
  ****************************************************************************************/
 
 .text
-.globl make_fcontext
-.type make_fcontext,@function
+.globl jq_make_fcontext
+.type jq_make_fcontext,@function
 .align 16
-make_fcontext:
-    /* first arg of make_fcontext() == top of context-stack */
+jq_make_fcontext:
+    /* first arg of jq_make_fcontext() == top of context-stack */
     movq  %rdi, %rax
 
     /* shift address in RAX to lower 16 byte boundary */
@@ -39,7 +39,7 @@ make_fcontext:
     /* on context-function entry: (RSP -0x8) % 16 == 0 */
     leaq  -0x40(%rax), %rax
 
-    /* third arg of make_fcontext() == address of context-function */
+    /* third arg of jq_make_fcontext() == address of context-function */
     /* stored in RBX */
     movq  %rdx, 0x28(%rax)
 
@@ -75,7 +75,7 @@ finish:
     /* exit application */
     call  _exit@PLT
     hlt
-.size make_fcontext,.-make_fcontext
+.size jq_make_fcontext,.-jq_make_fcontext
 
 /* Mark that we don't need executable stack. */
 .section .note.GNU-stack,"",%progbits

@@ -11,6 +11,9 @@ std::atomic<uint32_t> g_JqLocklessPops;
 #endif
 
 #ifdef _WIN32
+#ifndef CreateSemaphoreEx 
+#define CreateSemaphoreEx CreateSemaphoreExW
+#endif
 JqMutex::JqMutex()
 {
 	InitializeCriticalSection(&CriticalSection);
@@ -91,6 +94,7 @@ void JqSemaphore::Signal(uint32_t nCount)
 	if(nCount > (uint32_t)nMaxCount)
 		nCount = nMaxCount;
 	BOOL r = ReleaseSemaphore(Handle, nCount, 0);
+	(void)r;
 	JQLSC(g_JqSemaSignal.fetch_add(1));
 }
 
@@ -288,7 +292,7 @@ void JqSemaphore::Wait()
 
 
 
-
+#ifndef JQ_ALLOC_STACK_INTERNAL_IMPL
 #ifdef _WIN32
 void* JqAllocStackInternal(uint32_t nStackSize)
 {
@@ -298,6 +302,7 @@ void* JqAllocStackInternal(uint32_t nStackSize)
 }
 void JqFreeStackInternal(void* pStack, uint32_t nStackSize)
 {
+	(void)nStackSize;
 	VirtualFree(pStack, 0, MEM_RELEASE);
 }
 #else
@@ -316,6 +321,7 @@ void JqFreeStackInternal(void* p, uint32_t nStackSize)
 	munmap(p, nStackSize);
 }
 #endif
+#endif
 
 
 JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)
@@ -331,7 +337,7 @@ JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t
 		JqJobStackLink NewValue = {pNext, Value.nCounter+1 };
 		if(FreeList.compare_exchange_strong(Value, NewValue))
 		{
-			JQ_ASSERT((nFlags&JQ_JOBFLAG_LARGE_STACK) == (pHead->nFlags&JQ_JOBFLAG_LARGE_STACK));
+			JQ_ASSERT((nFlags&JQ_JOBFLAG_SMALL_STACK) == (pHead->nFlags&JQ_JOBFLAG_SMALL_STACK));
 			pHead->pLink = nullptr;
 			return pHead;
 		}
@@ -342,7 +348,7 @@ JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t
 	MICROPROFILE_COUNTER_ADD("jq/stack/bytes", nStackSize);
 #endif
 	void* pStack = JqAllocStackInternal(nStackSize);
-	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags&JQ_JOBFLAG_LARGE_STACK);
+	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags&JQ_JOBFLAG_SMALL_STACK);
 	return pJobStack;
 }
 void JqFreeAllStacks(JqJobStackList& FreeList)
@@ -397,10 +403,10 @@ void JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumWorkers)
 	{
 		JqThreadConfig& C = pAttributes->ThreadConfig[i];
 		memset(&C.nPipes[0], 0xff, sizeof(C.nPipes));
-		for(uint32_t i = 0; i < JQ_NUM_PIPES; ++i)
+		for(uint32_t j = 0; j < JQ_NUM_PIPES; ++j)
 		{
 			C.nNumPipes = JQ_NUM_PIPES;
-			C.nPipes[i] = i;
+			C.nPipes[j] = (uint8_t)j;
 		}
 	}
 }

@@ -20,7 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\jqinternal.cpp" />
-    <ClCompile Include="..\..\jqlocked.cpp" />
+    <ClCompile Include="..\..\jqmultilocked.cpp" />
     <ClCompile Include="..\..\jqnode.cpp" />
     <ClCompile Include="..\..\jqpipe.cpp" />
     <ClCompile Include="..\demo_stress.cpp" />
@@ -40,11 +40,11 @@
     <MASM Include="..\..\boost_context\make_x86_64_ms_pe_masm.asm" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{36113F02-26C4-4681-BBB0-C46F1FB91BD4}</ProjectGuid>
+    <ProjectGuid>{2C1CFA35-6962-4C84-90EC-90D6CF8E69CE}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>jq</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
-    <ProjectName>jq_demo_stress_m</ProjectName>
+    <ProjectName>jq_demo_stress_mm</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

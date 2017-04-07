@@ -9,6 +9,6 @@ struct JqTransfer {
 };
 
 extern "C"
-JqTransfer  jump_fcontext( JqFContext const to, void * vp);
+JqTransfer  jq_jump_fcontext( JqFContext const to, void * vp);
 extern "C" 
-JqFContext  make_fcontext( void * sp, std::size_t size, void (* fn)( JqTransfer) );
+JqFContext  jq_make_fcontext( void * sp, std::size_t size, void (* fn)( JqTransfer) );

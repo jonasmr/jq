@@ -25,7 +25,7 @@
 #include <stdint.h>
 
 struct JqJobStack;
-
+#define JQ_IMPL
 #include "jq.h"
 #include "jqinternal.h"
 #ifdef JQ_MICROPROFILE
@@ -80,7 +80,6 @@ bool 		JqPendingJobs(uint64_t nJob);
 void 		JqSelfPush(uint64_t nHandle, uint32_t nJobIndex);
 void 		JqSelfPop(uint64_t nHandle);
 uint64_t 	JqFindHandle(JqMutexLock& Lock);
-bool		JqExecuteOne(int nShortOnly);
 int JqGetRangeStart(int nIndex, int nFraction, int nRemainder);
 
 
@@ -223,13 +222,13 @@ void JqContextRun(JqTransfer T)
 {
 	JqJobStack * pJobData = (JqJobStack*)T.data;
 	JqState.m_Jobs2[pJobData->nExternalId].Function(pJobData->nBegin, pJobData->nEnd);
-	jump_fcontext(T.fctx, (void*)447);
+	jq_jump_fcontext(T.fctx, (void*)447);
 	JQ_BREAK();
 }
 
 JqJobStackList& JqGetJobStackList(uint32_t nFlags)
 {
-	bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+	bool bSmall = 0 != (nFlags&JQ_JOBFLAG_SMALL_STACK);
 	return bSmall ? JqState.m_StackSmall : JqState.m_StackLarge;
 }
 
@@ -239,7 +238,7 @@ void JqRunInternal(uint32_t nExternalId, int nBegin, int nEnd)
 	if(JQ_INIT_USE_SEPERATE_STACK == (JqState.m_Attributes.Flags & JQ_INIT_USE_SEPERATE_STACK))
 	{
 		uint32_t nFlags = JqState.m_Jobs2[nExternalId].nJobFlags;
-		bool bSmall = 0 == (nFlags&JQ_JOBFLAG_LARGE_STACK);
+		bool bSmall = 0 != (nFlags&JQ_JOBFLAG_SMALL_STACK);
 		uint32_t nStackSize = bSmall ? JqState.m_Attributes.nStackSizeSmall : JqState.m_Attributes.nStackSizeLarge;
 		JqJobStack* pJobData = JqAllocStack(JqGetJobStackList(nFlags), nStackSize, nFlags);
 		void* pHest = g_pJqJobStacks;
@@ -249,8 +248,8 @@ void JqRunInternal(uint32_t nExternalId, int nBegin, int nEnd)
 		pJobData->nEnd = nEnd;
 		pJobData->nExternalId = nExternalId;
 		g_pJqJobStacks = pJobData;
-		pJobData->pContextJob = make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
-		JqTransfer T = jump_fcontext(pJobData->pContextJob, (void*) pJobData);
+		pJobData->pContextJob = jq_make_fcontext( pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
+		JqTransfer T = jq_jump_fcontext(pJobData->pContextJob, (void*) pJobData);
 		JQ_ASSERT(T.data == (void*)447);
 		g_pJqJobStacks = pJobData->pLink;
 		pJobData->pLink = nullptr;
@@ -314,6 +313,7 @@ void JqCheckFinished(uint64_t nJob)
 uint32_t g_TESTID = 0;
 void JqFinishJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId, int nNumJobs, int nCancel)
 {
+	(void)PipeHandle;
 	JQ_ASSERT(nExternalId != 0);
 	JQ_ASSERT(nExternalId < JQ_TREE_BUFFER_SIZE2);
 	JqPipeHandle Null = JqPipeHandleNull();
@@ -399,8 +399,6 @@ void JqStart(JqAttributes* pAttr)
 	// JQ_ASSERT(nPipeConfigSize == 0 || nPipeConfigSize == JQ_NUM_PIPES * nNumWorkers); //either full spec or nothing
 	JQ_ASSERT_NOT_LOCKED();
 
-	JQ_ASSERT(((JQ_CACHE_LINE_SIZE - 1)&(uint64_t)&JqState) == 0);
-	JQ_ASSERT(((JQ_CACHE_LINE_SIZE - 1)&offsetof(JqState_t, Mutex)) == 0);
 	JQ_ASSERT(JqState.nNumWorkers == 0);
 	memset(JqState.m_PipeList, 0xff, sizeof(JqState.m_PipeList));
 	memset(JqState.m_nNumPipes, 0, sizeof(JqState.m_nNumPipes));
@@ -451,13 +449,15 @@ void JqStart(JqAttributes* pAttr)
 				if (PipeMask & (1llu << j))
 				{
 					JQ_ASSERT(JqState.m_PipeNumSemaphores[j] < JQ_MAX_SEMAPHORES);
-					JqState.m_PipeToSemaphore[j][JqState.m_PipeNumSemaphores[j]++] = nSelectedSemaphore;
+					JQ_ASSERT(nSelectedSemaphore < 256);
+					JqState.m_PipeToSemaphore[j][JqState.m_PipeNumSemaphores[j]++] = (uint8_t)nSelectedSemaphore;
 				}
 			}
 		}
 		JQ_ASSERT(JqState.m_SemaphoreClientCount[nSelectedSemaphore] < JQ_MAX_SEMAPHORES);
-		JqState.m_SemaphoreClients[nSelectedSemaphore][JqState.m_SemaphoreClientCount[nSelectedSemaphore]++] = i;
-		JqState.m_SemaphoreIndex[i] = nSelectedSemaphore;
+		JqState.m_SemaphoreClients[nSelectedSemaphore][JqState.m_SemaphoreClientCount[nSelectedSemaphore]++] = (uint8_t)i;
+		JQ_ASSERT(nSelectedSemaphore < 256);
+		JqState.m_SemaphoreIndex[i] = (uint8_t)nSelectedSemaphore;
 	}
 	for (uint32_t i = 0; i < JQ_NUM_PIPES; ++i)
 	{
@@ -667,7 +667,7 @@ uint64_t JqDetachChild(uint64_t nChild)
 		JQ_ASSERT(ChildState.nParent);
 		uint16_t nPrevIndex = 0;
 		uint16_t nDeleteIndex = 0;
-		JqJobTreeState PrevState, NewState, DeleteState,xx;
+		JqJobTreeState PrevState, DeleteState, xx;
 		do
 		{
 
@@ -832,7 +832,12 @@ uint16_t JqTreeIterate(uint64_t nJob, uint16_t nCurrent)
 bool JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes);
 bool JqExecuteOne()
 {
-	return JqExecuteOne(g_JqPipes, g_nJqNumPipes);
+	return JqExecuteOne(g_JqPipes, (uint8_t)g_nJqNumPipes);
+}
+
+bool JqExecuteOne(uint8_t nPipe)
+{
+	return JqExecuteOne(&nPipe, 1);
 }
 
 bool JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes)
@@ -943,7 +948,7 @@ void JqWorker(int nThreadId)
 		bool bExecuted = false;
 		for(uint32_t i = 0; i < nNumPipes; ++i)
 		{
-			if(JqExecuteOne(pPipes, nNumPipes))
+			if(JqExecuteOne(pPipes, (uint8_t)nNumPipes))
 			{
 				bExecuted = true;
 				break;
@@ -1076,10 +1081,10 @@ void JqDump()
 	{
 		char fname[128];
 		snprintf(fname, sizeof(fname)-1, "jqpipe%d.txt", i);
-		FILE* F = fopen(fname, "w");
-		fprintf(F, " XXX PIPE DUMP %d XXX\n", i);
-		JqPipeDump(F, &JqState.m_Pipes[i]);
-		fclose(F);
+		FILE* FX = fopen(fname, "w");
+		fprintf(FX, " XXX PIPE DUMP %d XXX\n", i);
+		JqPipeDump(FX, &JqState.m_Pipes[i]);
+		fclose(FX);
 	}
 	printf("dump complete\n");
 
@@ -1102,7 +1107,7 @@ void JqSentinel(int nSeconds)
 	{
 		JQ_USLEEP(50000);
 		int64_t nJobsCur = JqState.nNumFinished.load();
-		if(nJobsCur != nJobs)
+		if(nJobsCur != (int64_t)nJobs)
 		{
 			nTicks = 0;
 		}
@@ -1210,7 +1215,6 @@ bool JqCancel(uint64_t nJob)
 
 	if(JqPipeCancel(&JqState.m_Pipes[PipeHandle.Pipe], PipeHandle))
 	{
-		JqJobFinish Finish;
 		Finish = JqState.m_Jobs2[nIndex].Handle.load();
 
 
@@ -1397,6 +1401,10 @@ void JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint32_t 
 
 uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 {
+	(void)pJobs;
+	(void)nNumJobs;
+	(void)nWaitFlag;
+	(void)nUsWaitTime;
 	JQ_BREAK(); //todo
 	return 0;
 }
@@ -1404,6 +1412,7 @@ uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag, uint3
 
 uint64_t JqGroupBegin(uint8_t nPriority)
 {
+	(void)nPriority;
 	uint64_t nHandle = JqNextHandle();
 	uint16_t nIndex = nHandle % JQ_TREE_BUFFER_SIZE2;
 	JqJob2* pEntry = &JqState.m_Jobs2[nIndex];

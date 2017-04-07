@@ -245,7 +245,7 @@ void JqTestCancel()
 	g_CancelFinished = 0;
 	//start a bunch of jobs, cancel half of them
 	uint64_t nGroup = JqGroupBegin(0);
-	for(uint32_t i = 0; i < nNumJobs; ++i)
+	for(int i = 0; i < nNumJobs; ++i)
 	{
 		SCancelJobState* pState = &Cancel[i];
 		Cancel[i].nStarted = 0;
@@ -268,7 +268,7 @@ void JqTestCancel()
 		JobSpinWork(2000);
 		if(1)
 		{
-			for(uint32_t i = 0; i < nNumWorkers; ++i)
+			for(int i = 0; i < nNumWorkers; ++i)
 			{
 				do
 				{
@@ -292,7 +292,7 @@ void JqTestCancel()
 	}
 
 	JqWait(nGroup);
-	for(uint32_t i = 0; i < nNumJobs; ++i)
+	for(int i = 0; i < nNumJobs; ++i)
 	{
 		SCancelJobState* pState = &Cancel[i];	
 		if(pState->nCancelled)
@@ -453,7 +453,7 @@ void JqTestCancel()
 int main(int argc, char* argv[])
 {
 	uint32_t nJqInitFlags = JQ_INIT_USE_SEPERATE_STACK;
-	for(uint32_t i = 1; i < argc; ++i)
+	for(int i = 1; i < argc; ++i)
 	{
 		if(0 == strcmp("-ns", argv[i]))
 		{

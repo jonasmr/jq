@@ -25,9 +25,9 @@
  ****************************************************************************************/
 
 .text
-.globl _jump_fcontext
+.globl _jq_jump_fcontext
 .align 2
-_jump_fcontext:
+_jq_jump_fcontext:
     leal  -0x18(%esp), %esp  /* prepare stack */
 
     stmxcsr  (%esp)     /* save MMX control- and status-word */

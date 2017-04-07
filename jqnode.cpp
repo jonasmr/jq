@@ -172,7 +172,7 @@ void JqNode::RunInternal(int b, int e)
 	JobFunc(b, e);
 	JqNodePop(this);
 #if JQNODE_VERIFY
-	if(nNumJobsExecuted.fetch_add(1)+1 == nNumJobs)
+	if(nNumJobsExecuted.fetch_add(1)+1 == (uint32_t)nNumJobs)
 	{
 		JQNODE_STATE_VERIFY(State == STATE_KICKED);
 		JQNODE_STATE_NEXT(STATE_DONE);

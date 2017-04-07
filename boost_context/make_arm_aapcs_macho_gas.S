@@ -39,9 +39,9 @@
  *******************************************************/
 
 .text
-.globl _make_fcontext
+.globl _jq_make_fcontext
 .align 2
-_make_fcontext:
+_jq_make_fcontext:
     @ shift address in A1 to lower 16 byte boundary
     bic  a1, a1, #15
 

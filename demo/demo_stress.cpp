@@ -295,6 +295,18 @@ void JqTest()
 
 
 		uint64_t nJobMedium = JqAdd(JobTree, 0, JOB_COUNT);
+#if 0
+		if(JqExecuteOne(1))
+		{
+			JQ_BREAK();
+		}
+		if(JqExecuteOne(0))
+		{
+			//OutputDebugString("HJEJ\n");
+		}
+#endif
+
+
 		g_nExternalStats ++;
 		{
 			MICROPROFILE_SCOPEI("JQDEMO", "JqWaitMedium", 0xff0000);
