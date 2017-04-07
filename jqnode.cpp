@@ -1,6 +1,31 @@
 #include "jqnode.h"
 #include "string.h"
 
+
+JQ_THREAD_LOCAL uint32_t JqNodeSelfPos = 0;
+JQ_THREAD_LOCAL JqNode* JqNodeSelfStack[JQ_MAX_JOB_STACK] = {0};
+
+void JqNodePush(JqNode* pNode)
+{
+	JqNodeSelfStack[JqNodeSelfPos] = pNode;
+	JqNodeSelfPos++;
+}
+void JqNodePop(JqNode* pNode)
+{
+	JQ_ASSERT(JqNodeSelfPos != 0);
+	JqNodeSelfPos--;
+	JQ_ASSERT(JqNodeSelfStack[JqNodeSelfPos] == pNode);	
+}
+
+JqNode* JqNodeSelf()
+{
+	JQ_ASSERT(JqNodeSelfPos > 0);
+	return JqNodeSelfStack[JqNodeSelfPos-1];
+}
+
+
+
+
 JqNode::JqNode(JqFunction Func, uint8_t nPipe, int nNumJobs, int nRange)
 	:JobFunc(Func)
 	,nJob(0)
@@ -133,9 +158,19 @@ void JqNode::DependencyDone()
 		KickInternal();
 	}
 }
+
+
+
+
+
+
+
+
 void JqNode::RunInternal(int b, int e)
 {
+	JqNodePush(this);
 	JobFunc(b, e);
+	JqNodePop(this);
 #if JQNODE_VERIFY
 	if(nNumJobsExecuted.fetch_add(1)+1 == nNumJobs)
 	{

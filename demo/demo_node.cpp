@@ -140,6 +140,35 @@ int main(int argc, char* argv[])
 	A.Run();
 	A.Wait();
 	printf("YYY RUN 2 DONE\n");
+
+
+	struct STest
+	{
+		char c;
+		uint64_t v;
+		double d;
+	};
+
+
+	JqNodeResult<STest> VTest(
+		[]
+		{
+			STest R = {'c', 0x10000000000000, 42.0 };
+			JqNodeSetResult(R);
+		}, 1);
+	VTest.Run();
+	STest Result = VTest.AwaitResult();
+	printf("Result is %d %lld %f\n", Result.c, Result.v, Result.d);
+	VTest.Reset();
+	VTest.Run();
+	STest Result2 = VTest.AwaitResult();
+	printf("Result2 is %d %lld %f\n", Result2.c, Result2.v, Result2.d);
+
+
+
+
+
+
 	g_nQuit = 1;
 
 	JqStop();
