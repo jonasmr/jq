@@ -186,6 +186,8 @@ void uprintf(const char* fmt, ...);
 #define uprintf printf
 #endif
 
+std::atomic<uint64_t> g_Handle;
+
 
 void JqTest()
 {
@@ -204,6 +206,30 @@ void JqTest()
 		TickLast = JqTick();
 		printf("\n");
 	}
+#if 1
+	//attempt at doing a blocking test
+	g_Handle.store(0);
+	uint64_t h0 = JqAdd([]
+	{
+		uint64_t nHandle = 0;
+		do
+		{
+			nHandle = g_Handle.load();
+		}while(nHandle == 0);
+		JqWait(nHandle, JQ_WAITFLAG_EXECUTE_SUCCESSORS|JQ_WAITFLAG_BLOCK);
+	}, 0, 3);
+
+	uint64_t h1 = JqAdd([]
+	{
+		JqUsleep(2000);
+	}, 0, 1);
+	uint64_t ex = 0;
+	bool bR = g_Handle.compare_exchange_strong(ex, h1);
+	JQ_ASSERT(bR);
+	JqWait(h0);
+#endif
+
+
 
 	if(frames > fLimit)
 	{

@@ -68,7 +68,20 @@ JqConditionVariable::~JqConditionVariable()
 void JqConditionVariable::Wait(JqMutex& Mutex)
 {
 	JQLSC(g_JqCondWait.fetch_add(1));
+
+#ifdef JQ_ASSERT_LOCKS
+	Mutex.nLockCount--;
+	if(0 == Mutex.nLockCount)
+	{
+		Mutex.nThreadId = 0;
+	}
+#endif
 	SleepConditionVariableCS(&Cond, &Mutex.CriticalSection, INFINITE);
+
+	JQ_AL(Mutex.nThreadId = JqGetCurrentThreadId());
+	JQ_AL(Mutex.nLockCount++);
+
+
 }
 
 void JqConditionVariable::NotifyOne()
@@ -184,7 +197,19 @@ JqConditionVariable::~JqConditionVariable()
 
 void JqConditionVariable::Wait(JqMutex& Mutex)
 {
+
+#ifdef JQ_ASSERT_LOCKS
+	Mutex.nLockCount--;
+	if(0 == Mutex.nLockCount)
+	{
+		Mutex.nThreadId = 0;
+	}
+#endif
+
 	pthread_cond_wait(&Cond, &Mutex.Mutex);
+
+	JQ_AL(Mutex.nThreadId = JqGetCurrentThreadId());
+	JQ_AL(Mutex.nLockCount++);
 
 	JQLSC(g_JqCondWait.fetch_add(1));
 
