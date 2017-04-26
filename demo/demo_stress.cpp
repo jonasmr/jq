@@ -221,7 +221,11 @@ void JqTest()
 
 	uint64_t h1 = JqAdd([]
 	{
+		#ifdef _WIN32
 		JqUsleep(2000);
+		#else
+		usleep(2000);
+		#endif
 	}, 0, 1);
 	uint64_t ex = 0;
 	bool bR = g_Handle.compare_exchange_strong(ex, h1);
