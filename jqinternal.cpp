@@ -31,14 +31,12 @@ void JqMutex::Lock()
 {
 	EnterCriticalSection(&CriticalSection);
 	JQLSC(g_JqLockOps.fetch_add(1));
-	JQ_AL(nThreadId = JQ_THREAD_ID());
+	JQ_AL(nThreadId = JqGetCurrentThreadId());
 	JQ_AL(nLockCount++);
 }
 
 void JqMutex::Unlock()
 {
-	LeaveCriticalSection(&CriticalSection);
-	JQLSC(g_JqLockOps.fetch_add(1));
 #ifdef JQ_ASSERT_LOCKS
 	nLockCount--;
 	if(0 == nLockCount)
@@ -46,12 +44,15 @@ void JqMutex::Unlock()
 		nThreadId = 0;
 	}
 #endif
+
+	LeaveCriticalSection(&CriticalSection);
+	JQLSC(g_JqLockOps.fetch_add(1));
 }
 
 #ifdef JQ_ASSERT_LOCKS
 bool JqMutex::IsLocked()
 {
-	return (nThreadId == JQ_THREAD_ID());
+	return (nThreadId == JqGetCurrentThreadId());
 }
 #endif
 JqConditionVariable::JqConditionVariable()

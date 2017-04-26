@@ -144,7 +144,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>MICROPROFILE_GPU_TIMERS=0;_ENABLE_ATOMIC_ALIGNMENT_FIX;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>JQ_ASSERT_LOCKS;MICROPROFILE_GPU_TIMERS=0;_ENABLE_ATOMIC_ALIGNMENT_FIX;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ProgramDataBaseFileName>$(OutDir)$(PROJECTNAME).pdb</ProgramDataBaseFileName>
@@ -199,7 +199,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>MICROPROFILE_GPU_TIMERS=0;_ENABLE_ATOMIC_ALIGNMENT_FIX;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>JQ_ASSERT_LOCKS;MICROPROFILE_GPU_TIMERS=0;_ENABLE_ATOMIC_ALIGNMENT_FIX;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ProgramDataBaseFileName>$(OutDir)$(PROJECTNAME).pdb</ProgramDataBaseFileName>
