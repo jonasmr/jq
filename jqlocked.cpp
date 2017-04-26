@@ -108,7 +108,6 @@ struct JQ_ALIGN_CACHELINE JqState_t
 {
 	JqSemaphore Semaphore[JQ_MAX_SEMAPHORES];
 	JqMutex Mutex;
-	JqCondMutex CondMutex;
 	JqConditionVariable WaitCond;
 
 	uint64_t m_SemaphoreMask[JQ_MAX_SEMAPHORES];
@@ -1129,7 +1128,7 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 			}
 			else
 			{
-				JqCondMutexLock lock(JqState.CondMutex);
+				JqMutexLock lock(JqState.Mutex);
 				if(JqIsDoneExt(nJob, nWaitFlag))
 				{
 					return;
@@ -1137,7 +1136,7 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 				uint16_t nJobIndex = nJob % JQ_PIPE_BUFFER_SIZE;
 				JqState.Jobs[nJobIndex].nWaiters++;
 				JqState.Stats.nNumWaitCond++;
-				JqState.WaitCond.Wait(JqState.CondMutex);
+				JqState.WaitCond.Wait(JqState.Mutex);
 				JqState.Jobs[nJobIndex].nWaiters--;
 			}
 		}

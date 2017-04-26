@@ -148,7 +148,6 @@ struct JQ_ALIGN_CACHELINE JqPipe
 	uint64_t nNextHandle;
 	uint64_t nPipeId;
 	JqMutex Mutex;
-	JqCondMutex CondMutex;
 	JqConditionVariable WaitCond;
 
 };
@@ -1315,11 +1314,11 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 				{
 					return;
 				}
-				JqCondMutexLock lock(Pipe.CondMutex);
+				JqMutexLock lock(Pipe.Mutex);
 				uint16_t nJobIndex = nJob % JQ_PIPE_BUFFER_SIZE;
 				Pipe.Jobs[nJobIndex].nWaiters++;
 				JqState.Stats.nNumWaitCond++;
-				Pipe.WaitCond.Wait(Pipe.CondMutex);
+				Pipe.WaitCond.Wait(Pipe.Mutex);
 				Pipe.Jobs[nJobIndex].nWaiters--;
 			}
 		}
