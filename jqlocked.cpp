@@ -189,7 +189,7 @@ void JqStart(JqAttributes* pAttr)
 	JQ_ASSERT(!JQ_LT_WRAP(t2, t0));
 #endif
 
-	JQ_ASSERT_NOT_LOCKED();
+	JQ_ASSERT_NOT_LOCKED(JqState.Mutex);
 
 	JQ_ASSERT( ((JQ_CACHE_LINE_SIZE-1)&(uint64_t)&JqState) == 0);
 	JQ_ASSERT( ((JQ_CACHE_LINE_SIZE-1)&offsetof(JqState_t, Mutex)) == 0);
@@ -379,7 +379,7 @@ void JqConsumeStats(JqStats* pStats)
 
 void JqCheckFinished(uint64_t nJob)
 {
-	JQ_ASSERT_LOCKED();
+	JQ_ASSERT_LOCKED(JqState.Mutex);
 	uint32_t nIndex = nJob % JQ_PIPE_BUFFER_SIZE; 
 	JQ_ASSERT(JQ_LE_WRAP(JqState.Jobs[nIndex].nFinishedHandle, nJob));
 	JQ_ASSERT(nJob == JqState.Jobs[nIndex].nStartedHandle);
@@ -415,7 +415,7 @@ void JqCheckFinished(uint64_t nJob)
 
 uint16_t JqIncrementStarted(uint64_t nJob)
 {
-	JQ_ASSERT_LOCKED();
+	JQ_ASSERT_LOCKED(JqState.Mutex);
 	uint16_t nIndex = nJob % JQ_PIPE_BUFFER_SIZE; 
 	JQ_ASSERT(JqState.Jobs[nIndex].nNumJobs > JqState.Jobs[nIndex].nNumStarted);
 	uint16_t nSubIndex = JqState.Jobs[nIndex].nNumStarted++;
@@ -427,7 +427,7 @@ uint16_t JqIncrementStarted(uint64_t nJob)
 }
 void JqIncrementFinished(uint64_t nJob)
 {
-	JQ_ASSERT_LOCKED();
+	JQ_ASSERT_LOCKED(JqState.Mutex);
 	JQ_MICROPROFILE_VERBOSE_SCOPE("Increment Finished", 0xffff);
 	uint16_t nIndex = nJob % JQ_PIPE_BUFFER_SIZE; 
 	JqState.Jobs[nIndex].nNumFinished++;
@@ -438,7 +438,7 @@ void JqIncrementFinished(uint64_t nJob)
 
 void JqAttachChild(uint64_t nParentJob, uint64_t nChildJob)
 {
-	JQ_ASSERT_LOCKED();
+	JQ_ASSERT_LOCKED(JqState.Mutex);
 	uint16_t nParentIndex = nParentJob % JQ_PIPE_BUFFER_SIZE;
 	uint16_t nChildIndex = nChildJob % JQ_PIPE_BUFFER_SIZE;
 	uint16_t nFirstChild = JqState.Jobs[nParentIndex].nFirstChild;
@@ -572,7 +572,7 @@ void JqRunInternal(uint32_t nWorkIndex, int nBegin, int nEnd)
 void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 {
 	JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
-	JQ_ASSERT_NOT_LOCKED();
+	JQ_ASSERT_NOT_LOCKED(JqState.Mutex);
 	JQ_ASSERT(JqSelfPos < JQ_MAX_JOB_STACK);
 	JqSelfPush(nJob, nSubIndex);
 	uint16_t nWorkIndex = nJob % JQ_PIPE_BUFFER_SIZE;
@@ -589,7 +589,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 
 uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumPrio, uint8_t* pPrio)
 {
-	JQ_ASSERT_LOCKED();
+	JQ_ASSERT_LOCKED(JqState.Mutex);
 	if(nNumPrio)
 	{
 		for(uint32_t i = 0; i < nNumPrio; i++)
@@ -739,7 +739,7 @@ uint16_t JqTreeIterate(uint64_t nJob, uint16_t nCurrent)
 uint16_t JqTakeChildJob(uint64_t nJob, uint16_t* pSubIndexOut)
 {
 	JQ_MICROPROFILE_VERBOSE_SCOPE("JqTakeChildJob", 0xff);
-	JQ_ASSERT_LOCKED();
+	JQ_ASSERT_LOCKED(JqState.Mutex);
 #if JQ_ASSERT_SANITY
 	{
 		//verify that the child iteration is sane
@@ -865,7 +865,7 @@ uint64_t JqNextHandle(uint64_t nJob)
 }
 uint64_t JqFindHandle(JqMutexLock& Lock)
 {
-	JQ_ASSERT_LOCKED();
+	JQ_ASSERT_LOCKED(JqState.Mutex);
 	while(!JqState.nFreeJobs)
 	{
 		if(JqSelfPos < JQ_MAX_JOB_STACK)

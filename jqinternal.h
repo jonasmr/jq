@@ -12,6 +12,7 @@
 //#include <libkern/OSAtomic.h>
 #include <os/lock.h>
 #include <unistd.h>
+#include <pthread.h>
 #define JQ_BREAK() __builtin_trap()
 #define JQ_THREAD_LOCAL __thread
 #define JQ_STRCASECMP strcasecmp
@@ -32,6 +33,15 @@ inline int64_t JqTick()
 {
 	return mach_absolute_time();
 }
+
+inline uint64_t JqGetCurrentThreadId()
+{
+	uint64_t tid;
+	pthread_threadid_np(pthread_self(), &tid);
+	return tid;
+}
+
+
 #elif defined(_WIN32)
 #define JQ_BREAK() __debugbreak()
 #define JQ_THREAD_LOCAL __declspec(thread)
@@ -93,15 +103,13 @@ inline void JqUsleep(__int64 usec)
 #endif
 
 #ifdef JQ_ASSERT_LOCKS
-#define JQ_ASSERT_LOCKED() do{if(0 == JqHasLock){JQ_BREAK();}}while(0)
-#define JQ_ASSERT_NOT_LOCKED()  do{if(0 != JqHasLock){JQ_BREAK();}}while(0)
-#define JQ_ASSERT_LOCK_ENTER() do{JqHasLock++;}while(0)
-#define JQ_ASSERT_LOCK_LEAVE()  do{JqHasLock--;}while(0)
+#define JQ_AL(exp) do{exp;}while(0)
+#define JQ_ASSERT_LOCKED(m) do{if(!m.IsLocked()){JQ_BREAK();}}while(0)
+#define JQ_ASSERT_NOT_LOCKED(m)  do{if(m.IsLocked()){JQ_BREAK();}}while(0)
 #else
-#define JQ_ASSERT_LOCKED() do{}while(0)
-#define JQ_ASSERT_NOT_LOCKED()  do{}while(0)
-#define JQ_ASSERT_LOCK_ENTER() do{}while(0)
-#define JQ_ASSERT_LOCK_LEAVE()  do{}while(0)
+#define JQ_AL(exp) do{}while(0)
+#define JQ_ASSERT_LOCKED(m) do{}while(0)
+#define JQ_ASSERT_NOT_LOCKED(m)  do{}while(0)
 #endif
 
 #ifdef JQ_MICROPROFILE
@@ -163,6 +171,12 @@ struct JqMutex
 #else
 	pthread_mutex_t Mutex;
 #endif
+
+#ifdef JQ_ASSERT_LOCKS
+	uint32_t nLockCount;
+	ThreadIdType nThreadId;
+	bool IsLocked();
+#endif
 };
 
 
@@ -223,13 +237,11 @@ struct JqMutexLock
 	{
 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
 		Mutex.Lock();
-		JQ_ASSERT_LOCK_ENTER();
 		bIsLocked = true;
 	}
 	void Unlock()
 	{
 		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
-		JQ_ASSERT_LOCK_LEAVE();
 		Mutex.Unlock();
 		bIsLocked = false;
 	}

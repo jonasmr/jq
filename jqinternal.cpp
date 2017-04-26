@@ -16,6 +16,9 @@ std::atomic<uint32_t> g_JqLocklessPops;
 #endif
 JqMutex::JqMutex()
 {
+
+	JQ_AL(nLockCount = 0);
+	JQ_AL(nThreadId = 0);
 	InitializeCriticalSection(&CriticalSection);
 }
 
@@ -28,15 +31,29 @@ void JqMutex::Lock()
 {
 	EnterCriticalSection(&CriticalSection);
 	JQLSC(g_JqLockOps.fetch_add(1));
+	JQ_AL(nThreadId = JQ_THREAD_ID());
+	JQ_AL(nLockCount++);
 }
 
 void JqMutex::Unlock()
 {
 	LeaveCriticalSection(&CriticalSection);
 	JQLSC(g_JqLockOps.fetch_add(1));
+#ifdef JQ_ASSERT_LOCKS
+	nLockCount--;
+	if(0 == nLockCount)
+	{
+		nThreadId = 0;
+	}
+#endif
 }
 
-
+#ifdef JQ_ASSERT_LOCKS
+bool JqMutex::IsLocked()
+{
+	return (nThreadId == JQ_THREAD_ID());
+}
+#endif
 JqConditionVariable::JqConditionVariable()
 {
 	InitializeConditionVariable(&Cond);
@@ -109,6 +126,12 @@ void JqSemaphore::Wait()
 
 JqMutex::JqMutex()
 {
+#ifdef JQ_ASSERT_LOCKS
+	nLockCount = 0;
+	nThreadId = 0;
+#endif
+
+
 	pthread_mutex_init(&Mutex, 0);
 }
 
@@ -122,13 +145,31 @@ void JqMutex::Lock()
 	pthread_mutex_lock(&Mutex);
 	JQLSC(g_JqLockOps.fetch_add(1));
 
+	JQ_AL(nThreadId = JqGetCurrentThreadId());
+	JQ_AL(nLockCount++);
 }
 
 void JqMutex::Unlock()
 {
+#ifdef JQ_ASSERT_LOCKS
+	nLockCount--;
+	if(0 == nLockCount)
+	{
+		nThreadId = 0;
+	}
+#endif
+
 	pthread_mutex_unlock(&Mutex);
 	JQLSC(g_JqLockOps.fetch_add(1));
 }
+
+#ifdef JQ_ASSERT_LOCKS
+bool JqMutex::IsLocked()
+{
+	return nThreadId == JqGetCurrentThreadId();
+}
+#endif
+
 
 JqConditionVariable::JqConditionVariable()
 {

@@ -268,7 +268,7 @@ void JqRunInternal(uint32_t nExternalId, int nBegin, int nEnd)
 
 void JqCheckFinished(uint64_t nJob)
 {
-	JQ_ASSERT_LOCKED();
+	// JQ_ASSERT_LOCKED();
 	uint16_t nIndex = nJob % JQ_TREE_BUFFER_SIZE2;
 	JQ_ASSERT(nIndex < JQ_TREE_BUFFER_SIZE2);
 	JqPipeHandle PipeHandle = JqState.m_Jobs2[nIndex].PipeHandle.load();
@@ -352,7 +352,7 @@ void JqFinishJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId, int nNumJo
 void JqRunJobHelper(JqPipeHandle PipeHandle, uint32_t nExternalId, uint16_t nSubIndex, int nNumJobs, int nRange)
 {
 	JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
-	JQ_ASSERT_NOT_LOCKED();
+	// JQ_ASSERT_NOT_LOCKED();
 	JQ_ASSERT(JqSelfPos < JQ_MAX_JOB_STACK);
 	JQ_ASSERT(nExternalId < JQ_TREE_BUFFER_SIZE2);
 	while(JqState.m_Jobs2[nExternalId].PipeHandle.load(std::memory_order_acquire).Handle != PipeHandle.Handle)	//spin untill external id is actually set
@@ -397,7 +397,7 @@ void JqStart(JqAttributes* pAttr)
 	JQ_ASSERT(!JQ_LT_WRAP(t2, t0));
 #endif
 	// JQ_ASSERT(nPipeConfigSize == 0 || nPipeConfigSize == JQ_NUM_PIPES * nNumWorkers); //either full spec or nothing
-	JQ_ASSERT_NOT_LOCKED();
+	// JQ_ASSERT_NOT_LOCKED();
 
 	JQ_ASSERT(JqState.nNumWorkers == 0);
 	memset(JqState.m_PipeList, 0xff, sizeof(JqState.m_PipeList));
