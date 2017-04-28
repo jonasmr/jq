@@ -1253,16 +1253,6 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 
 			}
 
-			// JqMutexLock lock(JqState.Mutex);
-			// if(nIndex)
-			// 	JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);
-			// if(JqIsDoneExt(nJob, nWaitFlag)) 
-			// 	return;
-			// nIndex = JqTakeChildJob(nJob, &nSubIndex);
-			// if(!nIndex)
-			// {
-			// 	nIndex = JqTakeJob(&nSubIndex, g_nJqNumPipes, g_JqPipes);
-			// }
 		}
 		else if(nWaitFlag & JQ_WAITFLAG_EXECUTE_SUCCESSORS)
 		{
@@ -1271,14 +1261,6 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 			{
 				pPipe = &Pipe;
 			}
-
-
-			// JqMutexLock lock(JqState.Mutex);
-			// if(nIndex)
-			// 	JqIncrementFinished(JqState.Jobs[nIndex].nStartedHandle);
-			// if(JqIsDoneExt(nJob, nWaitFlag)) 
-			// 	return;
-			// nIndex = JqTakeChildJob(nJob, &nSubIndex);
 		}
 		else if(0 != (nWaitFlag & JQ_WAITFLAG_EXECUTE_ANY))
 		{
@@ -1320,6 +1302,10 @@ void JqWait(uint64_t nJob, uint32_t nWaitFlag, uint32_t nUsWaitTime)
 					return;
 				}
 				JqMutexLock lock(Pipe.Mutex);
+				if(JqIsDoneExt(nJob, nWaitFlag))
+				{
+					return;
+				}
 				uint16_t nJobIndex = nJob % JQ_PIPE_BUFFER_SIZE;
 				Pipe.Jobs[nJobIndex].nWaiters++;
 				JqState.Stats.nNumWaitCond++;
