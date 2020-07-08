@@ -20,10 +20,10 @@ typedef uint64_t ThreadIdType;
 #define JQ_USLEEP(us) usleep(us);
 inline int64_t JqTicksPerSecond()
 {
-	static int64_t nTicksPerSecond = 0;	
-	if(nTicksPerSecond == 0) 
+	static int64_t nTicksPerSecond = 0;
+	if(nTicksPerSecond == 0)
 	{
-		mach_timebase_info_data_t sTimebaseInfo;	
+		mach_timebase_info_data_t sTimebaseInfo;
 		mach_timebase_info(&sTimebaseInfo);
 		nTicksPerSecond = 1000000000ll * sTimebaseInfo.denom / sTimebaseInfo.numer;
 	}
@@ -52,8 +52,8 @@ typedef uint32_t ThreadIdType;
 #include <windows.h>
 inline int64_t JqTicksPerSecond()
 {
-	static int64_t nTicksPerSecond = 0;	
-	if(nTicksPerSecond == 0) 
+	static int64_t nTicksPerSecond = 0;
+	if(nTicksPerSecond == 0)
 	{
 		QueryPerformanceFrequency((LARGE_INTEGER*)&nTicksPerSecond);
 	}
@@ -65,8 +65,8 @@ inline int64_t JqTick()
 	QueryPerformanceCounter((LARGE_INTEGER*)&ticks);
 	return ticks;
 }
-inline void JqUsleep(__int64 usec) 
-{ 
+inline void JqUsleep(__int64 usec)
+{
 	if(usec > 20000)
 	{
 		Sleep((DWORD)(usec/1000));
@@ -86,6 +86,32 @@ inline void JqUsleep(__int64 usec)
 		Sleep(0);
 	}
 }
+
+#else
+
+#include <time.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+#define JQ_BREAK() __builtin_trap()
+#define JQ_THREAD_LOCAL __thread
+#define JQ_STRCASECMP strcasecmp
+typedef uint64_t ThreadIdType;
+#define JQ_USLEEP(us) usleep(us);
+#define JqGetCurrentThreadId() (uint64_t)pthread_self()
+inline int64_t JqTicksPerSecond()
+{
+       return 1000000000ll;
+}
+inline int64_t JqTick()
+{
+       timespec ts;
+       clock_gettime(CLOCK_REALTIME, &ts);
+       return 1000000000ll * ts.tv_sec + ts.tv_nsec;
+}
+
+
 #endif
 
 #ifndef JQ_THREAD
@@ -213,7 +239,7 @@ struct JqSemaphore
 	JqMutex Mutex;
 	JqConditionVariable Cond;
 	std::atomic<uint32_t> nReleaseCount;
-	uint32_t nMaxCount;	
+	uint32_t nMaxCount;
 #endif
 };
 
