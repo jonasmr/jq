@@ -1,0 +1,933 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"MicroProfileCharacterMask",
+				"MicroProfileCharacterMaskString"
+			]
+		]
+	},
+	"buffers":
+	[
+		{
+			"file": "jqlocked.cpp",
+			"settings":
+			{
+				"buffer_size": 32573,
+				"encoding": "UTF-8",
+				"line_ending": "Windows"
+			},
+			"undo_stack":
+			[
+				[
+					3,
+					1,
+					"insert",
+					{
+						"characters": "®"
+					},
+					"AQAAADEDAAAAAAAAMgMAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAMQMAAAAAAAAxAwAAAAAAAAAAAAAAAPC/"
+				]
+			]
+		},
+		{
+			"file": "demo/demo_priority.cpp",
+			"settings":
+			{
+				"buffer_size": 12258,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			},
+			"undo_stack":
+			[
+				[
+					26,
+					1,
+					"left_delete",
+					null,
+					"AQAAADoSAAAAAAAAOhIAAAAAAAAOAAAAKGludCBiLCBpbnQgZSk",
+					"AQAAAAAAAAABAAAAOhIAAAAAAABIEgAAAAAAAP///////+9/"
+				]
+			]
+		}
+	],
+	"build_system": "",
+	"build_system_choices":
+	[
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"pack",
+				"Package Control: Install Package"
+			]
+		],
+		"width": 0.0
+	},
+	"console":
+	{
+		"height": 131.0,
+		"history":
+		[
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"expanded_folders":
+	[
+		"/Users/jonasmeyer/git/jq",
+		"/Users/jonasmeyer/git/jq/demo"
+	],
+	"file_history":
+	[
+		"/Users/jonasmeyer/git-windows/sph/_log/2020_11_20__21_31_37.log",
+		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/shader.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/shader.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/array.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/renderimguimenu.cpp",
+		"/Users/jonasmeyer/git-windows/sph/_clang-format",
+		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/vulkancommandbuffer.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/rendercommandbuffer.h",
+		"/Users/jonasmeyer/git-windows/sph/src/material.h",
+		"/Users/jonasmeyer/git-windows/sph/src/material.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/object.h",
+		"/Users/jonasmeyer/git-windows/sph/src/main.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/vulkancommandbuffer.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/pool.h",
+		"/Users/jonasmeyer/git-windows/sph/src/mesh.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/mesh.h",
+		"/Users/jonasmeyer/git-windows/sph/src/jq/boost_context/make_arm64_aapcs_macho_gas.S",
+		"/Users/jonasmeyer/git-windows/sph/src/render/render.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/render.cpp",
+		"/usr/local/include/vulkan/vulkan_core.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/vulkandevice.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/sys.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/rendertypes.h",
+		"/Users/jonasmeyer/git-windows/sph/src/triangle_split_image.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/vulkaninc.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/vulkanbase.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/jq/jqpipe.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/pso.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/pso.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/icosphere.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/icosphere.h",
+		"/Users/jonasmeyer/git-windows/sph/src/tilecache.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/graveyard.cpp",
+		"/Users/jonasmeyer/git-windows/sph/_out/osx/sph_debug",
+		"/Users/jonasmeyer/git-windows/sph/src/base/refcounted.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/renderfwd.h",
+		"/Users/jonasmeyer/git-windows/sph/src/ngen.py",
+		"/Users/jonasmeyer/git-windows/sph/src/ngen/rules.osx",
+		"/Users/jonasmeyer/git-windows/sph/src/scene.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/v4.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/v4.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/v3.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/mathmisc.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/v3.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/mathtypes.h",
+		"/Users/jonasmeyer/git-windows/sph/src/camera.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/shaderstructs.h",
+		"/Users/jonasmeyer/git-windows/sph/src/debug.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/renderdebug.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/renderdebug.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/renderimgui.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/vulkancommandbuffer.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/build.ninja",
+		"/Users/jonasmeyer/git-windows/sph/src/ngen.osx",
+		"/Users/jonasmeyer/git-windows/sph/src/sphclient.cpp",
+		"/Users/jonasmeyer/git-windows/sph/log/jonasm.log",
+		"/Users/jonasmeyer/git-windows/sph/src/object.cpp",
+		"/usr/local/include/lzma/base.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/base.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/buffer.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/buffer.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/shader.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/pso.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/sphclient.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/sys_linux.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/jq/jqinternal.h",
+		"/Users/jonasmeyer/git-windows/sph/src/jq/jqinternal.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/jq/jq.h",
+		"/Users/jonasmeyer/git-windows/sph/teast/sph/src/jq/demo/demo_stress.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/threading.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/threading.h",
+		"/Users/jonasmeyer/git-windows/sph/sph.sublime-project",
+		"/Users/jonasmeyer/git-windows/sph/src/base/socket_linux.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/socket_osx.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/socket.h",
+		"/Users/jonasmeyer/git-windows/sph/src/imgui/imgui_demo.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/location/location_osx.mm",
+		"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreLocation.framework/Headers/CLLocationManager.h",
+		"/Users/jonasmeyer/git-windows/sph/src/stb/stb_image.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/httprequest.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/httprequest.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/vk_oldold.xpp",
+		"/Users/jonasmeyer/git-windows/sph/teast/sph/src/jq/jqinternal.h",
+		"/Users/jonasmeyer/git-windows/sph/src/materialinstance.cpp",
+		"/Users/jonasmeyer/git-windows/sph/shaders/basic.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/rendertexture.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/rendertexture.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/mathmisc.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/vulkanentrypoints.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/render/vulkanentrypoints.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/vulkancommandbuffer.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/ps",
+		"/Users/jonasmeyer/git-windows/sph/shaders/debug.hlsl",
+		"/Users/jonasmeyer/git-windows/sph/shaders/globals.h",
+		"/Users/jonasmeyer/git-windows/sph/shaders/ubo.h",
+		"/Users/jonasmeyer/git-windows/sph/shaders/globe.hlsl",
+		"/Users/jonasmeyer/git-windows/sph/src/camera.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/globalposition.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/globalposition.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/base.cpp",
+		"/usr/local/include/glm/gtx/texture.hpp",
+		"/Users/jonasmeyer/git-windows/sph/src/socketdebugread",
+		"/Users/jonasmeyer/git-windows/sph/src/tilecache.h",
+		"/Users/jonasmeyer/git-windows/sph/src/render/descriptorset.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/ngen.cfg",
+		"/Users/jonasmeyer/git-windows/sph/src/ngen.win32",
+		"/Users/jonasmeyer/git-windows/sph/src/ngen.linux",
+		"/Users/jonasmeyer/git-windows/sph/src/base/sys_osx.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/zstring.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/m.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/md.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/v3d.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/quat.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/quat.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/v4d.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/v4d.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/m.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/base/md.cpp",
+		"/Users/jonasmeyer/git-windows/sph/shaders/shader.frag",
+		"/Users/jonasmeyer/git-windows/sph/shaders/standard_vert.vert",
+		"/Users/jonasmeyer/git-windows/sph/shaders/standard_vert_rotation.vert",
+		"/Users/jonasmeyer/git-windows/sph/shaders/standard_frag_color.frag",
+		"/Users/jonasmeyer/git-windows/sph/shaders/standard_frag.frag",
+		"/Users/jonasmeyer/git-windows/sph/src/shaderstructs.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/v2.h",
+		"/Users/jonasmeyer/git-windows/sph/src/renderdebug.cpp",
+		"/Users/jonasmeyer/git-windows/sph/src/renderdebug.h",
+		"/Users/jonasmeyer/git-windows/sph/src/base/hash.cpp"
+	],
+	"find":
+	{
+		"height": 39.0
+	},
+	"find_in_files":
+	{
+		"height": 102.0,
+		"where_history":
+		[
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+			"JqTestPrio",
+			"JqPriorityListAdd",
+			"nPrioListHead",
+			"JqTakeJob",
+			"JqExecuteJob"
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+		],
+		"reverse": false,
+		"scrollbar_highlights": true,
+		"show_context": true,
+		"use_buffer2": true,
+		"use_gitignore": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "jqlocked.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 32573,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								25269,
+								25286
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 16870.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "demo/demo_priority.cpp",
+					"selected": true,
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 12258,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								4666,
+								4666
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 1.0,
+						"translation.y": 3585.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				}
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 27.0
+	},
+	"input":
+	{
+		"height": 0.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.exec":
+	{
+		"height": 362.0
+	},
+	"output.find_results":
+	{
+		"height": 0.0
+	},
+	"pinned_build_system": "default",
+	"project": "jq.sublime-project",
+	"replace":
+	{
+		"height": 50.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"ico",
+				"sph/src/icosphere.cpp"
+			],
+			[
+				"",
+				"sph/src/sphclient.cpp"
+			],
+			[
+				"imguime",
+				"sph/src/render/renderimguimenu.cpp"
+			],
+			[
+				"menu",
+				"include/msgpack/preprocessor/enum.hpp"
+			],
+			[
+				"sphcli",
+				"sph/src/sphclient.cpp"
+			],
+			[
+				"sph",
+				"sph/src/sphclient.cpp"
+			],
+			[
+				"main",
+				"sph/src/main.cpp"
+			],
+			[
+				"sec",
+				"sph/src/sectorid.cpp"
+			],
+			[
+				"sectori",
+				"sph/src/sectorid.cpp"
+			],
+			[
+				"secto",
+				"sph/src/sectorid.cpp"
+			],
+			[
+				"imgmenu",
+				"sph/src/render/renderimguimenu.cpp"
+			],
+			[
+				"main.c",
+				"sph/src/main.cpp"
+			],
+			[
+				"poo",
+				"sph/src/base/pool.cpp"
+			],
+			[
+				"sys.h",
+				"sph/src/base/sys.h"
+			],
+			[
+				"sy.h",
+				"include/msgpack/sysdep.h"
+			],
+			[
+				"globa",
+				"sph/src/globalposition.cpp"
+			],
+			[
+				"camera",
+				"sph/src/camera.cpp"
+			],
+			[
+				"global",
+				"sph/src/globalposition.cpp"
+			],
+			[
+				"glo",
+				"sph/src/globalposition.cpp"
+			],
+			[
+				"imgui",
+				"sph/src/render/renderimgui.cpp"
+			],
+			[
+				"defe",
+				"sph/src/base/defer.h"
+			],
+			[
+				"scen",
+				"sph/src/scene.cpp"
+			],
+			[
+				"imguim",
+				"sph/src/render/renderimguimenu.cpp"
+			],
+			[
+				"loca",
+				"sph/src/location/location.h"
+			],
+			[
+				"jonasm",
+				"sph/log/jonasm.log"
+			],
+			[
+				"main.",
+				"sph/src/main.cpp"
+			],
+			[
+				"ic",
+				"sph/src/icosphere.cpp"
+			],
+			[
+				"renderty",
+				"sph/src/render/rendertypes.h"
+			],
+			[
+				"obj",
+				"sph/src/object.h"
+			],
+			[
+				"jonas",
+				"sph/log/jonasm.log"
+			],
+			[
+				"todo",
+				"sph/src/todo.jonasm"
+			],
+			[
+				"vulkanin",
+				"sph/src/render/_vulkan/vulkaninc.h"
+			],
+			[
+				"shader.cpp",
+				"~/git-windows/sph/src/render/_vulkan/shader.cpp"
+			],
+			[
+				"globe",
+				"sph/shaders/globe.hlsl"
+			],
+			[
+				"pso.h",
+				"sph/src/render/_vulkan/vulkanpso.h"
+			],
+			[
+				"sha",
+				"sph/src/render/_vulkan/shader.h"
+			],
+			[
+				"render .h",
+				"sph/src/render/rendertypes.h"
+			],
+			[
+				"shader",
+				"sph/src/render/_vulkan/shader.h"
+			],
+			[
+				"vulkanpso",
+				"sph/src/render/_vulkan/vulkanpso.cpp"
+			],
+			[
+				"vulkan ps",
+				"sph/src/render/_vulkan/vulkanpso.h"
+			],
+			[
+				".gitin",
+				"sph/src/ngen/.gitignore"
+			],
+			[
+				"refc",
+				"sph/src/base/refcounted.h"
+			],
+			[
+				"shader.cp",
+				"sph/src/render/_vulkan/shader.cpp"
+			],
+			[
+				"shader.h",
+				"sph/src/render/_vulkan/shader.h"
+			],
+			[
+				"limit",
+				"sph/src/objectlimits.h"
+			],
+			[
+				"limits",
+				"include/glslang/Include/ResourceLimits.h"
+			],
+			[
+				"vulkanps",
+				"sph/src/render/_vulkan/vulkanpso.h"
+			],
+			[
+				"shader.c",
+				"sph/src/render/_vulkan/shader.cpp"
+			],
+			[
+				"vulkandev",
+				"sph/src/render/_vulkan/vulkandevice.cpp"
+			],
+			[
+				"device",
+				"sph/src/base/render/renderdevice.cpp"
+			],
+			[
+				"render",
+				"sph/src/render/render.cpp"
+			],
+			[
+				"pool",
+				"sph/src/base/pool.cpp"
+			],
+			[
+				"sys",
+				"sph/src/base/sys_osx.cpp"
+			],
+			[
+				"ref",
+				"sph/src/base/refcounted.h"
+			],
+			[
+				"clien",
+				"sph/src/sphclient.h"
+			],
+			[
+				"sphcl",
+				"sph/src/sphclient.cpp"
+			],
+			[
+				"pool.",
+				"sph/src/base/pool.cpp"
+			],
+			[
+				"scene.c",
+				"sph/src/scene.cpp"
+			],
+			[
+				"commandlin",
+				"sph/src/base/commandline.cpp"
+			],
+			[
+				"zstrin",
+				"sph/src/base/zstring.h"
+			],
+			[
+				"command",
+				"sph/src/base/commandline.h"
+			],
+			[
+				"array.",
+				"sph/src/base/array.h"
+			],
+			[
+				"vkco",
+				"include/vulkan/vulkan_core.h"
+			],
+			[
+				"sys.",
+				"sph/src/base/sys.h"
+			],
+			[
+				"vulkanb",
+				"sph/src/render/_vulkan/vulkanbase.cpp"
+			],
+			[
+				"vulkaninc",
+				"sph/src/render/_vulkan/vulkaninc.h"
+			],
+			[
+				"pso",
+				"sph/src/render/_vulkan/pso.cpp"
+			],
+			[
+				"shader.",
+				"sph/src/render/_vulkan/shader.h"
+			],
+			[
+				"vulkacomma",
+				"sph/src/render/_vulkan/vulkancommandbuffer.cpp"
+			],
+			[
+				"pso.",
+				"sph/src/render/_vulkan/pso.h"
+			],
+			[
+				"material",
+				"sph/src/material.cpp"
+			],
+			[
+				"rendert",
+				"sph/src/render/rendertypes.h"
+			],
+			[
+				"ommandbuff",
+				"sph/src/render/rendercommandbuffer.h"
+			],
+			[
+				"render.cp",
+				"sph/src/render/render.cpp"
+			],
+			[
+				"renderim",
+				"sph/src/render/renderimguimenu.cpp"
+			],
+			[
+				"vulkanco",
+				"sph/src/render/_vulkan/vulkancommandbuffer.cpp"
+			],
+			[
+				"mesh",
+				"sph/src/mesh.h"
+			],
+			[
+				"mehs",
+				"sph/src/jq/boost_context/make_arm64_aapcs_macho_gas.S"
+			],
+			[
+				"shade",
+				"sph/src/render/_vulkan/shader.h"
+			],
+			[
+				"vulkancp",
+				"sph/src/render/_vulkan/vulkancommandbuffer.cpp"
+			],
+			[
+				"_cla",
+				"sph/_clang-format"
+			],
+			[
+				"renderfw",
+				"sph/src/render/renderfwd.h"
+			],
+			[
+				"_cl",
+				"sph/_clang-format"
+			],
+			[
+				"_c",
+				"sph/_clang-format"
+			],
+			[
+				"renderco",
+				"sph/src/render/rendercommandbuffer.h"
+			],
+			[
+				"mes",
+				"sph/src/mesh.h"
+			],
+			[
+				"sphc",
+				"sph/src/sphclient.cpp"
+			],
+			[
+				"scne",
+				"sph/src/scene.cpp"
+			],
+			[
+				"icos",
+				"sph/src/icosphere.h"
+			],
+			[
+				"icosp",
+				"sph/src/icosphere.h"
+			],
+			[
+				"mathmi",
+				"sph/src/base/mathmisc.h"
+			],
+			[
+				"rendercom",
+				"sph/src/render/rendercommandbuffer.h"
+			],
+			[
+				"buff",
+				"sph/src/render/buffer.cpp"
+			],
+			[
+				"base.",
+				"sph/src/base/base.h"
+			],
+			[
+				"base",
+				"include/lzma/base.h"
+			],
+			[
+				"renderimg",
+				"sph/src/render/renderimguimenu.cpp"
+			],
+			[
+				"v3",
+				"sph/src/base/v3.h"
+			],
+			[
+				"math",
+				"sph/src/base/mathtypes.h"
+			],
+			[
+				"imgu menu",
+				"sph/src/render/renderimguimenu.cpp"
+			],
+			[
+				"ngen.",
+				"sph/src/ngen.osx"
+			],
+			[
+				"ngne.osx",
+				"sph/src/ngen/rules.osx"
+			],
+			[
+				"ngen",
+				"sph/src/ngen.py"
+			],
+			[
+				"renderde",
+				"sph/src/render/renderdebug.cpp"
+			],
+			[
+				"shaderstru",
+				"sph/src/render/shaderstructs.h"
+			],
+			[
+				"main.cpp",
+				"sph/src/main.cpp"
+			],
+			[
+				"nge",
+				"sph/src/ngen.osx"
+			],
+			[
+				"array",
+				"sph/src/base/array.h"
+			],
+			[
+				"icosc",
+				"sph/src/icosphere.cpp"
+			],
+			[
+				"build",
+				"sph/src/build.ninja"
+			],
+			[
+				"rende",
+				"sph/src/render/renderdebug.cpp"
+			],
+			[
+				"renderd",
+				"sph/src/render/renderdebug.h"
+			],
+			[
+				"v4",
+				"sph/src/base/v4.h"
+			],
+			[
+				"camer",
+				"sph/src/camera.h"
+			],
+			[
+				"renderdeb",
+				"sph/src/render/renderdebug.h"
+			],
+			[
+				"debug",
+				"sph/src/debug.h"
+			],
+			[
+				"tilec",
+				"sph/src/tilecache.cpp"
+			],
+			[
+				"rul",
+				"sph/src/ngen/rules.osx"
+			],
+			[
+				"ngen.osx",
+				"sph/src/ngen.osx"
+			],
+			[
+				"n",
+				"sph/src/ngen.cfg"
+			],
+			[
+				"lo",
+				"sph/src/location/location_osx.mm"
+			],
+			[
+				"vulkancom",
+				"sph/src/render/vulkancommandbuffer.cpp"
+			],
+			[
+				"commandb",
+				"sph/src/render/rendercommandbuffer.h"
+			],
+			[
+				"img",
+				"sph/src/imgui/imgui.h"
+			],
+			[
+				"tileca",
+				"sph/src/tilecache.h"
+			],
+			[
+				"socket_os",
+				"sph/src/base/socket_osx.cpp"
+			],
+			[
+				"socket_",
+				"sph/src/base/socket_linux.cpp"
+			],
+			[
+				"ng",
+				"sph/src/ngen.cfg"
+			],
+			[
+				"http",
+				"sph/src/base/httprequest.cpp"
+			]
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 500.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 380.0
+	},
+	"select_symbol":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+	},
+	"show_minimap": true,
+	"show_open_files": true,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 362.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+	}
+}

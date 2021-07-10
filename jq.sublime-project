@@ -1,0 +1,26 @@
+{
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	],
+	"build_systems":
+    [
+    	{
+    		"name":"jq_demo",
+    		"osx" : {
+						"shell_cmd": "make",
+						"file_regex": "(...*?):([0-9]*):([0-9]*):",
+						"working_dir": "${project_path}/demo/"
+					}
+		},
+
+	],
+  "settings": {
+    "ClangFormat": {
+      "format_on_save": true
+    }
+  }
+
+}
