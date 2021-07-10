@@ -2,7 +2,7 @@ LDFLAGS=-lpthread -lcurses
 
 CFLAGS=-I.. -I. -DGLEW_STATIC -Wno-c++11-extensions -Wall
 #CFLAGS+=-fsanitize=undefined-trap -fsanitize-undefined-trap-on-error
-CFLAGS+=-g -O3 -Wno-invalid-offsetof 
+CFLAGS+=-g -O0 -Wno-invalid-offsetof 
 CFLAGS+=-DJQ_ASSERT_LOCKS
 
 CPPFLAGS=$(CFLAGS)
