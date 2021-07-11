@@ -224,7 +224,9 @@ void JqTestPrio()
 	std::atomic<int>* pBar			 = &Bar;
 	std::atomic<int>* pSuccessorDone = &SuccessorDone;
 	uint64_t		  ReservedHandle = JqReserve(0);
+	Foo								 = 0;
 	Bar								 = 0;
+	SuccessorDone					 = 0;
 
 	uint64_t ReservedWait = JqAdd(
 		[pBar, ReservedHandle] {
@@ -239,7 +241,7 @@ void JqTestPrio()
 
 	uint64_t J3 = JqAdd(
 		[pFoo, pBar, &ReservedHandle](int JobIndex) {
-			MICROPROFILE_SCOPEI("JQ_TEST", "Lots of increments", 0xffff00);
+			MICROPROFILE_SCOPEI("JQ_TEST", "Lots of increments", 0x77ff00);
 			pFoo->fetch_add(1);
 			if(JobIndex == 999)
 			{
@@ -252,13 +254,14 @@ void JqTestPrio()
 	uint64_t Successor = JqAddSuccessor(
 		J3,
 		[pFoo, pSuccessorDone]() {
-			JQ_BREAK();
 			if(1000 != *pFoo)
 			{
 				JQ_BREAK();
 			}
 
 			*pSuccessorDone = 1;
+			MICROPROFILE_SCOPEI("JQ_TEST", "THE_SUCCESSOR", 0xff0000);
+			JobSpinWork(5000);
 		},
 		0);
 

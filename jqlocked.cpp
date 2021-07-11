@@ -388,9 +388,10 @@ void JqCheckFinished(uint64_t nJob)
 
 		while(Precondition != 0)
 		{
-			uint32_t nPreconditionIndex	   = Precondition % JQ_PIPE_BUFFER_SIZE;
-			JqJob*	 pStalled			   = &JqState.Jobs[nIndex];
-			pStalled->nStalled			   = 0;
+			uint32_t nPreconditionIndex = Precondition % JQ_PIPE_BUFFER_SIZE;
+			JqJob*	 pStalled			= &JqState.Jobs[nPreconditionIndex];
+			pStalled->nStalled			= 0;
+			printf("releasing %p\n", Precondition);
 			Precondition				   = pStalled->nPreconditionSibling;
 			pStalled->nPreconditionSibling = 0;
 
@@ -916,13 +917,13 @@ bool JqCancel(uint64_t nJob)
 
 void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
 {
+	JQ_ASSERT_LOCKED(JqState.Mutex);
 	uint16_t nIndex = Handle % JQ_PIPE_BUFFER_SIZE;
 	if(JqIsDone(Precondition))
 	{
 		JqPriorityListAdd(nIndex);
 	}
 	{
-		JqMutexLock Lock(JqState.Mutex);
 		if(JqIsDone(Precondition))
 		{
 			JqPriorityListAdd(nIndex);
