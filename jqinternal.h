@@ -1,18 +1,17 @@
 #pragma once
-//internal code, shared by both lockless and locked version
+// internal code, shared by both lockless and locked version
 
 #include "jqfcontext.h"
 #ifdef JQ_MICROPROFILE
 #include "microprofile.h"
 #endif
 
-
 #if defined(__APPLE__)
 #include <mach/mach_time.h>
 //#include <libkern/OSAtomic.h>
 #include <os/lock.h>
-#include <unistd.h>
 #include <pthread.h>
+#include <unistd.h>
 #define JQ_BREAK() __builtin_trap()
 #define JQ_THREAD_LOCAL __thread
 #define JQ_STRCASECMP strcasecmp
@@ -41,7 +40,6 @@ inline uint64_t JqGetCurrentThreadId()
 	return tid;
 }
 
-
 #elif defined(_WIN32)
 #define JQ_BREAK() __debugbreak()
 #define JQ_THREAD_LOCAL __declspec(thread)
@@ -50,7 +48,7 @@ typedef uint32_t ThreadIdType;
 #define JQ_USLEEP(us) JqUsleep(us);
 #define JqGetCurrentThreadId() GetCurrentThreadId()
 #include <windows.h>
-inline int64_t JqTicksPerSecond()
+inline int64_t	 JqTicksPerSecond()
 {
 	static int64_t nTicksPerSecond = 0;
 	if(nTicksPerSecond == 0)
@@ -69,15 +67,15 @@ inline void JqUsleep(__int64 usec)
 {
 	if(usec > 20000)
 	{
-		Sleep((DWORD)(usec/1000));
+		Sleep((DWORD)(usec / 1000));
 	}
 	else if(usec >= 1000)
 	{
 #ifdef _DURANGO
-		Sleep((DWORD)(usec/1000));
+		Sleep((DWORD)(usec / 1000));
 #else
 		timeBeginPeriod(1);
-		Sleep((DWORD)(usec/1000));
+		Sleep((DWORD)(usec / 1000));
 		timeEndPeriod(1);
 #endif
 	}
@@ -89,9 +87,9 @@ inline void JqUsleep(__int64 usec)
 
 #else
 
-#include <time.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #define JQ_BREAK() __builtin_trap()
@@ -99,66 +97,112 @@ inline void JqUsleep(__int64 usec)
 #define JQ_STRCASECMP strcasecmp
 typedef uint64_t ThreadIdType;
 #define JQ_USLEEP(us) usleep(us);
-#define JqGetCurrentThreadId() (uint64_t)pthread_self()
-inline int64_t JqTicksPerSecond()
+#define JqGetCurrentThreadId() (uint64_t) pthread_self()
+inline int64_t	 JqTicksPerSecond()
 {
-       return 1000000000ll;
+	return 1000000000ll;
 }
 inline int64_t JqTick()
 {
-       timespec ts;
-       clock_gettime(CLOCK_REALTIME, &ts);
-       return 1000000000ll * ts.tv_sec + ts.tv_nsec;
+	timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	return 1000000000ll * ts.tv_sec + ts.tv_nsec;
 }
-
 
 #endif
 
 #ifndef JQ_THREAD
 #include <thread>
 #define JQ_THREAD std::thread
-#define JQ_THREAD_CREATE(pThread) do{} while(0)
-#define JQ_THREAD_DESTROY(pThread) do{} while(0)
-#define JQ_THREAD_START(pThread, entry, index) do{ *pThread = std::thread(entry, index); } while(0)
-#define JQ_THREAD_JOIN(pThread) do{(pThread)->join();}while(0)
+#define JQ_THREAD_CREATE(pThread)                                                                                                                                                                      \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
+#define JQ_THREAD_DESTROY(pThread)                                                                                                                                                                     \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
+#define JQ_THREAD_START(pThread, entry, index)                                                                                                                                                         \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+		*pThread = std::thread(entry, index);                                                                                                                                                          \
+	} while(0)
+#define JQ_THREAD_JOIN(pThread)                                                                                                                                                                        \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+		(pThread)->join();                                                                                                                                                                             \
+	} while(0)
 #endif
 
-#ifdef JQ_NO_ASSERT
-#define JQ_ASSERT(a) do{}while(0)
-#else
-#define JQ_ASSERT(a) do{if(!(a)){JqDump(); JQ_BREAK();} }while(0)
-#endif
+// #ifdef JQ_NO_ASSERT
+// #define JQ_ASSERT(a) do{}while(0)
+// #else
+// #define JQ_ASSERT(a) do{if(!(a)){JqDump(); JQ_BREAK();} }while(0)
+// #endif
 
 #ifdef JQ_ASSERT_LOCKS
-#define JQ_AL(exp) do{exp;}while(0)
-#define JQ_ASSERT_LOCKED(m) do{if(!m.IsLocked()){JQ_BREAK();}}while(0)
-#define JQ_ASSERT_NOT_LOCKED(m)  do{if(m.IsLocked()){JQ_BREAK();}}while(0)
+#define JQ_AL(exp)                                                                                                                                                                                     \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+		exp;                                                                                                                                                                                           \
+	} while(0)
+#define JQ_ASSERT_LOCKED(m)                                                                                                                                                                            \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+		if(!m.IsLocked())                                                                                                                                                                              \
+		{                                                                                                                                                                                              \
+			JQ_BREAK();                                                                                                                                                                                \
+		}                                                                                                                                                                                              \
+	} while(0)
+#define JQ_ASSERT_NOT_LOCKED(m)                                                                                                                                                                        \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+		if(m.IsLocked())                                                                                                                                                                               \
+		{                                                                                                                                                                                              \
+			JQ_BREAK();                                                                                                                                                                                \
+		}                                                                                                                                                                                              \
+	} while(0)
 #else
-#define JQ_AL(exp) do{}while(0)
-#define JQ_ASSERT_LOCKED(m) do{}while(0)
-#define JQ_ASSERT_NOT_LOCKED(m)  do{}while(0)
+#define JQ_AL(exp)                                                                                                                                                                                     \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
+#define JQ_ASSERT_LOCKED(m)                                                                                                                                                                            \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
+#define JQ_ASSERT_NOT_LOCKED(m)                                                                                                                                                                        \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
 #endif
 
 #ifdef JQ_MICROPROFILE
-#define JQ_MICROPROFILE_SCOPE(a,c) MICROPROFILE_SCOPEI("JQ",a,c)
+#define JQ_MICROPROFILE_SCOPE(a, c) MICROPROFILE_SCOPEI("JQ", a, c)
 #else
-#define JQ_MICROPROFILE_SCOPE(a,c) do{}while(0)
+#define JQ_MICROPROFILE_SCOPE(a, c)                                                                                                                                                                    \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
 #endif
 
 #ifdef JQ_MICROPROFILE_VERBOSE
-#define JQ_MICROPROFILE_VERBOSE_SCOPE(a,c) MICROPROFILE_SCOPEI("JQ",a,c)
+#define JQ_MICROPROFILE_VERBOSE_SCOPE(a, c) MICROPROFILE_SCOPEI("JQ", a, c)
 #else
-#define JQ_MICROPROFILE_VERBOSE_SCOPE(a,c) do{}while(0)
+#define JQ_MICROPROFILE_VERBOSE_SCOPE(a, c)                                                                                                                                                            \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
 #endif
 
-#define JQ_LT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<0)
-#define JQ_LE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))<=0)
-#define JQ_GE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>=0)
-#define JQ_GT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b))>0)
-#define JQ_LT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<0)
-#define JQ_LE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))<=0)
-#define JQ_GE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>=0)
-#define JQ_GT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a<<(bits)) - (uint64_t)(b<<(bits))))>0)
+#define JQ_LT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b)) < 0)
+#define JQ_LE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b)) <= 0)
+#define JQ_GE_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b)) >= 0)
+#define JQ_GT_WRAP(a, b) (((int64_t)((uint64_t)a - (uint64_t)b)) > 0)
+#define JQ_LT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a << (bits)) - (uint64_t)(b << (bits)))) < 0)
+#define JQ_LE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a << (bits)) - (uint64_t)(b << (bits)))) <= 0)
+#define JQ_GE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a << (bits)) - (uint64_t)(b << (bits)))) >= 0)
+#define JQ_GT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a << (bits)) - (uint64_t)(b << (bits)))) > 0)
 
 #ifdef _WIN32
 #define JQ_ALIGN_CACHELINE __declspec(align(JQ_CACHE_LINE_SIZE))
@@ -182,9 +226,11 @@ extern std::atomic<uint32_t> g_JqSemaSignal;
 extern std::atomic<uint32_t> g_JqSemaWait;
 extern std::atomic<uint32_t> g_JqLocklessPops;
 #else
-#define JQLSC(exp) do{}while(0)
+#define JQLSC(exp)                                                                                                                                                                                     \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
 #endif
-
 
 struct JqPipe;
 struct JqMutex
@@ -196,16 +242,15 @@ struct JqMutex
 #ifdef _WIN32
 	CRITICAL_SECTION CriticalSection;
 #else
-	pthread_mutex_t Mutex;
+	pthread_mutex_t		  Mutex;
 #endif
 
 #ifdef JQ_ASSERT_LOCKS
-	uint32_t nLockCount;
+	uint32_t	 nLockCount;
 	ThreadIdType nThreadId;
-	bool IsLocked();
+	bool		 IsLocked();
 #endif
 };
-
 
 struct JqConditionVariable
 {
@@ -217,11 +262,9 @@ struct JqConditionVariable
 #ifdef _WIN32
 	CONDITION_VARIABLE Cond;
 #else
-	pthread_cond_t Cond;
+	pthread_cond_t		  Cond;
 #endif
 };
-
-
 
 struct JqSemaphore
 {
@@ -234,21 +277,21 @@ struct JqSemaphore
 
 #ifdef _WIN32
 	HANDLE Handle;
-	LONG nMaxCount;
+	LONG   nMaxCount;
 #else
-	JqMutex Mutex;
-	JqConditionVariable Cond;
+	JqMutex				  Mutex;
+	JqConditionVariable	  Cond;
 	std::atomic<uint32_t> nReleaseCount;
-	uint32_t nMaxCount;
+	uint32_t			  nMaxCount;
 #endif
 };
 
 struct JqMutexLock
 {
-	bool bIsLocked;
+	bool	 bIsLocked;
 	JqMutex& Mutex;
 	JqMutexLock(JqMutex& Mutex)
-		:Mutex(Mutex)
+		: Mutex(Mutex)
 	{
 		bIsLocked = false;
 		Lock();
@@ -274,28 +317,26 @@ struct JqMutexLock
 	}
 };
 
-
 struct JqJobStack
 {
-	uint64_t GUARD[2];
+	uint64_t   GUARD[2];
 	JqFContext ContextReturn;
 	JqFContext pContextJob;
 
-	JqJobStack* pLink;//when in use: Previous. When freed, next element in free list
-	JqPipe* pPipe;
+	JqJobStack* pLink; // when in use: Previous. When freed, next element in free list
+	JqPipe*		pPipe;
 
 	uint32_t nExternalId;
 	uint32_t nFlags;
-	int nBegin;
-	int nEnd;
-	int nStackSize;
-	void* StackBottom()
+	int		 nBegin;
+	int		 nEnd;
+	int		 nStackSize;
+	void*	 StackBottom()
 	{
 		intptr_t t = (intptr_t)this;
 		t += Offset();
 		t -= nStackSize;
 		return (void*)t;
-
 	}
 	void* StackTop()
 	{
@@ -317,34 +358,28 @@ struct JqJobStack
 		t += nStackSize;
 		t -= Offset();
 		JqJobStack* pJobStack = (JqJobStack*)t;
-		new (pJobStack) JqJobStack;
-		pJobStack->pLink = 0;
+		new(pJobStack) JqJobStack;
+		pJobStack->pLink	   = 0;
 		pJobStack->nExternalId = 0;
-		pJobStack->nFlags = nFlags;
-		pJobStack->nStackSize = nStackSize;
-		pJobStack->GUARD[0] = (uint64_t)0xececececececececll;
-		pJobStack->GUARD[1] = (uint64_t)0xececececececececll;
+		pJobStack->nFlags	   = nFlags;
+		pJobStack->nStackSize  = nStackSize;
+		pJobStack->GUARD[0]	   = (uint64_t)0xececececececececll;
+		pJobStack->GUARD[1]	   = (uint64_t)0xececececececececll;
 		return pJobStack;
 	}
 };
 
-
 struct JqJobStackLink
 {
 	JqJobStack* pHead;
-	uint32_t 	nCounter;
+	uint32_t	nCounter;
 };
 
 typedef std::atomic<JqJobStackLink> JqJobStackList;
 
-
 void* JqAllocStackInternal(uint32_t nStackSize);
-void JqFreeStackInternal(void* pStack, uint32_t nStackSize);
+void  JqFreeStackInternal(void* pStack, uint32_t nStackSize);
 
 JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags);
-void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack);
-void JqFreeAllStacks(JqJobStackList& FreeList);
-
-
-
-
+void		JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack);
+void		JqFreeAllStacks(JqJobStackList& FreeList);

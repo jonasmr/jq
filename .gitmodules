@@ -1,0 +1,3 @@
+[submodule "microprofile"]
+	path = microprofile
+	url = git@github.com:jonasmr/microprofile.git

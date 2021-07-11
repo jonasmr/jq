@@ -1,23 +1,43 @@
-LDFLAGS=-lpthread -lcurses 
+UNAME_S := $(shell uname -s)
 
-CFLAGS=-I.. -I. -DGLEW_STATIC -Wno-c++11-extensions -Wall
+
+LDFLAGS=-lpthread -lcurses
+
+CFLAGS=-I.. -I. -DGLEW_STATIC -Wall
 #CFLAGS+=-fsanitize=undefined-trap -fsanitize-undefined-trap-on-error
-CFLAGS+=-g -O0 -Wno-invalid-offsetof 
+CFLAGS+=-g -O0 -Wno-invalid-offsetof -Wno-format
 CFLAGS+=-DJQ_ASSERT_LOCKS
 
 CPPFLAGS=$(CFLAGS)
-CPPFLAGS+=-stdlib=libc++ -std=c++11
+
+#CPPFLAGS+=-stdlib=libc++ -std=c++11
+
 CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
 #CPPFLAGS+=-DJQ_MICROPROFILE
+LDFLAGS += -latomic
 
 
 
 
-CPP_SOURCES = microprofile.cpp ../jqpipe.cpp  ../jqinternal.cpp ../jqnode.cpp
+CPP_SOURCES = ../microprofile/microprofile.cpp ../jqpipe.cpp  ../jqinternal.cpp ../jqnode.cpp
 DEMO_SOURCES = demo_stress.cpp demo_priority.cpp demo_node.cpp demo_cancel.cpp
 JQ_SOURCES=../jqlockless.cpp ../jqlocked.cpp ../jqmultilocked.cpp
 C_SOURCES =
 ASM_SOURCES = ../boost_context/jump_x86_64_sysv_macho_gas.S ../boost_context/make_x86_64_sysv_macho_gas.S
+
+
+#osx
+ifeq ($(UNAME_S),Darwin)
+	CCFLAGS += -D OSX
+	ASM_SOURCES = ../boost_context/jump_x86_64_sysv_macho_gas.S ../boost_context/make_x86_64_sysv_macho_gas.S
+endif
+
+#linux
+ifeq ($(UNAME_S),Linux)
+	ASM_SOURCES = ../boost_context/jump_x86_64_sysv_elf_gas.S ../boost_context/make_x86_64_sysv_elf_gas.S
+	CCFLAGS += LINUX
+endif
+
 
 CC=clang
 CPP=clang++
@@ -37,7 +57,7 @@ ll: demo_priority_ll demo_stress_ll demo_node_ll demo_cancel_ll
 mm: demo_priority_mm demo_stress_mm demo_node_mm demo_cancel_mm
 m: demo_priority_m demo_stress_m demo_node_m demo_cancel_m
 
-all: clean default 
+all: clean default
 
 x: clean demo_stress_ll
 
@@ -85,7 +105,7 @@ demo_cancel_mm: demo_cancel.o $(OBJS) $(OMM)
 
 -include .depend
 
-.cpp.o: 
+.cpp.o:
 	$(CPP) -c $< $(CPPFLAGS) -o $@
 
 .c.o:
@@ -99,7 +119,7 @@ remove_files:
 
 
 clean: remove_files depend
-	
+
 
 depend: $(CPP_SOURCES) $(C_SOURCES) $(DEMO_SOURCES) $(JQ_SOURCES)
 	$(CPP) -MM $(CPPFLAGS) $(CPP_SOURCES) $(DEMO_SOURCES) $(JQ_SOURCES) > .depend
