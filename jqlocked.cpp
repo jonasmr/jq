@@ -388,10 +388,9 @@ void JqCheckFinished(uint64_t nJob)
 
 		while(Precondition != 0)
 		{
-			uint32_t nPreconditionIndex = Precondition % JQ_PIPE_BUFFER_SIZE;
-			JqJob*	 pStalled			= &JqState.Jobs[nPreconditionIndex];
-			pStalled->nStalled			= 0;
-			printf("releasing %p\n", Precondition);
+			uint32_t nPreconditionIndex	   = Precondition % JQ_PIPE_BUFFER_SIZE;
+			JqJob*	 pStalled			   = &JqState.Jobs[nPreconditionIndex];
+			pStalled->nStalled			   = 0;
 			Precondition				   = pStalled->nPreconditionSibling;
 			pStalled->nPreconditionSibling = 0;
 
@@ -591,6 +590,7 @@ uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumPrio, uint8_t* pPrio)
 			uint16_t nIndex = JqState.nPrioListHead[pPrio[i]];
 			if(nIndex)
 			{
+				JQ_ASSERT(JqState.Jobs[nIndex].nStalled == 0);
 				*pSubIndex = JqIncrementStarted(JqState.Jobs[nIndex].nStartedHandle);
 				return nIndex;
 			}
@@ -603,6 +603,7 @@ uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumPrio, uint8_t* pPrio)
 			uint16_t nIndex = JqState.nPrioListHead[i];
 			if(nIndex)
 			{
+				JQ_ASSERT(JqState.Jobs[nIndex].nStalled == 0);
 				*pSubIndex = JqIncrementStarted(JqState.Jobs[nIndex].nStartedHandle);
 				return nIndex;
 			}
@@ -763,6 +764,7 @@ uint16_t JqTakeChildJob(uint64_t nJob, uint16_t* pSubIndexOut)
 
 		if(JqState.Jobs[nIndex].nNumStarted < JqState.Jobs[nIndex].nNumJobs)
 		{
+			JQ_ASSERT(JqState.Jobs[nIndex].nStalled == 0);
 			*pSubIndexOut = JqIncrementStarted(JqState.Jobs[nIndex].nStartedHandle);
 			return nIndex;
 		}
@@ -921,21 +923,17 @@ void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
 	uint16_t nIndex = Handle % JQ_PIPE_BUFFER_SIZE;
 	if(JqIsDone(Precondition))
 	{
+		JqJob* pEntry	 = &JqState.Jobs[nIndex];
+		pEntry->nStalled = 0;
 		JqPriorityListAdd(nIndex);
 	}
+	else
 	{
-		if(JqIsDone(Precondition))
-		{
-			JqPriorityListAdd(nIndex);
-		}
-		else
-		{
-			uint16_t nPreconditionIndex	  = Precondition % JQ_PIPE_BUFFER_SIZE;
-			JqJob*	 pEntry				  = &JqState.Jobs[nIndex];
-			JqJob*	 pPreEntry			  = &JqState.Jobs[nPreconditionIndex];
-			pEntry->nPreconditionSibling  = pPreEntry->nPreconditionFirst;
-			pPreEntry->nPreconditionFirst = Handle;
-		}
+		uint16_t nPreconditionIndex	  = Precondition % JQ_PIPE_BUFFER_SIZE;
+		JqJob*	 pEntry				  = &JqState.Jobs[nIndex];
+		JqJob*	 pPreEntry			  = &JqState.Jobs[nPreconditionIndex];
+		pEntry->nPreconditionSibling  = pPreEntry->nPreconditionFirst;
+		pPreEntry->nPreconditionFirst = Handle;
 	}
 }
 
@@ -1006,8 +1004,8 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t nPri
 		}
 		else
 		{
-			JqAddPrecondition(nHandle, Precondition);
 			pEntry->nStalled = 1;
+			JqAddPrecondition(nHandle, Precondition);
 		}
 	}
 	if(!Precondition)
@@ -1324,6 +1322,7 @@ uint64_t JqSelf()
 
 void JqPriorityListAdd(uint16_t nIndex)
 {
+	JQ_ASSERT(JqState.Jobs[nIndex].nStalled == 0);
 	uint8_t nPrio = JqState.Jobs[nIndex].nPrio;
 	JQ_ASSERT(JqState.Jobs[nIndex].nLinkNext == 0);
 	JQ_ASSERT(JqState.Jobs[nIndex].nLinkPrev == 0);

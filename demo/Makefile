@@ -14,7 +14,6 @@ CPPFLAGS=$(CFLAGS)
 
 CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
 #CPPFLAGS+=-DJQ_MICROPROFILE
-LDFLAGS += -latomic
 
 
 
@@ -28,12 +27,14 @@ ASM_SOURCES = ../boost_context/jump_x86_64_sysv_macho_gas.S ../boost_context/mak
 
 #osx
 ifeq ($(UNAME_S),Darwin)
+	CPPFLAGS+=-stdlib=libc++ -std=c++11
 	CCFLAGS += -D OSX
 	ASM_SOURCES = ../boost_context/jump_x86_64_sysv_macho_gas.S ../boost_context/make_x86_64_sysv_macho_gas.S
 endif
 
 #linux
 ifeq ($(UNAME_S),Linux)
+	LDFLAGS += -latomic
 	ASM_SOURCES = ../boost_context/jump_x86_64_sysv_elf_gas.S ../boost_context/make_x86_64_sysv_elf_gas.S
 	CCFLAGS += LINUX
 endif
