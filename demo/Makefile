@@ -52,7 +52,7 @@ OLL = ../jqlockless.o
 OM = ../jqlocked.o
 OMM = ../jqmultilocked.o
 
-default: ll m mm
+default: mm
 
 ll: demo_priority_ll demo_stress_ll demo_node_ll demo_cancel_ll
 mm: demo_priority_mm demo_stress_mm demo_node_mm demo_cancel_mm
@@ -116,7 +116,7 @@ demo_cancel_mm: demo_cancel.o $(OBJS) $(OMM)
 	$(CC) -c $< -o $@
 
 remove_files:
-	rm -f *.o ../*.o demo_priority_mm demo_stress_mm demo_node_mm demo_cancel_mm demo_stress_ll demo_priority_ll demo_node_ll demo_cancel_ll demo_stress_m demo_priority_m demo_node_m demo_cancel_m .depend
+	rm -f *.o ../*.o demo_priority_mm demo_stress_mm demo_node_mm demo_cancel_mm .depend
 
 
 clean: remove_files depend

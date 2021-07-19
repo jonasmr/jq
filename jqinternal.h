@@ -48,7 +48,7 @@ typedef uint32_t ThreadIdType;
 #define JQ_USLEEP(us) JqUsleep(us);
 #define JqGetCurrentThreadId() GetCurrentThreadId()
 #include <windows.h>
-inline int64_t	 JqTicksPerSecond()
+inline int64_t JqTicksPerSecond()
 {
 	static int64_t nTicksPerSecond = 0;
 	if(nTicksPerSecond == 0)
@@ -98,7 +98,7 @@ inline void JqUsleep(__int64 usec)
 typedef uint64_t ThreadIdType;
 #define JQ_USLEEP(us) usleep(us);
 #define JqGetCurrentThreadId() (uint64_t) pthread_self()
-inline int64_t	 JqTicksPerSecond()
+inline int64_t JqTicksPerSecond()
 {
 	return 1000000000ll;
 }
@@ -242,7 +242,7 @@ struct JqMutex
 #ifdef _WIN32
 	CRITICAL_SECTION CriticalSection;
 #else
-	pthread_mutex_t		  Mutex;
+	pthread_mutex_t Mutex;
 #endif
 
 #ifdef JQ_ASSERT_LOCKS
@@ -262,7 +262,7 @@ struct JqConditionVariable
 #ifdef _WIN32
 	CONDITION_VARIABLE Cond;
 #else
-	pthread_cond_t		  Cond;
+	pthread_cond_t Cond;
 #endif
 };
 
@@ -328,6 +328,8 @@ struct JqJobStack
 
 	uint32_t nExternalId;
 	uint32_t nFlags;
+	uint32_t nPipeIndex3;
+	uint32_t nJobIndex3;
 	int		 nBegin;
 	int		 nEnd;
 	int		 nStackSize;
