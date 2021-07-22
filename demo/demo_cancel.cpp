@@ -19,10 +19,10 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 // For more information, please refer to <http://unlicense.org/>
 
-#include <stdio.h>
 #include <stdarg.h>
-#include <string>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string>
 #ifdef _WIN32
 #include <Windows.h>
 #include <conio.h>
@@ -32,28 +32,38 @@
 
 #include "microprofile.h"
 
-
-
-
-
 #define WIDTH 1024
 #define HEIGHT 600
-uint32_t g_FewJobs = 1;
+uint32_t g_FewJobs	 = 1;
 uint32_t g_DontSleep = 1;
 
 uint32_t g_nNumWorkers = 1;
-uint32_t g_nQuit = 0;
-uint32_t g_MouseX = 0;
-uint32_t g_MouseY = 0;
-uint32_t g_MouseDown0 = 0;
-uint32_t g_MouseDown1 = 0;
-int g_MouseDelta = 0;
+uint32_t g_nQuit	   = 0;
+uint32_t g_MouseX	   = 0;
+uint32_t g_MouseY	   = 0;
+uint32_t g_MouseDown0  = 0;
+uint32_t g_MouseDown1  = 0;
+int		 g_MouseDelta  = 0;
 
 MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 #ifdef _WIN32
-#define DEMO_ASSERT(a) do{if(!(a)){__debugbreak();} }while(0)
+#define DEMO_ASSERT(a)                                                                                                                                                                                 \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+		if(!(a))                                                                                                                                                                                       \
+		{                                                                                                                                                                                              \
+			__debugbreak();                                                                                                                                                                            \
+		}                                                                                                                                                                                              \
+	} while(0)
 #else
-#define DEMO_ASSERT(a) do{if(!(a)){__builtin_trap();} }while(0)
+#define DEMO_ASSERT(a)                                                                                                                                                                                 \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+		if(!(a))                                                                                                                                                                                       \
+		{                                                                                                                                                                                              \
+			__builtin_trap();                                                                                                                                                                          \
+		}                                                                                                                                                                                              \
+	} while(0)
 #endif
 
 #define JQ_CANCEL_TEST 1
@@ -62,12 +72,10 @@ int64_t JqTicksPerSecond();
 
 uint32_t g_Reset = 0;
 
-
 #include <thread>
 
 #include "../jq.h"
 #include "../jqnode.h"
-
 
 #include <atomic>
 std::atomic<int> g_nJobCount;
@@ -83,34 +91,31 @@ std::atomic<int> g_nExternalStats;
 #define JOB_COUNT_2 20
 #define JOB_COUNT_LOW 300
 
-
 uint32_t JobSpinWork(uint32_t nUs)
 {
 	if(g_DontSleep)
 	{
 		return 0;
 	}
-	uint32_t result = 0;
-	uint64_t nTick = JqTick();
+	uint32_t result			 = 0;
+	uint64_t nTick			 = JqTick();
 	uint64_t nTicksPerSecond = JqTicksPerSecond();
 	do
-	{	
+	{
 		for(uint32_t i = 0; i < 1000; ++i)
 		{
-			result |= i << (i&7); //do something.. whatever
-		}	
-	}while( (1000000ull*(JqTick()-nTick)) / nTicksPerSecond < nUs);
+			result |= i << (i & 7); // do something.. whatever
+		}
+	} while((1000000ull * (JqTick() - nTick)) / nTicksPerSecond < nUs);
 	return result;
-
 }
 
 void JobTree2(int nStart)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree2", 0xff);
-	JobSpinWork(5+ rand() % 100);
+	JobSpinWork(5 + rand() % 100);
 	g_nJobCount2.fetch_add(1);
 }
-
 
 void JobTree1()
 {
@@ -118,14 +123,14 @@ void JobTree1()
 	if(g_FewJobs)
 	{
 		JqAdd(JobTree2, 2, JOB_COUNT_2);
-		g_nExternalStats ++;
+		g_nExternalStats++;
 	}
 	else
 	{
 		for(int i = 0; i < JOB_COUNT_2; ++i)
 		{
 			JqAdd(JobTree2, 2, 1);
-			g_nExternalStats ++;
+			g_nExternalStats++;
 		}
 	}
 	JobSpinWork(50 + rand() % 100);
@@ -133,41 +138,35 @@ void JobTree1()
 	// printf("jc1 %d :: %d\n", njc1, JOB_COUNT_1);
 }
 
-
 void JobTree0(void* pArg, int nStart, int nEnd)
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree0", 0x00ff00);
 	if(g_FewJobs)
 	{
 		JqAdd(JobTree1, 2, JOB_COUNT_1);
-		g_nExternalStats ++;
+		g_nExternalStats++;
 	}
 	else
 	{
 		for(int i = 0; i < JOB_COUNT_1; ++i)
 		{
 			JqAdd(JobTree1, 2, 1);
-			g_nExternalStats ++;
+			g_nExternalStats++;
 		}
 	}
 	JobSpinWork(50 + rand() % 100);
 	((int*)pArg)[nStart] = 1;
 	g_nJobCount0.fetch_add(1);
 	// printf("jc0 %d :: %d\n", njc0, JOB_COUNT_0);
-
 }
 
 void JobTree()
 {
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
 	JobSpinWork(100);
-	int lala[3]={0,0,0};
-	uint64_t nJobTree0 = JqAdd(
-		[&](int s, int e)
-		{
-			JobTree0((void*)&lala[0],s,e);
-		}, 2, 3);
-	g_nExternalStats ++;
+	int		 lala[3]   = { 0, 0, 0 };
+	uint64_t nJobTree0 = JqAdd([&](int s, int e) { JobTree0((void*)&lala[0], s, e); }, 2, 3);
+	g_nExternalStats++;
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree Wait", 0xff5555);
 	JqWait(nJobTree0);
 	DEMO_ASSERT(lala[0] == 1);
@@ -176,11 +175,7 @@ void JobTree()
 
 	g_nJobCount.fetch_add(1);
 	// printf("jc0 %d :: %d\n", njc, JOB_COUNT);
-
-
-
 }
-
 
 void JqRangeTest(void* pArray, int nBegin, int nEnd)
 {
@@ -198,68 +193,65 @@ extern uint32_t g_TESTID;
 
 void JqTestPrio()
 {
-	g_DontSleep =  0;
-	uint64_t J1 = JqAdd([](int b, int e)
-	{
-		MICROPROFILE_SCOPEI("JQ_TEST", "P7", 0xffffff);
-		JobSpinWork(5000);
-	}, 7, 3);
-	uint64_t J2 = JqAdd([](int b, int e)
-	{
-		MICROPROFILE_SCOPEI("JQ_TEST", "P0", 0xff0000);		
-		JqAdd([](int b, int e)
-		{
-			MICROPROFILE_SCOPEI("JQ_TEST", "P1", 0x0000ff);
-			JqAdd([](int b, int e)
-			{
-				MICROPROFILE_SCOPEI("JQ_TEST", "P5", 0xffff00);
+	g_DontSleep = 0;
+	uint64_t J1 = JqAdd(
+		[](int b, int e) {
+			MICROPROFILE_SCOPEI("JQ_TEST", "P7", 0xffffff);
+			JobSpinWork(5000);
+		},
+		7, 3);
+	uint64_t J2 = JqAdd(
+		[](int b, int e) {
+			MICROPROFILE_SCOPEI("JQ_TEST", "P0", 0xff0000);
+			JqAdd(
+				[](int b, int e) {
+					MICROPROFILE_SCOPEI("JQ_TEST", "P1", 0x0000ff);
+					JqAdd([](int b, int e) { MICROPROFILE_SCOPEI("JQ_TEST", "P5", 0xffff00); }, 5, 500);
+					JobSpinWork(20);
+				},
+				1, 20);
+			JobSpinWork(2000);
+		},
+		0, 2, 1);
 
-			}, 5, 500);
-			JobSpinWork(20);
-
-		}, 1, 20);
-		JobSpinWork(2000);
-
-	}, 0, 2, 1);
-
-	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY| JQ_WAITFLAG_SLEEP);
+	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
-
 }
 
 struct SCancelJobState
 {
-	uint64_t nHandle;
+	uint64_t		 nHandle;
 	std::atomic<int> nStarted;
 	std::atomic<int> nFinished;
-	int nCancelled;
-	int nCancelRequested;
+	int				 nCancelled;
+	int				 nCancelRequested;
 };
 std::atomic<int> g_CancelFinished;
 
 void JqTestCancel()
 {
-	int nNumWorkers = JqGetNumWorkers();
-	int nNumJobs = nNumWorkers * 2;
-	SCancelJobState* Cancel = new SCancelJobState[nNumJobs];
-	g_CancelFinished = 0;
-	//start a bunch of jobs, cancel half of them
+	int				 nNumWorkers = JqGetNumWorkers();
+	int				 nNumJobs	 = nNumWorkers * 2;
+	SCancelJobState* Cancel		 = new SCancelJobState[nNumJobs];
+	g_CancelFinished			 = 0;
+	// start a bunch of jobs, cancel half of them
 	uint64_t nGroup = JqGroupBegin(0);
 	for(int i = 0; i < nNumJobs; ++i)
 	{
-		SCancelJobState* pState = &Cancel[i];
-		Cancel[i].nStarted = 0;
-		Cancel[i].nFinished = 0;
-		Cancel[i].nCancelled = 0;
+		SCancelJobState* pState	   = &Cancel[i];
+		Cancel[i].nStarted		   = 0;
+		Cancel[i].nFinished		   = 0;
+		Cancel[i].nCancelled	   = 0;
 		Cancel[i].nCancelRequested = 0;
-		Cancel[i].nHandle = JqAdd([pState]
-		{
-			MICROPROFILE_SCOPEI("CANCEL", "WORK", MP_CYAN);
-			pState->nStarted.fetch_add(1);
-			JobSpinWork(5000);
-			pState->nFinished.fetch_add(1);
-			g_CancelFinished.fetch_add(1);
-		}, 0);
+		Cancel[i].nHandle		   = JqAdd(
+			 [pState] {
+				 MICROPROFILE_SCOPEI("CANCEL", "WORK", MP_CYAN);
+				 pState->nStarted.fetch_add(1);
+				 JobSpinWork(5000);
+				 pState->nFinished.fetch_add(1);
+				 g_CancelFinished.fetch_add(1);
+			 },
+			 0);
 	}
 	JqGroupEnd();
 	int nNumCancelled = 0;
@@ -273,7 +265,7 @@ void JqTestCancel()
 				do
 				{
 					int idx = rand() % nNumJobs;
-					// int idx = 
+					// int idx =
 					// idx = nNumJobs-1;
 					SCancelJobState* pState = &Cancel[idx];
 					if(!pState->nCancelRequested)
@@ -286,7 +278,7 @@ void JqTestCancel()
 						pState->nCancelRequested = 1;
 						break;
 					}
-				}while(1);
+				} while(1);
 			}
 		}
 	}
@@ -294,7 +286,7 @@ void JqTestCancel()
 	JqWait(nGroup);
 	for(int i = 0; i < nNumJobs; ++i)
 	{
-		SCancelJobState* pState = &Cancel[i];	
+		SCancelJobState* pState = &Cancel[i];
 		if(pState->nCancelled)
 		{
 			DEMO_ASSERT(pState->nStarted.load() == 0);
@@ -307,7 +299,6 @@ void JqTestCancel()
 		}
 	}
 	printf("num cancelled %d/%d\n", nNumCancelled, nNumJobs);
-
 }
 
 // void JqTest()
@@ -334,7 +325,7 @@ void JqTestCancel()
 // 		JqStats Stats0;
 // 		JqConsumeStats(&Stats0);
 // 		Stats.Add(Stats0);
-// 		static bool bFirst = true;		
+// 		static bool bFirst = true;
 // 		static uint64_t H = Stats.nNextHandle;
 // 		uint64_t nHandleConsumption = Stats.nNextHandle - H;
 // 		H = Stats.nNextHandle;
@@ -344,10 +335,10 @@ void JqTestCancel()
 // 		{
 // 			bFirst = false;
 // 			bUseWrapping = false;
-// 		printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|%7s|%7s\n", 
+// 		printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %8s/%8s|%8s|%12s|%7s|%7s\n",
 // 			"JobAdd", "JobFin","JobCancel",
 // 			"SubAdd", "SubFin",
-// 			"Locks", "Waits", "Kicks", 
+// 			"Locks", "Waits", "Kicks",
 // 			"JobAdd", "JobFin", "SubAdd", "SubFin","Handles", "WrapTime", "Time", "Workers");
 // 		}
 
@@ -356,7 +347,6 @@ void JqTestCancel()
 // 		float fTime = 1000.f * nDelta / nTicksPerSecond;
 // 		double HandlesPerMs = nHandleConsumption / fTime;
 // 		double HandlesPerYear = (0x8000000000000000 / (365llu * 24 * 60 * 60 * 60 * 1000)) / HandlesPerMs;
-
 
 // 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption?nHandleConsumption:1) * (1.0 / (365*60.0* 60.0 * 60.0 * 24.0));
 // 		(void)WrapTime;
@@ -381,7 +371,7 @@ void JqTestCancel()
 // 			g_DontSleep?'d':' ',
 // 			g_FewJobs?'f':' '
 
-// 			); 
+// 			);
 // 		fflush(stdout);
 
 // 		frames = 0;
@@ -406,7 +396,6 @@ void JqTestCancel()
 
 // 	g_nLowCount = 0;
 
-
 // 	uint64_t nJob = JqAdd( [](int begin, int end)
 // 	{
 // 		MICROPROFILE_SCOPEI("JQDEMO", "JobLow", 0x0000ff);
@@ -418,7 +407,7 @@ void JqTestCancel()
 // 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 // 		JobSpinWork(500);
 // 	}
-// 	uint64_t nStart = JqTick();	
+// 	uint64_t nStart = JqTick();
 // 	#if 1
 // 	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
 // 	{
@@ -426,7 +415,6 @@ void JqTestCancel()
 // 		g_nJobCount0 = 0;
 // 		g_nJobCount1 = 0;
 // 		g_nJobCount2 = 0;
-
 
 // 		uint64_t nJobMedium = JqAdd(JobTree, 0, JOB_COUNT);
 // 		g_nExternalStats ++;
@@ -443,8 +431,6 @@ void JqTestCancel()
 // 	}
 // 	#endif
 // }
-
-
 
 // #define JQ_NODE_TEST 0
 
@@ -469,32 +455,44 @@ int main(int argc, char* argv[])
 	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
 #endif
 	static JqAttributes Attr;
-	JqInitAttributes(&Attr, JQ_TEST_WORKERS);
-	Attr.Flags = nJqInitFlags;
-	Attr.ThreadConfig[0] = JqThreadConfig{ 7, {0, 1, 2, 3, 4, 5, 6, 0xff} };
-	Attr.ThreadConfig[1] = JqThreadConfig{ 3, {3, 2, 1, 0xff, 0xff, 0xff, 0xff, 0xff} };
-	Attr.ThreadConfig[2] = JqThreadConfig{ 2, {5, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
-	Attr.ThreadConfig[3] = JqThreadConfig{ 2, {1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
-	Attr.ThreadConfig[4] = JqThreadConfig{ 1, {7, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,} };
+	JqInitAttributes(&Attr, JQ_TEST_WORKERS, JQ_TEST_WORKERS);
+	Attr.Flags		  = nJqInitFlags;
+	Attr.PipeOrder[0] = JqPipeOrder{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };
+	Attr.PipeOrder[1] = JqPipeOrder{ 3, { 3, 2, 1, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	Attr.PipeOrder[2] = JqPipeOrder{ 2, { 5, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	Attr.PipeOrder[3] = JqPipeOrder{ 2, { 1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	Attr.PipeOrder[4] = JqPipeOrder{ 1,
+									 {
+										 7,
+										 0xff,
+										 0xff,
+										 0xff,
+										 0xff,
+										 0xff,
+										 0xff,
+										 0xff,
+									 } };
+
+	for(uint32_t i = 0; i < JQ_TEST_WORKERS; ++i)
+	{
+		Attr.WorkerOrderIndex[i] = i;
+	}
 
 	JqStart(&Attr);
-	JqThreadConfig MyPipeConfig = JqThreadConfig{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }};
-	JqSetThreadPipeConfig(&MyPipeConfig);
+	JqPipeOrder MyPipeConfig = JqPipeOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	JqSetThreadPipeOrder(&MyPipeConfig);
 #ifdef _WIN32
 	std::atomic<int> keypressed;
-	std::thread	foo(
-		[&]()
-	{
-		int c = 0;
-		while (!g_nQuit && c != 'q' && c != 27 )
-		{
-			c = _getch(); 
-			keypressed.exchange(c);
-		}
-		g_nQuit = 1;
-	});
+	std::thread		 foo([&]() {
+		 int c = 0;
+		 while(!g_nQuit && c != 'q' && c != 27)
+		 {
+			 c = _getch();
+			 keypressed.exchange(c);
+		 }
+		 g_nQuit = 1;
+	 });
 #endif
-
 
 	while(!g_nQuit)
 	{
@@ -506,46 +504,48 @@ int main(int argc, char* argv[])
 #else
 		key = getch();
 #endif
-		if (key)
+		if(key)
 		{
-			switch (key)
+			switch(key)
 			{
 			case 'v':
-				g_Reset = 1; break;
+				g_Reset = 1;
+				break;
 			case 'x':
-				g_FewJobs = !g_FewJobs; 
-				g_Reset = 1; break;
+				g_FewJobs = !g_FewJobs;
+				g_Reset	  = 1;
+				break;
 				break;
 			case 'c':
 				g_DontSleep = !g_DontSleep;
-				g_Reset = 1; break;
+				g_Reset		= 1;
+				break;
 				break;
 			case ' ':
-				{
-					g_nNumWorkers++;
-					g_Reset = 1;
-				}
-				break;
+			{
+				g_nNumWorkers++;
+				g_Reset = 1;
+			}
+			break;
 			case 'q':
 				g_nQuit = 1;
 				break;
 			}
 		}
 
-// #if JQ_STRESS_TEST
-// 		if(g_nNumWorkers != nNumWorkers)
-// 		{
-// 			nNumWorkers = g_nNumWorkers;
-// 			printf("\n");
-// 			JqStop();
-// 			JqStart(1 + nNumWorkers % 12, 0, nullptr);
-// 		}
-// #endif
+		// #if JQ_STRESS_TEST
+		// 		if(g_nNumWorkers != nNumWorkers)
+		// 		{
+		// 			nNumWorkers = g_nNumWorkers;
+		// 			printf("\n");
+		// 			JqStop();
+		// 			JqStart(1 + nNumWorkers % 12, 0, nullptr);
+		// 		}
+		// #endif
 		MicroProfileFlip(0);
 		JqTestCancel();
-
 	}
-#ifdef _WIN32 
+#ifdef _WIN32
 	foo.join();
 #endif
 	JqStop();

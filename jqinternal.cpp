@@ -1,5 +1,6 @@
-#include "jq.h"
 #include "jqinternal.h"
+#include "jq.h"
+#include <stdint.h>
 
 #if JQ_LOCK_STATS
 std::atomic<uint32_t> g_JqLockOps;
@@ -11,7 +12,7 @@ std::atomic<uint32_t> g_JqLocklessPops;
 #endif
 
 #ifdef _WIN32
-#ifndef CreateSemaphoreEx 
+#ifndef CreateSemaphoreEx
 #define CreateSemaphoreEx CreateSemaphoreExW
 #endif
 JqMutex::JqMutex()
@@ -30,8 +31,9 @@ JqMutex::~JqMutex()
 void JqMutex::Lock()
 {
 	EnterCriticalSection(&CriticalSection);
+	// printf("JqMutex::LOCK   %p\n", this);
 	JQLSC(g_JqLockOps.fetch_add(1));
-	JQ_AL(nThreadId = JqGetCurrentThreadId());
+	JQ_AL(nThreadId = JqCurrentThreadId());
 	JQ_AL(nLockCount++);
 }
 
@@ -44,7 +46,7 @@ void JqMutex::Unlock()
 		nThreadId = 0;
 	}
 #endif
-
+	// printf("JqMutex::UNLOCK %p\n", this);
 	LeaveCriticalSection(&CriticalSection);
 	JQLSC(g_JqLockOps.fetch_add(1));
 }
@@ -52,7 +54,7 @@ void JqMutex::Unlock()
 #ifdef JQ_ASSERT_LOCKS
 bool JqMutex::IsLocked()
 {
-	return (nThreadId == JqGetCurrentThreadId());
+	return (nThreadId == JqCurrentThreadId());
 }
 #endif
 JqConditionVariable::JqConditionVariable()
@@ -78,10 +80,8 @@ void JqConditionVariable::Wait(JqMutex& Mutex)
 #endif
 	SleepConditionVariableCS(&Cond, &Mutex.CriticalSection, INFINITE);
 
-	JQ_AL(Mutex.nThreadId = JqGetCurrentThreadId());
+	JQ_AL(Mutex.nThreadId = JqCurrentThreadId());
 	JQ_AL(Mutex.nLockCount++);
-
-
 }
 
 void JqConditionVariable::NotifyOne()
@@ -92,7 +92,7 @@ void JqConditionVariable::NotifyOne()
 
 void JqConditionVariable::NotifyAll()
 {
-	JQLSC(g_JqCondSignal.fetch_add(1));	
+	JQLSC(g_JqCondSignal.fetch_add(1));
 	WakeAllConditionVariable(&Cond);
 }
 
@@ -106,7 +106,6 @@ JqSemaphore::~JqSemaphore()
 	{
 		CloseHandle(Handle);
 	}
-
 }
 void JqSemaphore::Init(int nCount)
 {
@@ -116,9 +115,8 @@ void JqSemaphore::Init(int nCount)
 		Handle = 0;
 	}
 	nMaxCount = nCount;
-	Handle = CreateSemaphoreEx(NULL, 0, nCount*2, NULL, 0, SEMAPHORE_ALL_ACCESS);	
+	Handle	  = CreateSemaphoreEx(NULL, 0, nCount * 2, NULL, 0, SEMAPHORE_ALL_ACCESS);
 }
-
 
 void JqSemaphore::Signal(uint32_t nCount)
 {
@@ -142,9 +140,8 @@ JqMutex::JqMutex()
 {
 #ifdef JQ_ASSERT_LOCKS
 	nLockCount = 0;
-	nThreadId = 0;
+	nThreadId  = 0;
 #endif
-
 
 	pthread_mutex_init(&Mutex, 0);
 }
@@ -156,10 +153,12 @@ JqMutex::~JqMutex()
 
 void JqMutex::Lock()
 {
+	JQ_ASSERT(nThreadId != JqCurrentThreadId());
 	pthread_mutex_lock(&Mutex);
 	JQLSC(g_JqLockOps.fetch_add(1));
+	// printf("JqMutex::LOCK   %p  tid: %llx\n", this, JqCurrentThreadId());
 
-	JQ_AL(nThreadId = JqGetCurrentThreadId());
+	JQ_AL(nThreadId = JqCurrentThreadId());
 	JQ_AL(nLockCount++);
 }
 
@@ -172,6 +171,7 @@ void JqMutex::Unlock()
 		nThreadId = 0;
 	}
 #endif
+	// printf("JqMutex::UNLOCK %p  tid: %llx\n", this, JqCurrentThreadId());
 
 	pthread_mutex_unlock(&Mutex);
 	JQLSC(g_JqLockOps.fetch_add(1));
@@ -180,10 +180,9 @@ void JqMutex::Unlock()
 #ifdef JQ_ASSERT_LOCKS
 bool JqMutex::IsLocked()
 {
-	return nThreadId == JqGetCurrentThreadId();
+	return nThreadId == JqCurrentThreadId();
 }
 #endif
-
 
 JqConditionVariable::JqConditionVariable()
 {
@@ -208,11 +207,10 @@ void JqConditionVariable::Wait(JqMutex& Mutex)
 
 	pthread_cond_wait(&Cond, &Mutex.Mutex);
 
-	JQ_AL(Mutex.nThreadId = JqGetCurrentThreadId());
+	JQ_AL(Mutex.nThreadId = JqCurrentThreadId());
 	JQ_AL(Mutex.nLockCount++);
 
 	JQLSC(g_JqCondWait.fetch_add(1));
-
 }
 
 void JqConditionVariable::NotifyOne()
@@ -225,7 +223,6 @@ void JqConditionVariable::NotifyAll()
 {
 	pthread_cond_broadcast(&Cond);
 	JQLSC(g_JqCondSignal.fetch_add(1));
-
 }
 
 JqSemaphore::JqSemaphore()
@@ -235,7 +232,6 @@ JqSemaphore::JqSemaphore()
 }
 JqSemaphore::~JqSemaphore()
 {
-
 }
 void JqSemaphore::Init(int nCount)
 {
@@ -251,7 +247,7 @@ void JqSemaphore::Signal(uint32_t nCount)
 	}
 	{
 		JqMutexLock l(Mutex);
-		uint32_t nCurrent = nReleaseCount.load();
+		uint32_t	nCurrent = nReleaseCount.load();
 		if(nCurrent + nCount > nMaxCount)
 			nCount = nMaxCount - nCurrent;
 		nReleaseCount.fetch_add(nCount);
@@ -285,8 +281,6 @@ void JqSemaphore::Wait()
 
 #endif
 
-
-
 #ifndef JQ_ALLOC_STACK_INTERNAL_IMPL
 #ifdef _WIN32
 void* JqAllocStackInternal(uint32_t nStackSize)
@@ -305,9 +299,9 @@ void JqFreeStackInternal(void* pStack, uint32_t nStackSize)
 #include <sys/mman.h>
 void* JqAllocStackInternal(uint32_t nStackSize)
 {
-	int nPageSize = sysconf(_SC_PAGE_SIZE);
-	int nSize = (nStackSize + nPageSize - 1) & ~(nPageSize-1);
-	void* pAlloc = mmap(nullptr, nSize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
+	int	  nPageSize = sysconf(_SC_PAGE_SIZE);
+	int	  nSize		= (nStackSize + nPageSize - 1) & ~(nPageSize - 1);
+	void* pAlloc	= mmap(nullptr, nSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	return pAlloc;
 }
 
@@ -318,32 +312,32 @@ void JqFreeStackInternal(void* p, uint32_t nStackSize)
 #endif
 #endif
 
-
 JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)
 {
-	do{
+	do
+	{
 		JqJobStackLink Value = FreeList.load();
-		JqJobStack* pHead = Value.pHead;
+		JqJobStack*	   pHead = Value.pHead;
 
 		if(!pHead)
 			break;
 
-		JqJobStack* pNext = pHead->pLink;
-		JqJobStackLink NewValue = {pNext, Value.nCounter+1 };
+		JqJobStack*	   pNext	= pHead->pLink;
+		JqJobStackLink NewValue = { pNext, Value.nCounter + 1 };
 		if(FreeList.compare_exchange_strong(Value, NewValue))
 		{
-			JQ_ASSERT((nFlags&JQ_JOBFLAG_SMALL_STACK) == (pHead->nFlags&JQ_JOBFLAG_SMALL_STACK));
+			JQ_ASSERT((nFlags & JQ_JOBFLAG_SMALL_STACK) == (pHead->nFlags & JQ_JOBFLAG_SMALL_STACK));
 			pHead->pLink = nullptr;
 			return pHead;
 		}
-	}while(1);
+	} while(1);
 
 #ifdef JQ_MICROPROFILE
 	MICROPROFILE_COUNTER_ADD("jq/stack/count", 1);
 	MICROPROFILE_COUNTER_ADD("jq/stack/bytes", nStackSize);
 #endif
-	void* pStack = JqAllocStackInternal(nStackSize);
-	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags&JQ_JOBFLAG_SMALL_STACK);
+	void*		pStack	  = JqAllocStackInternal(nStackSize);
+	JqJobStack* pJobStack = JqJobStack::Init(pStack, nStackSize, nFlags & JQ_JOBFLAG_SMALL_STACK);
 	return pJobStack;
 }
 void JqFreeAllStacks(JqJobStackList& FreeList)
@@ -351,12 +345,12 @@ void JqFreeAllStacks(JqJobStackList& FreeList)
 	do
 	{
 		JqJobStackLink Value = FreeList.load();
-		JqJobStack* pHead = Value.pHead;
+		JqJobStack*	   pHead = Value.pHead;
 		if(!pHead)
 		{
 			return;
 		}
-		JqJobStackLink NewValue = {pHead->pLink, Value.nCounter + 1};
+		JqJobStackLink NewValue = { pHead->pLink, Value.nCounter + 1 };
 		if(FreeList.compare_exchange_strong(Value, NewValue))
 		{
 #ifdef JQ_MICROPROFILE
@@ -366,7 +360,7 @@ void JqFreeAllStacks(JqJobStackList& FreeList)
 			JqFreeStackInternal(pHead->StackBottom(), pHead->nStackSize);
 		}
 
-	}while(1);
+	} while(1);
 }
 
 void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
@@ -374,46 +368,64 @@ void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
 	JQ_ASSERT(pStack->pLink == nullptr);
 	do
 	{
-		JqJobStackLink Value = FreeList.load();
-		JqJobStack* pHead = Value.pHead;
-		pStack->pLink = pHead;
-		JqJobStackLink NewValue = {pStack, Value.nCounter + 1};
+		JqJobStackLink Value	= FreeList.load();
+		JqJobStack*	   pHead	= Value.pHead;
+		pStack->pLink			= pHead;
+		JqJobStackLink NewValue = { pStack, Value.nCounter + 1 };
 		if(FreeList.compare_exchange_strong(Value, NewValue))
 		{
 			return;
 		}
 
-	}while(1);
+	} while(1);
 }
 
-
-void JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumWorkers)
+void JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumPipeOrders, uint32_t nNumWorkers)
 {
 	JQ_ASSERT(nNumWorkers <= JQ_MAX_THREADS);
 	memset(pAttributes, 0, sizeof(*pAttributes));
-	pAttributes->nNumWorkers = nNumWorkers;
+	memset(&pAttributes->PipeOrder, 0xff, sizeof(pAttributes->PipeOrder));
+	memset(&pAttributes->WorkerOrderIndex, 0xff, sizeof(pAttributes->WorkerOrderIndex));
+
+	pAttributes->nNumWorkers	 = nNumWorkers;
+	pAttributes->nNumPipeOrders	 = nNumPipeOrders;
 	pAttributes->nStackSizeSmall = JQ_DEFAULT_STACKSIZE_SMALL;
 	pAttributes->nStackSizeLarge = JQ_DEFAULT_STACKSIZE_LARGE;
-	for(uint32_t i = 0; i < nNumWorkers; ++i)
+
+	for(uint32_t i = 0; i < nNumPipeOrders; ++i)
 	{
-		JqThreadConfig& C = pAttributes->ThreadConfig[i];
+		JqPipeOrder& C = pAttributes->PipeOrder[i];
 		memset(&C.nPipes[0], 0xff, sizeof(C.nPipes));
 		for(uint32_t j = 0; j < JQ_NUM_PIPES; ++j)
 		{
-			C.nNumPipes = JQ_NUM_PIPES;
 			C.nPipes[j] = (uint8_t)j;
 		}
+		C.nNumPipes = JQ_NUM_PIPES;
+	}
+	for(uint32_t i = 0; i < nNumWorkers; ++i)
+	{
+		pAttributes->WorkerOrderIndex[i] = 0;
 	}
 }
 
 void JqStart(int nNumWorkers)
 {
 	JqAttributes Attr;
-	JqInitAttributes(&Attr, nNumWorkers);
+	JqInitAttributes(&Attr, 1, nNumWorkers);
 	JqStart(&Attr);
 }
 
+int64_t JqGetTicksPerSecond()
+{
+	return JqTicksPerSecond();
+}
 
+int64_t JqGetTick()
+{
+	return JqTick();
+}
 
-
-
+uint64_t JqGetCurrentThreadId()
+{
+	return JqCurrentThreadId();
+}

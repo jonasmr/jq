@@ -474,7 +474,7 @@ void JqTest()
 
 #define JQ_NODE_TEST 0
 
-#define JQ_TEST_WORKERS 5
+#define JQ_TEST_WORKERS 24
 
 int main(int argc, char* argv[])
 {
@@ -497,27 +497,32 @@ int main(int argc, char* argv[])
 #endif
 	// static uint32_t nNumWorkers = g_nNumWorkers;
 	static JqAttributes Attr;
-	JqInitAttributes(&Attr, JQ_TEST_WORKERS);
-	Attr.Flags			 = nJqInitFlags;
-	Attr.ThreadConfig[0] = JqThreadConfig{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };
-	Attr.ThreadConfig[1] = JqThreadConfig{ 3, { 3, 2, 1, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	Attr.ThreadConfig[2] = JqThreadConfig{ 2, { 5, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	Attr.ThreadConfig[3] = JqThreadConfig{ 2, { 1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	Attr.ThreadConfig[4] = JqThreadConfig{ 1,
-										   {
-											   7,
-											   0xff,
-											   0xff,
-											   0xff,
-											   0xff,
-											   0xff,
-											   0xff,
-											   0xff,
-										   } };
+	JqInitAttributes(&Attr, JQ_TEST_WORKERS, JQ_TEST_WORKERS);
+	Attr.Flags		  = nJqInitFlags;
+	Attr.PipeOrder[0] = JqPipeOrder{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };
+	Attr.PipeOrder[1] = JqPipeOrder{ 3, { 3, 2, 1, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	Attr.PipeOrder[2] = JqPipeOrder{ 2, { 5, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	Attr.PipeOrder[3] = JqPipeOrder{ 2, { 1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	Attr.PipeOrder[4] = JqPipeOrder{ 1,
+									 {
+										 7,
+										 0xff,
+										 0xff,
+										 0xff,
+										 0xff,
+										 0xff,
+										 0xff,
+										 0xff,
+									 } };
+
+	for(uint32_t i = 0; i < JQ_TEST_WORKERS; ++i)
+	{
+		Attr.WorkerOrderIndex[i] = i;
+	}
 
 	JqStart(&Attr);
-	JqThreadConfig MyPipeConfig = JqThreadConfig{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	JqSetThreadPipeConfig(&MyPipeConfig);
+	JqPipeOrder MyPipeConfig = JqPipeOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	JqSetThreadPipeOrder(&MyPipeConfig);
 
 #ifdef _WIN32
 	std::atomic<int> keypressed;

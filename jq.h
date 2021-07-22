@@ -25,7 +25,7 @@
 #endif
 
 #ifndef JQ_MAX_THREADS
-#define JQ_MAX_THREADS 64
+#define JQ_MAX_THREADS 128
 #endif
 
 #ifndef JQ_ASSERT_SANITY
@@ -229,7 +229,7 @@ class JqFunction
 
 // Job flags
 #define JQ_JOBFLAG_SMALL_STACK 0x1 // create with small stack
-#define JQ_JOBFLAG_DETACHED 0x2 // dont create as child of current job
+#define JQ_JOBFLAG_DETACHED 0x2	   // dont create as child of current job
 
 // Init flags
 #define JQ_INIT_USE_SEPERATE_STACK 0x1
@@ -270,7 +270,8 @@ struct JqStats
 	}
 };
 
-struct JqThreadConfig
+// Specify order of which to take jobs
+struct JqPipeOrder
 {
 	uint8_t nNumPipes;
 	uint8_t nPipes[JQ_NUM_PIPES];
@@ -278,11 +279,14 @@ struct JqThreadConfig
 
 struct JqAttributes
 {
-	uint32_t	   Flags;
-	uint32_t	   nNumWorkers;
-	uint32_t	   nStackSizeSmall;
-	uint32_t	   nStackSizeLarge;
-	JqThreadConfig ThreadConfig[JQ_MAX_THREADS];
+	uint32_t Flags;
+	uint32_t nNumWorkers;
+	uint32_t nStackSizeSmall;
+	uint32_t nStackSizeLarge;
+	uint32_t nNumPipeOrders;
+
+	JqPipeOrder PipeOrder[JQ_MAX_THREADS];		  // defines a set of different ways of pulling out work
+	uint8_t		WorkerOrderIndex[JQ_MAX_THREADS]; // for each worker thread, pick on of the pipe orders from abovce.
 };
 
 JQ_API uint64_t JqSelf();
@@ -312,7 +316,7 @@ JQ_API bool		JqIsDone(uint64_t nJob);
 JQ_API bool		JqIsDoneExt(uint64_t nJob, uint32_t nWaitFlag);
 JQ_API void		JqStart(int nNumWorkers);
 JQ_API void		JqStart(JqAttributes* pAttributes);
-JQ_API void		JqSetThreadPipeConfig(JqThreadConfig* pConfig);
+JQ_API void		JqSetThreadPipeOrder(JqPipeOrder* pConfig);
 JQ_API int		JqNumWorkers();
 JQ_API void		JqStop();
 JQ_API uint32_t JqSelfJobIndex();
@@ -324,4 +328,8 @@ JQ_API bool		JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes);
 JQ_API void		JqStartSentinel(int nTimeout);
 JQ_API void		JqCrashAndDump();
 JQ_API void		JqDump();
-JQ_API void		JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumWorkers);
+JQ_API void		JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumPipeOrders, uint32_t nNumWorkers);
+JQ_API int64_t	JqGetTicksPerSecond();
+JQ_API int64_t	JqGetTick();
+
+JQ_API uint64_t JqGetCurrentThreadId(); // for debugging.

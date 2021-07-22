@@ -131,6 +131,8 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	uint64_t nNextHandle;
 	uint32_t nFreeJobs;
 
+	JqPipeOrder ThreadConfig[JQ_MAX_THREADS];
+
 	JqJob	 Jobs[JQ_PIPE_BUFFER_SIZE];
 	uint16_t nPrioListHead[JQ_NUM_PIPES];
 	uint16_t nPrioListTail[JQ_NUM_PIPES];
@@ -197,11 +199,18 @@ void JqStart(JqAttributes* pAttr)
 	JqState.m_Attributes	   = *pAttr;
 	JqState.nNumWorkers		   = pAttr->nNumWorkers;
 
+	for(uint32_t i = 0; i < pAttr->nNumWorkers; ++i)
+	{
+
+		JQ_ASSERT(pAttr->WorkerOrderIndex[i] < pAttr->nNumPipeOrders); /// out of bounds pipe order index in attributes
+		JqState.ThreadConfig[i] = pAttr->PipeOrder[pAttr->WorkerOrderIndex[i]];
+	}
+
 	for(int i = 0; i < JqState.nNumWorkers; ++i)
 	{
-		JqThreadConfig& C				= JqState.m_Attributes.ThreadConfig[i];
-		uint8_t			nNumActivePipes = 0;
-		uint64_t		PipeMask		= 0;
+		JqPipeOrder& C				 = JqState.ThreadConfig[i];
+		uint8_t		 nNumActivePipes = 0;
+		uint64_t	 PipeMask		 = 0;
 		static_assert(JQ_NUM_PIPES < 64, "wont fit in 64bit mask");
 		for(uint32_t j = 0; j < C.nNumPipes; ++j)
 		{
@@ -330,7 +339,7 @@ void JqStop()
 	JqState.nNumWorkers = 0;
 }
 
-void JqSetThreadPipeConfig(JqThreadConfig* pConfig)
+void JqSetThreadPipeOrder(JqPipeOrder* pConfig)
 {
 	JQ_ASSERT(g_nJqNumPipes == 0); // its not supported to change this value, nor is it supported to set it on worker threads. set on init instead.
 	uint32_t nNumActivePipes = 0;
