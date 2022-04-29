@@ -318,6 +318,42 @@ struct JqMutexLock
 	}
 };
 
+JQ_THREAD_LOCAL JqMutex* g_SingleMutexLockMutex = nullptr;
+// Scope Mutex helper, which will also assert if the same thread is trying to lock two mutexes
+struct JqSingleMutexLock
+{
+	bool	 bIsLocked;
+	JqMutex& Mutex;
+	JqMutexLock(JqMutex& Mutex)
+		: Mutex(Mutex)
+	{
+		bIsLocked = false;
+		Lock();
+	}
+	~JqMutexLock()
+	{
+		if(bIsLocked)
+		{
+			Unlock();
+		}
+	}
+	void Lock()
+	{
+		JQ_ASSERT(g_SingleMutexLockMutex == nullptr);
+		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
+		Mutex.Lock();
+		bIsLocked			   = true;
+		g_SingleMutexLockMutex = &Mutex;
+	}
+	void Unlock()
+	{
+		g_SingleMutexLockMutex = nullptr;
+		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
+		Mutex.Unlock();
+		bIsLocked = false;
+	}
+};
+
 struct JqJobStack
 {
 	uint64_t   GUARD[2];

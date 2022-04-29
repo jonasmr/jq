@@ -12,46 +12,148 @@
 	"buffers":
 	[
 		{
+			"file": "jqmultilocked.cpp",
+			"settings":
+			{
+				"buffer_size": 41104,
+				"encoding": "UTF-8",
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "microprofile/microprofile.h",
+			"settings":
+			{
+				"buffer_size": 110975,
+				"line_ending": "Windows"
+			}
+		},
+		{
 			"file": "jqlocked.cpp",
 			"settings":
 			{
-				"buffer_size": 32573,
+				"buffer_size": 36554,
 				"encoding": "UTF-8",
 				"line_ending": "Windows"
-			},
-			"undo_stack":
-			[
-				[
-					3,
-					1,
-					"insert",
-					{
-						"characters": "®"
-					},
-					"AQAAADEDAAAAAAAAMgMAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAMQMAAAAAAAAxAwAAAAAAAAAAAAAAAPC/"
-				]
-			]
+			}
+		},
+		{
+			"file": "jqinternal.cpp",
+			"settings":
+			{
+				"buffer_size": 8663,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "jq.sublime-project",
+			"settings":
+			{
+				"buffer_size": 487,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "jqinternal.h",
+			"settings":
+			{
+				"buffer_size": 17065,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "jq.h",
+			"settings":
+			{
+				"buffer_size": 10844,
+				"encoding": "UTF-8",
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"contents": "Searching 209 files for \"jq_make_fcontext\"\n\n/home/jonasm/git/jq/jqfcontext.h:\n   12  JqTransfer  jq_jump_fcontext( JqFContext const to, void * vp);\n   13  extern \"C\" \n   14: JqFContext  jq_make_fcontext( void * sp, std::size_t size, void (* fn)( JqTransfer) );\n   15  \n\n/home/jonasm/git/jq/jqlocked.cpp:\n  548  \t\tpJobData->nExternalId = nWorkIndex;\n  549  \t\tg_pJqJobStacks\t\t  = pJobData;\n  550: \t\tpJobData->pContextJob = jq_make_fcontext(pJobData->StackTop(), pJobData->StackSize(), JqContextRun);\n  551  \t\tJqTransfer T\t\t  = jq_jump_fcontext(pJobData->pContextJob, (void*)pJobData);\n  552  \t\tJQ_ASSERT(T.data == (void*)447);\n\n/home/jonasm/git/jq/jqlockless.cpp:\n  234  \t\tpJobData->nExternalId = nExternalId;\n  235  \t\tg_pJqJobStacks\t\t  = pJobData;\n  236: \t\tpJobData->pContextJob = jq_make_fcontext(pJobData->StackTop(), pJobData->StackSize(), JqContextRun);\n  237  \t\tJqTransfer T\t\t  = jq_jump_fcontext(pJobData->pContextJob, (void*)pJobData);\n  238  \t\tJQ_ASSERT(T.data == (void*)447);\n\n/home/jonasm/git/jq/jqmultilocked.cpp:\n  632  \t\tpJobData->pPipe\t\t  = &Pipe;\n  633  \t\tg_pJqJobStacks\t\t  = pJobData;\n  634: \t\tpJobData->pContextJob = jq_make_fcontext(pJobData->StackTop(), pJobData->StackSize(), JqContextRun);\n  635  \t\tJqTransfer T\t\t  = jq_jump_fcontext(pJobData->pContextJob, (void*)pJobData);\n  636  \t\tJQ_ASSERT(T.data == (void*)447);\n\n/home/jonasm/git/jq/boost_context/make_arm64_aapcs_elf_gas.S:\n   54  .text\n   55  .align  2\n   56: .global jq_make_fcontext\n   57: .type   jq_make_fcontext, %function\n   58: jq_make_fcontext:\n   59      # shift address in x0 (allocated stack) to lower 16 byte boundary\n   60      and x0, x0, ~0xF\n   ..\n   63      sub  x0, x0, #0xb0\n   64  \n   65:     # third arg of jq_make_fcontext() == address of context-function\n   66      # store address as a PC to jump in\n   67      str  x2, [x0, #0xa0]\n   ..\n   80      bl  _exit\n   81  \n   82: .size   jq_make_fcontext,.-jq_make_fcontext\n   83  # Mark that we don't need executable stack.\n   84  .section .note.GNU-stack,\"\",%progbits\n\n/home/jonasm/git/jq/boost_context/make_arm64_aapcs_macho_gas.S:\n   53  \n   54  .text\n   55: .globl _jq_make_fcontext\n   56  .balign 16\n   57  \n   58: _jq_make_fcontext:\n   59      ; shift address in x0 (allocated stack) to lower 16 byte boundary\n   60      and x0, x0, ~0xF\n\n/home/jonasm/git/jq/boost_context/make_arm_aapcs_elf_gas.S:\n   40  \n   41  .text\n   42: .globl jq_make_fcontext\n   43  .align 2\n   44: .type jq_make_fcontext,%function\n   45: jq_make_fcontext:\n   46      @ shift address in A1 to lower 16 byte boundary\n   47      bic  a1, a1, #15\n   ..\n   50      sub  a1, a1, #128\n   51  \n   52:     @ third arg of jq_make_fcontext() == address of context-function\n   53      str  a3, [a1, #104]\n   54  \n   ..\n   74      @ exit application\n   75      bl  _exit@PLT\n   76: .size jq_make_fcontext,.-jq_make_fcontext\n   77  \n   78  @ Mark that we don't need executable stack.\n\n/home/jonasm/git/jq/boost_context/make_arm_aapcs_macho_gas.S:\n   40  \n   41  .text\n   42: .globl _jq_make_fcontext\n   43  .align 2\n   44: _jq_make_fcontext:\n   45      @ shift address in A1 to lower 16 byte boundary\n   46      bic  a1, a1, #15\n\n/home/jonasm/git/jq/boost_context/make_arm_aapcs_pe_armasm.asm:\n   28      AREA |.text|, CODE\n   29      ALIGN 4\n   30:     EXPORT jq_make_fcontext\n   31      IMPORT _exit\n   32  \n   33: jq_make_fcontext PROC\n   34:     ; first arg of jq_make_fcontext() == top of context-stack\n   35      ; save top of context-stack (base) A4\n   36      mov  a4, a1\n   ..\n   44      ; save top address of context_stack as 'base'\n   45      str  a4, [a1, #0x8]\n   46:     ; second arg of jq_make_fcontext() == size of context-stack\n   47      ; compute bottom address of context-stack (limit)\n   48      sub  a4, a4, a2\n   ..\n   52      str  a4, [a1, #0x0]\n   53  \n   54:     ; third arg of jq_make_fcontext() == address of context-function\n   55      str  a3, [a1, #0x34]\n   56  \n\n/home/jonasm/git/jq/boost_context/make_i386_ms_pe_gas.asm:\n   27  .text\n   28  .p2align 4,,15\n   29: .globl\t_jq_make_fcontext\n   30: .def\t_jq_make_fcontext;\t.scl\t2;\t.type\t32;\t.endef\n   31: _jq_make_fcontext:\n   32:     /* first arg of jq_make_fcontext() == top of context-stack */\n   33      movl  0x04(%esp), %eax\n   34  \n   ..\n   51      fnstcw  0x4(%eax)\n   52  \n   53:     /* first arg of jq_make_fcontext() == top of context-stack */\n   54      movl  0x4(%esp), %ecx\n   55      /* save top address of context stack as 'base' */\n   56      movl  %ecx, 0x14(%eax)\n   57:     /* second arg of jq_make_fcontext() == size of context-stack */\n   58      movl  0x8(%esp), %edx\n   59      /* negate stack size for LEA instruction (== substraction) */\n   ..\n   69      movl  %ecx, 0x8(%eax)\n   70  \n   71:     /* third arg of jq_make_fcontext() == address of context-function */\n   72      /* stored in EBX */\n   73      movl  0xc(%esp), %ecx\n   ..\n  145  \n  146  .section .drectve\n  147: .ascii \" -export:\\\"jq_make_fcontext\\\"\"\n  148  \n\n/home/jonasm/git/jq/boost_context/make_i386_ms_pe_masm.asm:\n   27  .code\n   28  \n   29: jq_make_fcontext PROC BOOST_CONTEXT_EXPORT\n   30:     ; first arg of jq_make_fcontext() == top of context-stack\n   31      mov  eax, [esp+04h]\n   32  \n   ..\n   48      fnstcw  [eax+04h]\n   49  \n   50:     ; first arg of jq_make_fcontext() == top of context-stack\n   51      mov  ecx, [esp+04h]\n   52      ; save top address of context stack as 'base'\n   53      mov  [eax+014h], ecx\n   54:     ; second arg of jq_make_fcontext() == size of context-stack\n   55      mov  edx, [esp+08h]\n   56      ; negate stack size for LEA instruction (== substraction)\n   ..\n   66      mov  [eax+08h], ecx\n   67  \n   68:     ; third arg of jq_make_fcontext() == address of context-function\n   69      ; stored in EBX\n   70      mov  ecx, [esp+0ch]\n   ..\n  137      call  _exit\n  138      hlt\n  139: jq_make_fcontext ENDP\n  140  END\n  141  \n\n/home/jonasm/git/jq/boost_context/make_i386_sysv_elf_gas.S:\n   26  \n   27  .text\n   28: .globl jq_make_fcontext\n   29  .align 2\n   30: .type jq_make_fcontext,@function\n   31: jq_make_fcontext:\n   32:     /* first arg of jq_make_fcontext() == top of context-stack */\n   33      movl  0x4(%esp), %eax\n   34  \n   ..\n   43      leal  -0x28(%eax), %eax\n   44  \n   45:     /* third arg of jq_make_fcontext() == address of context-function */\n   46      /* stored in EBX */\n   47      movl  0xc(%esp), %ecx\n   ..\n  101      call  _exit@PLT\n  102      hlt\n  103: .size jq_make_fcontext,.-jq_make_fcontext\n  104  \n  105  /* Mark that we don't need executable stack.  */\n\n/home/jonasm/git/jq/boost_context/make_i386_sysv_macho_gas.S:\n   26  \n   27  .text\n   28: .globl _jq_make_fcontext\n   29  .align 2\n   30: _jq_make_fcontext:\n   31      /* first arg of make_fcontext() == top of context-stack */\n   32      movl  0x4(%esp), %eax\n\n/home/jonasm/git/jq/boost_context/make_mips32_o32_elf_gas.S:\n   58  \n   59  .text\n   60: .globl jq_make_fcontext\n   61  .align 2\n   62: .type jq_make_fcontext,@function\n   63: .ent jq_make_fcontext\n   64: jq_make_fcontext:\n   65  #ifdef __PIC__\n   66  .set    noreorder\n   ..\n   68  .set    reorder\n   69  #endif\n   70:     # first arg of jq_make_fcontext() == top address of context-stack\n   71      move $v0, $a0\n   72  \n   ..\n   80      addiu $v0, $v0, -112\n   81  \n   82:     # third arg of jq_make_fcontext() == address of context-function\n   83      sw  $a2, 92($v0)\n   84      # save global pointer in context-data\n   ..\n  112      # exit application\n  113      jalr  $t9\n  114: .end jq_make_fcontext\n  115: .size jq_make_fcontext, .-jq_make_fcontext\n  116  \n  117  /* Mark that we don't need executable stack.  */\n\n/home/jonasm/git/jq/boost_context/make_ppc32_sysv_elf_gas.S:\n   75  \n   76  .text\n   77: .globl jq_make_fcontext\n   78  .align 2\n   79: .type jq_make_fcontext,@function\n   80: jq_make_fcontext:\n   81      # save return address into R6\n   82      mflr  %r6\n   83  \n   84:     # first arg of jq_make_fcontext() == top address of context-function\n   85      # shift address in R3 to lower 16 byte boundary\n   86      clrrwi  %r3, %r3, 4\n   ..\n   90      subi  %r3, %r3, 336\n   91  \n   92:     # third arg of jq_make_fcontext() == address of context-function\n   93      stw  %r5, 240(%r3)\n   94  \n   ..\n  137      # exit application\n  138      bl  _exit@plt\n  139: .size jq_make_fcontext, .-jq_make_fcontext\n  140  \n  141  /* Mark that we don't need executable stack.  */\n\n/home/jonasm/git/jq/boost_context/make_ppc32_sysv_macho_gas.S:\n   75  \n   76  .text\n   77: .globl _jq_make_fcontext\n   78  .align 2\n   79: _jq_make_fcontext:\n   80      # save return address into R6\n   81      mflr  r6\n\n/home/jonasm/git/jq/boost_context/make_ppc32_sysv_xcoff_gas.S:\n   73   *                                                     *\n   74   *******************************************************/\n   75: \t.globl\tjq_make_fcontext[DS]\n   76: \t.globl .jq_make_fcontext[PR]\n   77  \t.align 2 \n   78: \t.csect  jq_make_fcontext[DS]\n   79: jq_make_fcontext:\n   80: \t.long .jq_make_fcontext[PR]\n   81: \t.csect .jq_make_fcontext[PR], 3\n   82: #.jq_make_fcontext:\n   83      # save return address into R6\n   84      mflr  6\n   85  \n   86:     # first arg of jq_make_fcontext() == top address of context-function\n   87      # shift address in R3 to lower 16 byte boundary\n   88      clrrwi  3, 3, 4\n   ..\n   92      subi  3, 3, 336\n   93  \n   94:     # third arg of jq_make_fcontext() == address of context-function\n   95      stw  5, 240(3)\n   96  \n\n/home/jonasm/git/jq/boost_context/make_ppc64_sysv_elf_gas.S:\n   67   *******************************************************/\n   68  \n   69: .globl jq_make_fcontext\n   70  #if _CALL_ELF == 2\n   71  \t.text\n   72  \t.align 2\n   73: jq_make_fcontext:\n   74: \taddis\t%r2, %r12, .TOC.-jq_make_fcontext@ha\n   75: \taddi\t%r2, %r2, .TOC.-jq_make_fcontext@l\n   76: \t.localentry jq_make_fcontext, . - jq_make_fcontext\n   77  #else\n   78  \t.section \".opd\",\"aw\"\n   79  \t.align 3\n   80: jq_make_fcontext:\n   81  # ifdef _CALL_LINUX\n   82: \t.quad\t.L.jq_make_fcontext,.TOC.@tocbase,0\n   83: \t.type\tjq_make_fcontext,@function\n   84  \t.text\n   85  \t.align 2\n   86: .L.jq_make_fcontext:\n   87  # else\n   88: \t.hidden\t.jq_make_fcontext\n   89: \t.globl\t.jq_make_fcontext\n   90: \t.quad\t.jq_make_fcontext,.TOC.@tocbase,0\n   91: \t.size\tjq_make_fcontext,24\n   92: \t.type\t.jq_make_fcontext,@function\n   93  \t.text\n   94  \t.align 2\n   95: .jq_make_fcontext:\n   96  # endif\n   97  #endif\n   ..\n   99      mflr  %r6\n  100  \n  101:     # first arg of jq_make_fcontext() == top address of context-stack\n  102      # shift address in R3 to lower 16 byte boundary\n  103      clrrdi  %r3, %r3, 4\n  ...\n  107      subi  %r3, %r3, 248\n  108  \n  109:     # third arg of jq_make_fcontext() == address of context-function\n  110      # entry point (ELFv2) or descriptor (ELFv1)\n  111  #if _CALL_ELF == 2\n  ...\n  164      nop\n  165  #if _CALL_ELF == 2\n  166: \t.size jq_make_fcontext, .-jq_make_fcontext\n  167  #else\n  168  # ifdef _CALL_LINUX\n  169: \t.size .jq_make_fcontext, .-.L.jq_make_fcontext\n  170  # else\n  171: \t.size .jq_make_fcontext, .-.jq_make_fcontext\n  172  # endif\n  173  #endif\n\n/home/jonasm/git/jq/boost_context/make_ppc64_sysv_macho_gas.S:\n   67  \n   68  .text\n   69: .globl _jq_make_fcontext\n   70: _jq_make_fcontext:\n   71      ; save return address into R6\n   72      mflr  r6\n\n/home/jonasm/git/jq/boost_context/make_ppc64_sysv_xcoff_gas.S:\n    1: \t.globl\tjq_make_fcontext[DS]\n    2: \t.globl .jq_make_fcontext[PR]\n    3  \t.align 2 \n    4: \t.csect .jq_make_fcontext[PR], 3\n    5: \t.globl _jq_make_fcontext\n    6: #._jq_make_fcontext:\n    7      # save return address into R6\n    8      mflr  6\n    9  \n   10:     # first arg of jq_make_fcontext() == top address of context-function\n   11      # shift address in R3 to lower 16 byte boundary\n   12      clrrwi  3, 3, 4\n   ..\n   16      subi  3, 3, 248\n   17  \n   18:     # third arg of jq_make_fcontext() == address of context-function\n   19      stw  5, 176(3)\n   20  \n\n/home/jonasm/git/jq/boost_context/make_x86_64_ms_pe_gas.asm:\n   90  .text\n   91  .p2align 4,,15\n   92: .globl\tjq_make_fcontext\n   93: .def\tjq_make_fcontext;\t.scl\t2;\t.type\t32;\t.endef\n   94: .seh_proc\tjq_make_fcontext\n   95: jq_make_fcontext:\n   96  .seh_endprologue\n   97  \n   98:     /* first arg of jq_make_fcontext() == top of context-stack */\n   99      movq  %rcx, %rax\n  100  \n  ...\n  107      leaq  -0x150(%rax), %rax\n  108  \n  109:     /* third arg of jq_make_fcontext() == address of context-function */\n  110      movq  %r8, 0x100(%rax)\n  111  \n  112:     /* first arg of jq_make_fcontext() == top of context-stack */\n  113      /* save top address of context stack as 'base' */\n  114      movq  %rcx, 0xc8(%rax)\n  115:     /* second arg of jq_make_fcontext() == size of context-stack */\n  116      /* negate stack size for LEA instruction (== substraction) */\n  117      negq  %rdx\n  ...\n  156      andq  $-32, %rsp\n  157      /* 32byte shadow-space for _exit() are */\n  158:     /* already reserved by jq_make_fcontext() */\n  159      /* exit code is zero */\n  160      xorq  %rcx, %rcx\n  ...\n  167  \n  168  .section .drectve\n  169: .ascii \" -export:\\\"jq_make_fcontext\\\"\"\n  170  \n\n/home/jonasm/git/jq/boost_context/make_x86_64_ms_pe_masm.asm:\n   88  \n   89  ; generate function table entry in .pdata and unwind information in\n   90: jq_make_fcontext PROC EXPORT FRAME\n   91      ; .xdata for a function's structured exception handling unwind behavior\n   92      .endprolog\n   93  \n   94:     ; first arg of jq_make_fcontext() == top of context-stack\n   95      mov  rax, rcx\n   96  \n   ..\n  103      sub  rax, 0150h\n  104  \n  105:     ; third arg of jq_make_fcontext() == address of context-function\n  106      ; stored in RBX\n  107      mov  [rax+0100h], r8\n  108  \n  109:     ; first arg of jq_make_fcontext() == top of context-stack\n  110      ; save top address of context stack as 'base'\n  111      mov  [rax+0c8h], rcx\n  112:     ; second arg of jq_make_fcontext() == size of context-stack\n  113      ; negate stack size for LEA instruction (== substraction)\n  114      neg  rdx\n  ...\n  160      call  _exit\n  161      hlt\n  162: jq_make_fcontext ENDP\n  163  END\n  164  \n\n/home/jonasm/git/jq/boost_context/make_x86_64_sysv_elf_gas.S:\n   26  \n   27  .text\n   28: .globl jq_make_fcontext\n   29: .type jq_make_fcontext,@function\n   30  .align 16\n   31: jq_make_fcontext:\n   32:     /* first arg of jq_make_fcontext() == top of context-stack */\n   33      movq  %rdi, %rax\n   34  \n   ..\n   40      leaq  -0x40(%rax), %rax\n   41  \n   42:     /* third arg of jq_make_fcontext() == address of context-function */\n   43      /* stored in RBX */\n   44      movq  %rdx, 0x28(%rax)\n   ..\n   76      call  _exit@PLT\n   77      hlt\n   78: .size jq_make_fcontext,.-jq_make_fcontext\n   79  \n   80  /* Mark that we don't need executable stack. */\n\n/home/jonasm/git/jq/boost_context/make_x86_64_sysv_macho_gas.S:\n   26  \n   27  .text\n   28: .globl _jq_make_fcontext\n   29  .align 8\n   30: _jq_make_fcontext:\n   31:     /* first arg of jq_make_fcontext() == top of context-stack */\n   32      movq  %rdi, %rax\n   33  \n   ..\n   39      leaq  -0x40(%rax), %rax\n   40  \n   41:     /* third arg of jq_make_fcontext() == address of context-function */\n   42      /* stored in RBX */\n   43      movq  %rdx, 0x28(%rax)\n\n/home/jonasm/git/jq/demo/demo_bench_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_coroutine_mm:\n    <binary>\n\n142 matches across 28 files\n\n\nSearching 581 files for \"JqGetCurrentThreadId\"\n\n/home/jonasm/git/jq/jq.h:\n  329  JQ_API int64_t\tJqGetTick();\n  330  \n  331: JQ_API uint64_t JqGetCurrentThreadId(); // for debugging.\n\n/home/jonasm/git/jq/jqinternal.cpp:\n   34  \t// printf(\"JqMutex::LOCK   %p\\n\", this);\n   35  \tJQLSC(g_JqLockOps.fetch_add(1));\n   36: \tJQ_AL(nThreadId = JqGetCurrentThreadId());\n   37  \tJQ_AL(nLockCount++);\n   38  }\n   ..\n   55  bool JqMutex::IsLocked()\n   56  {\n   57: \treturn (nThreadId == JqGetCurrentThreadId());\n   58  }\n   59  #endif\n   ..\n   81  \tSleepConditionVariableCS(&Cond, &Mutex.CriticalSection, INFINITE);\n   82  \n   83: \tJQ_AL(Mutex.nThreadId = JqGetCurrentThreadId());\n   84  \tJQ_AL(Mutex.nLockCount++);\n   85  }\n   ..\n  154  void JqMutex::Lock()\n  155  {\n  156: \tJQ_ASSERT(nThreadId != JqGetCurrentThreadId());\n  157  \tpthread_mutex_lock(&Mutex);\n  158  \tJQLSC(g_JqLockOps.fetch_add(1));\n  159: \t// printf(\"JqMutex::LOCK   %p  tid: %llx\\n\", this, JqGetCurrentThreadId());\n  160  \n  161: \tJQ_AL(nThreadId = JqGetCurrentThreadId());\n  162  \tJQ_AL(nLockCount++);\n  163  }\n  ...\n  172  \t}\n  173  #endif\n  174: \t// printf(\"JqMutex::UNLOCK %p  tid: %llx\\n\", this, JqGetCurrentThreadId());\n  175  \n  176  \tpthread_mutex_unlock(&Mutex);\n  ...\n  181  bool JqMutex::IsLocked()\n  182  {\n  183: \treturn nThreadId == JqGetCurrentThreadId();\n  184  }\n  185  #endif\n  ...\n  208  \tpthread_cond_wait(&Cond, &Mutex.Mutex);\n  209  \n  210: \tJQ_AL(Mutex.nThreadId = JqGetCurrentThreadId());\n  211  \tJQ_AL(Mutex.nLockCount++);\n  212  \n  ...\n  417  }\n  418  \n  419: uint64_t JqGetCurrentThreadId()\n  420  {\n  421  \treturn JqCurrentThreadId();\n\n/home/jonasm/git/jq/demo/demo_job_profile.cpp:\n  138  \tSBenchmarkData& Data = g_Stage1[Index];\n  139  \tData.TickStart\t\t = JqGetTick();\n  140: \tData.ThreadId\t\t = JqGetCurrentThreadId();\n  141  \n  142  \tJobSpinWork(STAGE1_SPIN);\n\n12 matches across 3 files\n\n\nSearching 581 files for \"JqGetCurrentThreadId\"\n\n/home/jonasm/git/jq/jq.h:\n  329  JQ_API int64_t\tJqGetTick();\n  330  \n  331: JQ_API uint64_t JqGetCurrentThreadId(); // for debugging.\n\n/home/jonasm/git/jq/jqinternal.cpp:\n  417  }\n  418  \n  419: uint64_t JqGetCurrentThreadId()\n  420  {\n  421  \treturn JqCurrentThreadId();\n\n/home/jonasm/git/jq/demo/demo_job_profile.cpp:\n  138  \tSBenchmarkData& Data = g_Stage1[Index];\n  139  \tData.TickStart\t\t = JqGetTick();\n  140: \tData.ThreadId\t\t = JqGetCurrentThreadId();\n  141  \n  142  \tJobSpinWork(STAGE1_SPIN);\n\n3 matches across 3 files\n\n\nSearching 580 files for \"JqInitAttributes\"\n\n/home/jonasm/git/jq/jq.h:\n  325  JQ_API void\t\tJqCrashAndDump();\n  326  JQ_API void\t\tJqDump();\n  327: JQ_API void\t\tJqInitAttributes(JqAttributes* pAttributes, uint32_t nNumWorkers);\n  328  JQ_API int64_t\tJqGetTicksPerSecond();\n  329  JQ_API int64_t\tJqGetTick();\n\n/home/jonasm/git/jq/jqinternal.cpp:\n  381  }\n  382  \n  383: void JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumWorkers)\n  384  {\n  385  \tJQ_ASSERT(nNumWorkers <= JQ_MAX_THREADS);\n  ...\n  403  {\n  404  \tJqAttributes Attr;\n  405: \tJqInitAttributes(&Attr, nNumWorkers);\n  406  \tJqStart(&Attr);\n  407  }\n\n/home/jonasm/git/jq/README.md:\n   41  ```\n   42  \tJqAttributes Attr;\n   43: \tJqInitAttributes(&Attr, NUMBER_OF_WORKER_THREADS);\n   44  \tJqStart(&Attr);\n   45  ```\n\n/home/jonasm/git/jq/demo/demo_bench.cpp:\n   82  \t{\n   83  \t\tstatic JqAttributes Attr;\n   84: \t\tJqInitAttributes(&Attr, i);\n   85  \t\tAttr.Flags = nJqInitFlags;\n   86  \t\tJqStart(&Attr);\n   ..\n  110  \t{\n  111  \t\tstatic JqAttributes Attr;\n  112: \t\tJqInitAttributes(&Attr, i);\n  113  \t\tAttr.Flags = nJqInitFlags;\n  114  \t\tJqStart(&Attr);\n  ...\n  139  \t{\n  140  \t\tstatic JqAttributes Attr;\n  141: \t\tJqInitAttributes(&Attr, i);\n  142  \t\tAttr.Flags = nJqInitFlags;\n  143  \t\tJqStart(&Attr);\n\n/home/jonasm/git/jq/demo/demo_bench_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_cancel.cpp:\n  470  #endif\n  471  \tstatic JqAttributes Attr;\n  472: \tJqInitAttributes(&Attr, JQ_TEST_WORKERS);\n  473  \tAttr.Flags = nJqInitFlags;\n  474  \tAttr.ThreadConfig[0] = JqThreadConfig{ 7, {0, 1, 2, 3, 4, 5, 6, 0xff} };\n\n/home/jonasm/git/jq/demo/demo_cancel_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_cancel_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_cancel_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_coroutine.cpp:\n  105  \tstatic uint32_t nNumWorkers = g_nNumWorkers;\n  106  \tstatic JqAttributes Attr;\n  107: \tJqInitAttributes(&Attr, nNumWorkers);\n  108  \tAttr.Flags = nJqInitFlags;\n  109  \t// Attr.nStackSizeSmall = 4<<10;\n  ...\n  175  \t\t\tprintf(\"\\n\");\n  176  \t\t\tJqStop();\n  177: \t\t\tJqInitAttributes(&Attr, 1 + nNumWorkers % 64);\n  178  \t\t\tAttr.Flags = nJqInitFlags;\n  179  \t\t\tJqStart(&Attr);\n\n/home/jonasm/git/jq/demo/demo_coroutine_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_job_profile.cpp:\n  231  \t// static uint32_t nNumWorkers = g_nNumWorkers;\n  232  \tstatic JqAttributes Attr;\n  233: \tJqInitAttributes(&Attr, g_NumWorkers - 1);\n  234  \tAttr.Flags\t\t\t = nJqInitFlags;\n  235  \tAttr.ThreadConfig[0] = JqThreadConfig{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };\n\n/home/jonasm/git/jq/demo/demo_job_profile_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_node.cpp:\n   82  #endif\n   83  \tstatic JqAttributes Attr;\n   84: \tJqInitAttributes(&Attr, JQ_TEST_WORKERS);\n   85  \tAttr.Flags = nJqInitFlags;\n   86  \tAttr.ThreadConfig[0] = JqThreadConfig{ 7, {0, 1, 2, 3, 4, 5, 6, 0xff} };\n\n/home/jonasm/git/jq/demo/demo_node_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_node_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_node_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_priority.cpp:\n  498  \t// static uint32_t nNumWorkers = g_nNumWorkers;\n  499  \tstatic JqAttributes Attr;\n  500: \tJqInitAttributes(&Attr, JQ_TEST_WORKERS);\n  501  \tAttr.Flags\t\t\t = nJqInitFlags;\n  502  \tAttr.ThreadConfig[0] = JqThreadConfig{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };\n\n/home/jonasm/git/jq/demo/demo_priority_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_priority_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_priority_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_stress.cpp:\n  377  \tstatic uint32_t nNumWorkers = g_nNumWorkers;\n  378  \tstatic JqAttributes Attr;\n  379: \tJqInitAttributes(&Attr, nNumWorkers);\n  380  \tAttr.Flags = nJqInitFlags;\n  381  \t// Attr.nStackSizeSmall = 4<<10;\n  ...\n  447  \t\t\tprintf(\"\\n\");\n  448  \t\t\tJqStop();\n  449: \t\t\tJqInitAttributes(&Attr, 1 + nNumWorkers % 12);\n  450  \t\t\tAttr.Flags = nJqInitFlags;\n  451  \t\t\tJqStart(&Attr);\n\n/home/jonasm/git/jq/demo/demo_stress_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_stress_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_stress_mm:\n    <binary>\n\n66 matches across 27 files\n\n\nSearching 575 files for \"JqInitAttributes\"\n\n/home/jonasm/git/jq/jq.h:\n  329  JQ_API void\t\tJqCrashAndDump();\n  330  JQ_API void\t\tJqDump();\n  331: JQ_API void\t\tJqInitAttributes(JqAttributes* pAttributes, uint32_t nNumPipeOrders, uint32_t nNumWorkers);\n  332  JQ_API int64_t\tJqGetTicksPerSecond();\n  333  JQ_API int64_t\tJqGetTick();\n\n/home/jonasm/git/jq/jqinternal.cpp:\n  381  }\n  382  \n  383: void JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumPipeOrders, uint32_t nNumWorkers)\n  384  {\n  385  \tJQ_ASSERT(nNumWorkers <= JQ_MAX_THREADS);\n  ...\n  412  {\n  413  \tJqAttributes Attr;\n  414: \tJqInitAttributes(&Attr, 1, nNumWorkers);\n  415  \tJqStart(&Attr);\n  416  }\n\n/home/jonasm/git/jq/README.md:\n   41  ```\n   42  \tJqAttributes Attr;\n   43: \tJqInitAttributes(&Attr, NUMBER_OF_WORKER_THREADS);\n   44  \tJqStart(&Attr);\n   45  ```\n\n/home/jonasm/git/jq/demo/demo_bench.cpp:\n   82  \t{\n   83  \t\tstatic JqAttributes Attr;\n   84: \t\tJqInitAttributes(&Attr, i);\n   85  \t\tAttr.Flags = nJqInitFlags;\n   86  \t\tJqStart(&Attr);\n   ..\n  110  \t{\n  111  \t\tstatic JqAttributes Attr;\n  112: \t\tJqInitAttributes(&Attr, i);\n  113  \t\tAttr.Flags = nJqInitFlags;\n  114  \t\tJqStart(&Attr);\n  ...\n  139  \t{\n  140  \t\tstatic JqAttributes Attr;\n  141: \t\tJqInitAttributes(&Attr, i);\n  142  \t\tAttr.Flags = nJqInitFlags;\n  143  \t\tJqStart(&Attr);\n\n/home/jonasm/git/jq/demo/demo_bench_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_cancel.cpp:\n  470  #endif\n  471  \tstatic JqAttributes Attr;\n  472: \tJqInitAttributes(&Attr, JQ_TEST_WORKERS);\n  473  \tAttr.Flags = nJqInitFlags;\n  474  \tAttr.ThreadConfig[0] = JqThreadConfig{ 7, {0, 1, 2, 3, 4, 5, 6, 0xff} };\n\n/home/jonasm/git/jq/demo/demo_cancel_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_cancel_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_coroutine.cpp:\n  105  \tstatic uint32_t nNumWorkers = g_nNumWorkers;\n  106  \tstatic JqAttributes Attr;\n  107: \tJqInitAttributes(&Attr, nNumWorkers);\n  108  \tAttr.Flags = nJqInitFlags;\n  109  \t// Attr.nStackSizeSmall = 4<<10;\n  ...\n  175  \t\t\tprintf(\"\\n\");\n  176  \t\t\tJqStop();\n  177: \t\t\tJqInitAttributes(&Attr, 1 + nNumWorkers % 64);\n  178  \t\t\tAttr.Flags = nJqInitFlags;\n  179  \t\t\tJqStart(&Attr);\n\n/home/jonasm/git/jq/demo/demo_coroutine_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_job_profile.cpp:\n  231  \t// static uint32_t nNumWorkers = g_nNumWorkers;\n  232  \tstatic JqAttributes Attr;\n  233: \tJqInitAttributes(&Attr, 1, g_NumWorkers - 1);\n  234  \tAttr.Flags\t\t  = nJqInitFlags;\n  235  \tAttr.PipeOrder[0] = JqPipeOrder{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };\n\n/home/jonasm/git/jq/demo/demo_node.cpp:\n   82  #endif\n   83  \tstatic JqAttributes Attr;\n   84: \tJqInitAttributes(&Attr, JQ_TEST_WORKERS);\n   85  \tAttr.Flags = nJqInitFlags;\n   86  \tAttr.ThreadConfig[0] = JqThreadConfig{ 7, {0, 1, 2, 3, 4, 5, 6, 0xff} };\n\n/home/jonasm/git/jq/demo/demo_node_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_node_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_priority.cpp:\n  498  \t// static uint32_t nNumWorkers = g_nNumWorkers;\n  499  \tstatic JqAttributes Attr;\n  500: \tJqInitAttributes(&Attr, JQ_TEST_WORKERS);\n  501  \tAttr.Flags\t\t\t = nJqInitFlags;\n  502  \tAttr.ThreadConfig[0] = JqThreadConfig{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };\n\n/home/jonasm/git/jq/demo/demo_priority_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_priority_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_stress.cpp:\n  377  \tstatic uint32_t nNumWorkers = g_nNumWorkers;\n  378  \tstatic JqAttributes Attr;\n  379: \tJqInitAttributes(&Attr, nNumWorkers);\n  380  \tAttr.Flags = nJqInitFlags;\n  381  \t// Attr.nStackSizeSmall = 4<<10;\n  ...\n  447  \t\t\tprintf(\"\\n\");\n  448  \t\t\tJqStop();\n  449: \t\t\tJqInitAttributes(&Attr, 1 + nNumWorkers % 12);\n  450  \t\t\tAttr.Flags = nJqInitFlags;\n  451  \t\t\tJqStart(&Attr);\n\n/home/jonasm/git/jq/demo/demo_stress_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_stress_m:\n    <binary>\n\n51 matches across 22 files\n\n\nSearching 574 files for \"JqSetThread\"\n\n/home/jonasm/git/jq/jq.h:\n  317  JQ_API void\t\tJqStart(int nNumWorkers);\n  318  JQ_API void\t\tJqStart(JqAttributes* pAttributes);\n  319: JQ_API void\t\tJqSetThreadPipeOrder(JqPipeOrder* pConfig);\n  320  JQ_API int\t\tJqNumWorkers();\n  321  JQ_API void\t\tJqStop();\n\n/home/jonasm/git/jq/jqlocked.cpp:\n  331  }\n  332  \n  333: void JqSetThreadPipeConfig(JqThreadConfig* pConfig)\n  334  {\n  335  \tJQ_ASSERT(g_nJqNumPipes == 0); // its not supported to change this value, nor is it supported to set it on worker threads. set on init instead.\n\n/home/jonasm/git/jq/jqmultilocked.cpp:\n  405  }\n  406  \n  407: void JqSetThreadPipeConfig(JqPipeOrder* pConfig)\n  408  {\n  409  \tJQ_ASSERT(g_nJqNumPipes == 0); // its not supported to change this value, nor is it supported to set it on worker threads. set on init instead.\n\n/home/jonasm/git/jq/README.md:\n   17  * `JqExecuteOne`: can be called from any thread to execute a job. \n   18  * `JqExecuteChildren`: Execute one child job of job passed in.\n   19: * `JqSetThreadPipeConfig`: can be called to set how non worker threads select jobs, when fetching jobs through `JqExecuteOne` and `JqWait`\n   20  * `JqSpawn`: Adds a job and immediately waits for it.\n   21  * `JqCancel`: Attempt to cancel a job. Fails if started or finished. Note that the only way to find out if a job is cancelled is by the return value of this function.\n\n/home/jonasm/git/jq/demo/demo_bench_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_cancel.cpp:\n  481  \tJqStart(&Attr);\n  482  \tJqPipeOrder MyPipeConfig = JqPipeOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };\n  483: \tJqSetThreadPipeOrder(&MyPipeConfig);\n  484  #ifdef _WIN32\n  485  \tstd::atomic<int> keypressed;\n\n/home/jonasm/git/jq/demo/demo_cancel_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_cancel_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_coroutine_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_job_profile.cpp:\n  240  \n  241  \tJqStart(&Attr);\n  242: \tJqSetThreadPipeOrder(&Attr.PipeOrder[0]);\n  243  \n  244  #ifdef _WIN32\n\n/home/jonasm/git/jq/demo/demo_node_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_node_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_priority.cpp:\n  523  \tJqStart(&Attr);\n  524  \tJqPipeOrder MyPipeConfig = JqPipeOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };\n  525: \tJqSetThreadPipeOrder(&MyPipeConfig);\n  526  \n  527  #ifdef _WIN32\n\n/home/jonasm/git/jq/demo/demo_priority_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_priority_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_stress_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_stress_m:\n    <binary>\n\n43 matches across 19 files\n\n\nSearching 574 files for \"JqSetThreadPipeConfig\"\n\n/home/jonasm/git/jq/jqlocked.cpp:\n  331  }\n  332  \n  333: void JqSetThreadPipeConfig(JqThreadConfig* pConfig)\n  334  {\n  335  \tJQ_ASSERT(g_nJqNumPipes == 0); // its not supported to change this value, nor is it supported to set it on worker threads. set on init instead.\n\n/home/jonasm/git/jq/jqmultilocked.cpp:\n  405  }\n  406  \n  407: void JqSetThreadPipeConfig(JqPipeOrder* pConfig)\n  408  {\n  409  \tJQ_ASSERT(g_nJqNumPipes == 0); // its not supported to change this value, nor is it supported to set it on worker threads. set on init instead.\n\n/home/jonasm/git/jq/README.md:\n   17  * `JqExecuteOne`: can be called from any thread to execute a job. \n   18  * `JqExecuteChildren`: Execute one child job of job passed in.\n   19: * `JqSetThreadPipeConfig`: can be called to set how non worker threads select jobs, when fetching jobs through `JqExecuteOne` and `JqWait`\n   20  * `JqSpawn`: Adds a job and immediately waits for it.\n   21  * `JqCancel`: Attempt to cancel a job. Fails if started or finished. Note that the only way to find out if a job is cancelled is by the return value of this function.\n\n/home/jonasm/git/jq/demo/demo_bench_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_bench_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_cancel_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_cancel_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_coroutine_mm:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_node_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_node_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_priority_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_priority_m:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_stress_ll:\n    <binary>\n\n/home/jonasm/git/jq/demo/demo_stress_m:\n    <binary>\n\n39 matches across 15 files\n",
+			"settings":
+			{
+				"buffer_size": 30701,
+				"line_ending": "Unix",
+				"name": "Find Results",
+				"scratch": true
+			}
+		},
+		{
+			"file": "jqfcontext.h",
+			"settings":
+			{
+				"buffer_size": 303,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "jqpipe.cpp",
+			"settings":
+			{
+				"buffer_size": 7880,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "demo/Makefile",
+			"settings":
+			{
+				"buffer_size": 3126,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "demo/demo_cancel.cpp",
+			"settings":
+			{
+				"buffer_size": 15674,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
 		},
 		{
 			"file": "demo/demo_priority.cpp",
 			"settings":
 			{
-				"buffer_size": 12258,
+				"buffer_size": 16310,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
-			},
-			"undo_stack":
-			[
-				[
-					26,
-					1,
-					"left_delete",
-					null,
-					"AQAAADoSAAAAAAAAOhIAAAAAAAAOAAAAKGludCBiLCBpbnQgZSk",
-					"AQAAAAAAAAABAAAAOhIAAAAAAABIEgAAAAAAAP///////+9/"
-				]
-			]
+			}
+		},
+		{
+			"file": "demo/demo_job_profile.cpp",
+			"settings":
+			{
+				"buffer_size": 9984,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"contents": "clang++ -MMD -MT /home/jonasm/git/job-bench/bench/bench_jq/_temp/linux/debug/bench_jq.o -MF /home/jonasm/git/job-bench/bench/bench_jq/_temp/linux/debug/bench_jq.o.d -DTARGET_X86_64 -DMICROPROFILE_GPU_TIMERS=0 -g -Wno-format -stdlib=libc++ -std=c++11 -D_DEBUG -O0 -I\"/home/jonasm/git/job-bench/bench/bench_jq\" -I\"/home/jonasm/git/job-bench/microprofile\" -I\"/home/jonasm/git/job-bench/jq-private\"  -c bench_jq.cpp -o /home/jonasm/git/job-bench/bench/bench_jq/_temp/linux/debug/bench_jq.o\nclang++ -o demo_job_profile_m demo_job_profile.o  ../microprofile/microprofile.o ../jqpipe.o ../jqinternal.o ../boost_context/jump_x86_64_sysv_elf_gas.o ../boost_context/make_x86_64_sysv_elf_gas.o ../jqlocked.o -lpthread -lcurses -latomic -I.. -I../microprofile -I. -DGLEW_STATIC -Wall -g -O0 -Wno-invalid-offsetof -Wno-format -DJQ_ASSERT_LOCKS -DJQ_MICROPROFILE -DMICROPROFILE_MAX_THREADS=128 -DMICROPROFILE_GPU_TIMERS=0\n",
+			"settings":
+			{
+				"buffer_size": 908,
+				"line_ending": "Unix",
+				"name": "clang++ -MMD -MT /home/jonasm/git/job-bench/bench/"
+			}
+		},
+		{
+			"file": "demo/demo_stress.cpp",
+			"settings":
+			{
+				"buffer_size": 12700,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
 		}
 	],
 	"build_system": "",
@@ -90,11 +192,16 @@
 	},
 	"expanded_folders":
 	[
-		"/Users/jonasmeyer/git/jq",
-		"/Users/jonasmeyer/git/jq/demo"
+		"/home/jonasm/git/jq",
+		"/home/jonasm/git/jq/demo"
 	],
 	"file_history":
 	[
+		"/home/jonasm/git/jq/microprofile/microprofile.h",
+		"/home/jonasm/git/jq/microprofile/demo/vulkan/Main.cpp",
+		"/home/jonasm/git/jq/jqlockless.cpp",
+		"/home/jonasm/git/jq/demo/microprofile.h",
+		"/home/jonasm/git/jq/demo/microprofile.cpp",
 		"/Users/jonasmeyer/git-windows/sph/_log/2020_11_20__21_31_37.log",
 		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/shader.cpp",
 		"/Users/jonasmeyer/git-windows/sph/src/render/_vulkan/shader.h",
@@ -217,22 +324,18 @@
 		"/Users/jonasmeyer/git-windows/sph/shaders/standard_vert.vert",
 		"/Users/jonasmeyer/git-windows/sph/shaders/standard_vert_rotation.vert",
 		"/Users/jonasmeyer/git-windows/sph/shaders/standard_frag_color.frag",
-		"/Users/jonasmeyer/git-windows/sph/shaders/standard_frag.frag",
-		"/Users/jonasmeyer/git-windows/sph/src/shaderstructs.h",
-		"/Users/jonasmeyer/git-windows/sph/src/base/v2.h",
-		"/Users/jonasmeyer/git-windows/sph/src/renderdebug.cpp",
-		"/Users/jonasmeyer/git-windows/sph/src/renderdebug.h",
-		"/Users/jonasmeyer/git-windows/sph/src/base/hash.cpp"
+		"/Users/jonasmeyer/git-windows/sph/shaders/standard_frag.frag"
 	],
 	"find":
 	{
-		"height": 39.0
+		"height": 30.0
 	},
 	"find_in_files":
 	{
-		"height": 102.0,
+		"height": 111.0,
 		"where_history":
 		[
+			""
 		]
 	},
 	"find_state":
@@ -240,6 +343,51 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"JqStart",
+			"jqlock",
+			"node",
+			"JqSetThreadPipeConfig",
+			"JqSetThread",
+			"JqThreadConfig{",
+			"ThreadConfig",
+			"JQ_TEST_WORKERS",
+			"node",
+			"JqInitAttributes",
+			"g_JqPipes",
+			"JqPipeOrderConfig",
+			"JqThreadConfig",
+			"JQ_MAX_THREADS",
+			"JqInitAttributes",
+			"JqStart",
+			"JQ_MICROPROFILE",
+			"MICROPROFILE_ENABLED",
+			"JqWorker",
+			"JqGetCurrentThreadId",
+			"JobSpinWork",
+			"g_DontSleep",
+			"JobSpinWork",
+			"JqBlockDecrement",
+			"bSignal",
+			"JqBlockDecrement",
+			"Precondition",
+			"Precondtion",
+			"JqCheckFinished",
+			"JqAddPrecondition",
+			"Precondition",
+			"nNumChildren",
+			"finishedHandle",
+			"printf",
+			"JqCheckFinished",
+			"nJob",
+			"JqGetPipe",
+			"JQ_TEST_WORKERS",
+			"JQ_ASSERT_LOCKED",
+			"JqAddPrecondition",
+			"micro",
+			"jq_make_fcontext",
+			"__linux__",
+			"__LINUX__",
+			"MP_INVALID_SOCKET",
 			"JqTestPrio",
 			"JqPriorityListAdd",
 			"nPrioListHead",
@@ -254,33 +402,90 @@
 		[
 		],
 		"reverse": false,
-		"scrollbar_highlights": true,
 		"show_context": true,
 		"use_buffer2": true,
-		"use_gitignore": true,
 		"whole_word": false,
 		"wrap": true
 	},
 	"groups":
 	[
 		{
+			"selected": 1,
 			"sheets":
 			[
 				{
 					"buffer": 0,
-					"file": "jqlocked.cpp",
+					"file": "jqmultilocked.cpp",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 32573,
+						"buffer_size": 41104,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								25269,
-								25286
+								5579,
+								5579
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 3794.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 6,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "microprofile/microprofile.h",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 110975,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								74658,
+								74719
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 13559.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"type": "text"
+				},
+				{
+					"buffer": 2,
+					"file": "jqlocked.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 36554,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								10315,
+								10315
 							]
 						],
 						"settings":
@@ -290,29 +495,1089 @@
 							"translate_tabs_to_spaces": false
 						},
 						"translation.x": 0.0,
-						"translation.y": 16870.0,
+						"translation.y": 6755.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 1,
-					"stack_multiselect": false,
+					"stack_index": 5,
 					"type": "text"
 				},
 				{
-					"buffer": 1,
-					"file": "demo/demo_priority.cpp",
-					"selected": true,
+					"buffer": 3,
+					"file": "jqinternal.cpp",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 12258,
+						"buffer_size": 8663,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								4666,
-								4666
+								8490,
+								8490
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 8288.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 11,
+					"type": "text"
+				},
+				{
+					"buffer": 4,
+					"file": "jq.sublime-project",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 487,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								114,
+								114
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/JavaScript/JSON.sublime-syntax"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 14,
+					"type": "text"
+				},
+				{
+					"buffer": 5,
+					"file": "jqinternal.h",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 17065,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								121,
+								121
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 12,
+					"type": "text"
+				},
+				{
+					"buffer": 6,
+					"file": "jq.h",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 10844,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								10844,
+								10844
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 6314.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 4,
+					"type": "text"
+				},
+				{
+					"buffer": 7,
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 30701,
+						"regions":
+						{
+							"match":
+							{
+								"flags": 112,
+								"regions":
+								[
+									[
+										186,
+										202
+									],
+									[
+										421,
+										437
+									],
+									[
+										780,
+										796
+									],
+									[
+										1133,
+										1149
+									],
+									[
+										1445,
+										1461
+									],
+									[
+										1477,
+										1493
+									],
+									[
+										1512,
+										1528
+									],
+									[
+										1705,
+										1721
+									],
+									[
+										1883,
+										1899
+									],
+									[
+										1902,
+										1918
+									],
+									[
+										2116,
+										2132
+									],
+									[
+										2167,
+										2183
+									],
+									[
+										2386,
+										2402
+									],
+									[
+										2432,
+										2448
+									],
+									[
+										2466,
+										2482
+									],
+									[
+										2640,
+										2656
+									],
+									[
+										2803,
+										2819
+									],
+									[
+										2822,
+										2838
+									],
+									[
+										2997,
+										3013
+									],
+									[
+										3038,
+										3054
+									],
+									[
+										3275,
+										3291
+									],
+									[
+										3331,
+										3347
+									],
+									[
+										3379,
+										3395
+									],
+									[
+										3615,
+										3631
+									],
+									[
+										3818,
+										3834
+									],
+									[
+										4018,
+										4034
+									],
+									[
+										4048,
+										4064
+									],
+									[
+										4099,
+										4115
+									],
+									[
+										4144,
+										4160
+									],
+									[
+										4302,
+										4318
+									],
+									[
+										4504,
+										4520
+									],
+									[
+										4731,
+										4747
+									],
+									[
+										4913,
+										4929
+									],
+									[
+										5030,
+										5046
+									],
+									[
+										5099,
+										5115
+									],
+									[
+										5250,
+										5266
+									],
+									[
+										5440,
+										5456
+									],
+									[
+										5655,
+										5671
+									],
+									[
+										5814,
+										5830
+									],
+									[
+										5951,
+										5967
+									],
+									[
+										5997,
+										6013
+									],
+									[
+										6031,
+										6047
+									],
+									[
+										6076,
+										6092
+									],
+									[
+										6239,
+										6255
+									],
+									[
+										6417,
+										6433
+									],
+									[
+										6436,
+										6452
+									],
+									[
+										6616,
+										6632
+									],
+									[
+										6657,
+										6673
+									],
+									[
+										6875,
+										6891
+									],
+									[
+										6921,
+										6937
+									],
+									[
+										6960,
+										6976
+									],
+									[
+										6984,
+										7000
+									],
+									[
+										7118,
+										7134
+									],
+									[
+										7274,
+										7290
+									],
+									[
+										7470,
+										7486
+									],
+									[
+										7500,
+										7516
+									],
+									[
+										7520,
+										7536
+									],
+									[
+										7698,
+										7714
+									],
+									[
+										7744,
+										7760
+									],
+									[
+										7778,
+										7794
+									],
+									[
+										7892,
+										7908
+									],
+									[
+										8107,
+										8123
+									],
+									[
+										8269,
+										8285
+									],
+									[
+										8289,
+										8305
+									],
+									[
+										8470,
+										8486
+									],
+									[
+										8511,
+										8527
+									],
+									[
+										8798,
+										8814
+									],
+									[
+										8835,
+										8851
+									],
+									[
+										8890,
+										8906
+									],
+									[
+										8918,
+										8934
+									],
+									[
+										8951,
+										8967
+									],
+									[
+										8988,
+										9004
+									],
+									[
+										9021,
+										9037
+									],
+									[
+										9133,
+										9149
+									],
+									[
+										9340,
+										9356
+									],
+									[
+										9573,
+										9589
+									],
+									[
+										9654,
+										9670
+									],
+									[
+										9703,
+										9719
+									],
+									[
+										9752,
+										9768
+									],
+									[
+										9791,
+										9807
+									],
+									[
+										9813,
+										9829
+									],
+									[
+										9896,
+										9912
+									],
+									[
+										9958,
+										9974
+									],
+									[
+										10005,
+										10021
+									],
+									[
+										10073,
+										10089
+									],
+									[
+										10122,
+										10138
+									],
+									[
+										10155,
+										10171
+									],
+									[
+										10187,
+										10203
+									],
+									[
+										10234,
+										10250
+									],
+									[
+										10269,
+										10285
+									],
+									[
+										10335,
+										10351
+									],
+									[
+										10443,
+										10459
+									],
+									[
+										10655,
+										10671
+									],
+									[
+										10847,
+										10863
+									],
+									[
+										10867,
+										10883
+									],
+									[
+										10939,
+										10955
+									],
+									[
+										10962,
+										10978
+									],
+									[
+										11008,
+										11024
+									],
+									[
+										11029,
+										11045
+									],
+									[
+										11175,
+										11191
+									],
+									[
+										11200,
+										11216
+									],
+									[
+										11358,
+										11374
+									],
+									[
+										11395,
+										11411
+									],
+									[
+										11450,
+										11466
+									],
+									[
+										11490,
+										11506
+									],
+									[
+										11517,
+										11533
+									],
+									[
+										11629,
+										11645
+									],
+									[
+										11836,
+										11852
+									],
+									[
+										12031,
+										12047
+									],
+									[
+										12060,
+										12076
+									],
+									[
+										12120,
+										12136
+									],
+									[
+										12144,
+										12160
+									],
+									[
+										12221,
+										12237
+									],
+									[
+										12380,
+										12396
+									],
+									[
+										12502,
+										12518
+									],
+									[
+										12671,
+										12687
+									],
+									[
+										12934,
+										12950
+									],
+									[
+										13084,
+										13100
+									],
+									[
+										13265,
+										13281
+									],
+									[
+										13439,
+										13455
+									],
+									[
+										13582,
+										13598
+									],
+									[
+										13725,
+										13741
+									],
+									[
+										13884,
+										13900
+									],
+									[
+										14068,
+										14084
+									],
+									[
+										14207,
+										14223
+									],
+									[
+										14237,
+										14253
+									],
+									[
+										14288,
+										14304
+									],
+									[
+										14333,
+										14349
+									],
+									[
+										14491,
+										14507
+									],
+									[
+										14670,
+										14686
+									],
+									[
+										14689,
+										14705
+									],
+									[
+										14870,
+										14886
+									],
+									[
+										14911,
+										14927
+									],
+									[
+										14956,
+										14972
+									],
+									[
+										15114,
+										15130
+									],
+									[
+										15622,
+										15642
+									],
+									[
+										15817,
+										15837
+									],
+									[
+										15956,
+										15976
+									],
+									[
+										16125,
+										16145
+									],
+									[
+										16268,
+										16288
+									],
+									[
+										16429,
+										16449
+									],
+									[
+										16488,
+										16508
+									],
+									[
+										16640,
+										16660
+									],
+									[
+										16786,
+										16806
+									],
+									[
+										16927,
+										16947
+									],
+									[
+										17034,
+										17054
+									],
+									[
+										17264,
+										17284
+									],
+									[
+										17499,
+										17519
+									],
+									[
+										17611,
+										17631
+									],
+									[
+										17841,
+										17861
+									],
+									[
+										18093,
+										18109
+									],
+									[
+										18306,
+										18322
+									],
+									[
+										18481,
+										18497
+									],
+									[
+										18630,
+										18646
+									],
+									[
+										18812,
+										18828
+									],
+									[
+										18961,
+										18977
+									],
+									[
+										19110,
+										19126
+									],
+									[
+										19459,
+										19475
+									],
+									[
+										19922,
+										19938
+									],
+									[
+										20096,
+										20112
+									],
+									[
+										20410,
+										20426
+									],
+									[
+										20731,
+										20747
+									],
+									[
+										21190,
+										21206
+									],
+									[
+										21661,
+										21677
+									],
+									[
+										21835,
+										21851
+									],
+									[
+										22297,
+										22313
+									],
+									[
+										22535,
+										22551
+									],
+									[
+										22735,
+										22751
+									],
+									[
+										22887,
+										22903
+									],
+									[
+										23069,
+										23085
+									],
+									[
+										23218,
+										23234
+									],
+									[
+										23367,
+										23383
+									],
+									[
+										23716,
+										23732
+									],
+									[
+										24124,
+										24140
+									],
+									[
+										24298,
+										24314
+									],
+									[
+										24612,
+										24628
+									],
+									[
+										24870,
+										24886
+									],
+									[
+										25276,
+										25292
+									],
+									[
+										25690,
+										25706
+									],
+									[
+										25864,
+										25880
+									],
+									[
+										26300,
+										26311
+									],
+									[
+										26473,
+										26484
+									],
+									[
+										26750,
+										26761
+									],
+									[
+										27141,
+										27152
+									],
+									[
+										27847,
+										27858
+									],
+									[
+										28197,
+										28208
+									],
+									[
+										28549,
+										28560
+									],
+									[
+										28979,
+										29000
+									],
+									[
+										29256,
+										29277
+									],
+									[
+										29647,
+										29668
+									]
+								],
+								"scope": ""
+							}
+						},
+						"selection":
+						[
+							[
+								28995,
+								28995
+							]
+						],
+						"settings":
+						{
+							"detect_indentation": false,
+							"line_numbers": false,
+							"output_tag": 7,
+							"result_base_dir": "",
+							"result_file_regex": "^([^ \t].*):$",
+							"result_line_regex": "^ +([0-9]+):",
+							"scroll_past_end": true,
+							"syntax": "Packages/Default/Find Results.hidden-tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 20601.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 8,
+					"type": "text"
+				},
+				{
+					"buffer": 8,
+					"file": "jqfcontext.h",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 303,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								34,
+								34
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 13,
+					"type": "text"
+				},
+				{
+					"buffer": 9,
+					"file": "jqpipe.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 7880,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								7269,
+								7269
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 5238.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 15,
+					"type": "text"
+				},
+				{
+					"buffer": 10,
+					"file": "demo/Makefile",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 3126,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								1008,
+								1008
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/Makefile/Makefile.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"type": "text"
+				},
+				{
+					"buffer": 11,
+					"file": "demo/demo_cancel.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 15674,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								14599,
+								14599
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 9345.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 9,
+					"type": "text"
+				},
+				{
+					"buffer": 12,
+					"file": "demo/demo_priority.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 16310,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								15488,
+								15488
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 10368.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 10,
+					"type": "text"
+				},
+				{
+					"buffer": 13,
+					"file": "demo/demo_job_profile.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 9984,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								8736,
+								8736
 							]
 						],
 						"settings":
@@ -321,12 +1586,68 @@
 							"tab_size": 4,
 							"translate_tabs_to_spaces": false
 						},
-						"translation.x": 1.0,
-						"translation.y": 3585.0,
+						"translation.x": 0.0,
+						"translation.y": 4193.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 0,
-					"stack_multiselect": false,
+					"stack_index": 3,
+					"type": "text"
+				},
+				{
+					"buffer": 14,
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 908,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								908,
+								908
+							]
+						],
+						"settings":
+						{
+							"auto_name": "clang++ -MMD -MT /home/jonasm/git/job-bench/bench/",
+							"syntax": "Packages/Text/Plain text.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 2,
+					"type": "text"
+				},
+				{
+					"buffer": 15,
+					"file": "demo/demo_stress.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 12700,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								12519,
+								12519
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 8477.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 7,
 					"type": "text"
 				}
 			]
@@ -334,7 +1655,7 @@
 	],
 	"incremental_find":
 	{
-		"height": 27.0
+		"height": 30.0
 	},
 	"input":
 	{
@@ -365,17 +1686,17 @@
 	"menu_visible": true,
 	"output.exec":
 	{
-		"height": 362.0
+		"height": 463.0
 	},
 	"output.find_results":
 	{
 		"height": 0.0
 	},
-	"pinned_build_system": "default",
+	"pinned_build_system": "jq_demo",
 	"project": "jq.sublime-project",
 	"replace":
 	{
-		"height": 50.0
+		"height": 56.0
 	},
 	"save_all_on_build": true,
 	"select_file":
@@ -385,12 +1706,120 @@
 		"selected_items":
 		[
 			[
-				"ico",
-				"sph/src/icosphere.cpp"
+				"make",
+				"demo/Makefile"
+			],
+			[
+				"jq.h",
+				"jq.h"
+			],
+			[
+				"demo__jo",
+				"demo/demo_job_profile.cpp"
+			],
+			[
+				"jqmu",
+				"jqmultilocked.cpp"
+			],
+			[
+				"jqlo",
+				"jqlocked.cpp"
 			],
 			[
 				"",
-				"sph/src/sphclient.cpp"
+				"demo/demo_job_profile.cpp"
+			],
+			[
+				"micropro",
+				"microprofile/microprofile.h"
+			],
+			[
+				"MICROPROFI",
+				"microprofile/microprofile.h"
+			],
+			[
+				"demo_str",
+				"demo/demo_stress.cpp"
+			],
+			[
+				"job ",
+				"demo/demo_job_profile.cpp"
+			],
+			[
+				"democ",
+				"demo/demo_cancel.cpp"
+			],
+			[
+				"demo_pr",
+				"demo/demo_priority.cpp"
+			],
+			[
+				"demo can",
+				"demo/demo_cancel.cpp"
+			],
+			[
+				"jqloc",
+				"jqmultilocked.cpp"
+			],
+			[
+				"jqin",
+				"jqinternal.h"
+			],
+			[
+				"jqint",
+				"jqinternal.h"
+			],
+			[
+				"micro",
+				"microprofile/microprofile.h"
+			],
+			[
+				"main",
+				"microprofile/demo/vulkan/Main.cpp"
+			],
+			[
+				"demo job",
+				"demo/demo_job_profile.cpp"
+			],
+			[
+				"jql",
+				"jqlocked.cpp"
+			],
+			[
+				"jk",
+				"jqmultilocked.cpp"
+			],
+			[
+				"mak",
+				"demo/Makefile"
+			],
+			[
+				"micr",
+				"demo/microprofile.h"
+			],
+			[
+				"demo",
+				"demo/demo_priority.cpp"
+			],
+			[
+				"demo_prio",
+				"demo/demo_priority.cpp"
+			],
+			[
+				"jq.",
+				"jq.h"
+			],
+			[
+				"makef",
+				"demo/Makefile"
+			],
+			[
+				"jqpi",
+				"jqpipe.cpp"
+			],
+			[
+				"ico",
+				"sph/src/icosphere.cpp"
 			],
 			[
 				"imguime",
@@ -407,10 +1836,6 @@
 			[
 				"sph",
 				"sph/src/sphclient.cpp"
-			],
-			[
-				"main",
-				"sph/src/main.cpp"
 			],
 			[
 				"sec",
@@ -791,110 +2216,6 @@
 			[
 				"ngen",
 				"sph/src/ngen.py"
-			],
-			[
-				"renderde",
-				"sph/src/render/renderdebug.cpp"
-			],
-			[
-				"shaderstru",
-				"sph/src/render/shaderstructs.h"
-			],
-			[
-				"main.cpp",
-				"sph/src/main.cpp"
-			],
-			[
-				"nge",
-				"sph/src/ngen.osx"
-			],
-			[
-				"array",
-				"sph/src/base/array.h"
-			],
-			[
-				"icosc",
-				"sph/src/icosphere.cpp"
-			],
-			[
-				"build",
-				"sph/src/build.ninja"
-			],
-			[
-				"rende",
-				"sph/src/render/renderdebug.cpp"
-			],
-			[
-				"renderd",
-				"sph/src/render/renderdebug.h"
-			],
-			[
-				"v4",
-				"sph/src/base/v4.h"
-			],
-			[
-				"camer",
-				"sph/src/camera.h"
-			],
-			[
-				"renderdeb",
-				"sph/src/render/renderdebug.h"
-			],
-			[
-				"debug",
-				"sph/src/debug.h"
-			],
-			[
-				"tilec",
-				"sph/src/tilecache.cpp"
-			],
-			[
-				"rul",
-				"sph/src/ngen/rules.osx"
-			],
-			[
-				"ngen.osx",
-				"sph/src/ngen.osx"
-			],
-			[
-				"n",
-				"sph/src/ngen.cfg"
-			],
-			[
-				"lo",
-				"sph/src/location/location_osx.mm"
-			],
-			[
-				"vulkancom",
-				"sph/src/render/vulkancommandbuffer.cpp"
-			],
-			[
-				"commandb",
-				"sph/src/render/rendercommandbuffer.h"
-			],
-			[
-				"img",
-				"sph/src/imgui/imgui.h"
-			],
-			[
-				"tileca",
-				"sph/src/tilecache.h"
-			],
-			[
-				"socket_os",
-				"sph/src/base/socket_osx.cpp"
-			],
-			[
-				"socket_",
-				"sph/src/base/socket_linux.cpp"
-			],
-			[
-				"ng",
-				"sph/src/ngen.cfg"
-			],
-			[
-				"http",
-				"sph/src/base/httprequest.cpp"
 			]
 		],
 		"width": 0.0
