@@ -78,10 +78,13 @@ struct JqMutexLock;
 // uint64_t JqDetachChild(uint64_t nChildJob);
 void	 JqWorker(int nThreadId);
 void	 JqQueuePush(uint8_t nQueue, uint16_t nJobIndex);
-uint16_t JqQueuePop(uint8_t Queue, uint16_t* OutSubJob) void JqQueueRemove(uint8_t nQueue, uint16_t nJobIndex);
+uint16_t JqQueuePop(uint8_t Queue, uint16_t* OutSubJob);
+void	 JqQueueRemove(uint8_t nQueue, uint16_t nJobIndex);
 bool	 JqPendingJobs(uint64_t nJob);
 void	 JqSelfPush(uint64_t nJob, uint32_t nJobIndex);
 void	 JqSelfPop(uint64_t nJob);
+
+void JqFinishInternal(uint16_t nJobIndex);
 
 void JqDecPrecondtion(uint64_t Handle, int Count);
 void JqIncPrecondtion(uint64_t Handle, int Count);
@@ -117,7 +120,6 @@ JQ_THREAD_LOCAL uint32_t	JqHasLock					  = 0;
 // 	JqJobLink Link;
 // };
 
-static_assert(sizeof(JqPipeList) >= JQ_CACHE_LINE_SIZE);
 struct JqJob
 {
 	JqFunction Function;
@@ -130,7 +132,9 @@ struct JqJob
 	std::atomic<uint64_t> PendingStart;		 /// No. of Jobs that needs to be Started
 	std::atomic<uint64_t> PreconditionCount; /// No. of Preconditions that need to finish, before this can be enqueued.
 	uint64_t			  Parent;			 /// Handle of parent
-	bool				  Locked;			 /// Set when reserving a barrier
+	uint64_t			  DependentJob;		 /// Job that is dependent on this job finishing.
+
+	//	bool				  Locked;			 /// Set when reserving a barrier
 
 	uint16_t NumJobs;	 /// Num Jobs to launch
 	uint64_t Range;		 /// Range to pass to jobs
@@ -201,12 +205,13 @@ struct JqQueue
 	uint16_t ListHead;
 	uint16_t ListTail;
 };
+
 // note: This is just arbitrary: given a suffiently random priority setup you might need to bump this.
 
 struct JQ_ALIGN_CACHELINE JqState_t
 {
 	JqSemaphore Semaphore[JQ_MAX_SEMAPHORES];
-	// JqMutex				Mutex;
+
 	JqConditionVariable WaitCond;
 
 	uint64_t m_SemaphoreMask[JQ_MAX_SEMAPHORES];
@@ -234,10 +239,8 @@ struct JQ_ALIGN_CACHELINE JqState_t
 
 	JqPipeOrder ThreadConfig[JQ_MAX_THREADS];
 	JqJob		Jobs[JQ_PIPE_BUFFER_SIZE];
-
-	JqQueue Queues[JQ_NUM_PIPES];
-
-	JqMutex MutexJob[JQ_NUM_JOB_MUTEX];
+	JqQueue		Queues[JQ_NUM_PIPES];
+	JqMutex		MutexJob[JQ_NUM_JOB_MUTEX];
 
 	// JqPipeList	   Pipes[JQ_NUM_PIPES];
 
@@ -289,10 +292,8 @@ void JqStart(JqAttributes* pAttr)
 	JQ_ASSERT(!JQ_LT_WRAP(t2, t0));
 #endif
 
-	JQ_ASSERT_NOT_LOCKED(JqState.Mutex);
-
 	JQ_ASSERT(((JQ_CACHE_LINE_SIZE - 1) & (uint64_t)&JqState) == 0);
-	JQ_ASSERT(((JQ_CACHE_LINE_SIZE - 1) & offsetof(JqState_t, Mutex)) == 0);
+	// JQ_ASSERT(((JQ_CACHE_LINE_SIZE - 1) & offsetof(JqState_t, Mutex)) == 0);
 	JQ_ASSERT(JqState.nNumWorkers == 0);
 
 	memset(JqState.m_PipeList, 0xff, sizeof(JqState.m_PipeList));
@@ -403,12 +404,12 @@ void JqStart(JqAttributes* pAttr)
 	JqState.nTotalWaiting = 0;
 	for(int i = 0; i < JQ_PIPE_BUFFER_SIZE; ++i)
 	{
-		JqState.Jobs[i].nStartedHandle	= 0;
-		JqState.Jobs[i].nFinishedHandle = 0;
+		JqState.Jobs[i].StartedHandle  = 0;
+		JqState.Jobs[i].FinishedHandle = 0;
 	}
-	memset(&JqState.nPrioListHead, 0, sizeof(JqState.nPrioListHead));
-	JqState.nFreeJobs			   = JQ_NUM_JOBS;
-	JqState.nNextHandle			   = 1;
+	// memset(&JqState.nPrioListHead, 0, sizeof(JqState.nPrioListHead));
+	JqState.FreeJobs			   = JQ_NUM_JOBS;
+	JqState.NextHandle			   = 1;
 	JqState.Stats.nNumFinished	   = 0;
 	JqState.Stats.nNumLocks		   = 0;
 	JqState.Stats.nNumSema		   = 0;
@@ -463,7 +464,6 @@ void JqSetThreadPipeOrder(JqPipeOrder* pConfig)
 
 void JqConsumeStats(JqStats* pStats)
 {
-	JqMutexLock lock(JqState.Mutex);
 	*pStats						   = JqState.Stats;
 	JqState.Stats.nNumAdded		   = 0;
 	JqState.Stats.nNumFinished	   = 0;
@@ -475,7 +475,7 @@ void JqConsumeStats(JqStats* pStats)
 	JqState.Stats.nNumSema		   = 0;
 	JqState.Stats.nNumLocklessPops = 0;
 	JqState.Stats.nNumWaitCond	   = 0;
-	JqState.Stats.nNextHandle	   = JqState.nNextHandle;
+	JqState.Stats.nNextHandle	   = JqState.NextHandle;
 }
 
 void JqCheckFinished(uint64_t nJob)
@@ -544,15 +544,50 @@ uint16_t JqIncrementStarted(uint64_t nJob)
 	// }
 	// return nSubIndex;
 }
-void JqIncrementFinished(uint64_t nJob)
+void JqFinishInternal(uint16_t nJobIndex)
 {
-	JQ_BREAK();
-	// JQ_ASSERT_LOCKED(JqState.Mutex);
-	// JQ_MICROPROFILE_VERBOSE_SCOPE("Increment Finished", 0xffff);
-	// uint16_t nIndex = nJob % JQ_PIPE_BUFFER_SIZE;
-	// JqState.Jobs[nIndex].nNumFinished++;
-	// JqState.Stats.nNumFinishedSub++;
-	// JqCheckFinished(nJob);
+	JQ_MICROPROFILE_VERBOSE_SCOPE("Increment Finished", 0xffff);
+	JqJob& Job		   = JqState.Jobs[nJobIndex];
+	int	   FinishIndex = --Job.PendingFinish;
+	JQ_ASSERT(FinishIndex >= 0);
+	if(0 == FinishIndex)
+	{
+		// no need to lock queue, since we are removed a long time ago
+		uint16_t Parent		  = 0;
+		uint64_t DependentJob = 0;
+		{
+			JqSingleMutexLock L(JqGetJobMutex(nJobIndex));
+			Parent = Job.Parent;
+			JQ_CLEAR_FUNCTION(Job.Function);
+
+			if(Job.DependentJob)
+			{
+				DependentJob	 = Job.DependentJob;
+				Job.DependentJob = 0;
+			}
+
+			JqState.Stats.nNumFinished++;
+			// kick waiting threads.
+			int8_t nWaiters = Job.Waiters;
+			if(nWaiters != 0)
+			{
+				JqState.Stats.nNumSema++;
+				JqState.WaitCond.NotifyAll();
+				Job.Waiters	   = 0;
+				Job.WaitersWas = nWaiters;
+			}
+			else
+			{
+				Job.WaitersWas = 0xff;
+			}
+			JqState.FreeJobs++;
+			Job.FinishedHandle = Job.StartedHandle.load();
+		}
+		if(DependentJob)
+			JqDecPrecondtion(DependentJob, 1);
+		if(Parent)
+			JqFinishInternal(Parent);
+	}
 }
 
 void JqAttachChild(uint64_t nParentJob, uint64_t nChildJob)
@@ -652,11 +687,11 @@ JqJobStackList& JqGetJobStackList(uint32_t nFlags)
 
 void JqRunInternal(uint32_t nWorkIndex, int nBegin, int nEnd)
 {
-	JQ_ASSERT(JqState.Jobs[nWorkIndex].nStalled == 0);
+	JQ_ASSERT(JqState.Jobs[nWorkIndex].PreconditionCount == 0);
 
 	if(JQ_INIT_USE_SEPERATE_STACK == (JqState.m_Attributes.Flags & JQ_INIT_USE_SEPERATE_STACK))
 	{
-		uint32_t	nFlags	   = JqState.Jobs[nWorkIndex].nJobFlags;
+		uint32_t	nFlags	   = JqState.Jobs[nWorkIndex].JobFlags;
 		bool		bSmall	   = 0 != (nFlags & JQ_JOBFLAG_SMALL_STACK);
 		uint32_t	nStackSize = bSmall ? JqState.m_Attributes.nStackSizeSmall : JqState.m_Attributes.nStackSizeLarge;
 		JqJobStack* pJobData   = JqAllocStack(JqGetJobStackList(nFlags), nStackSize, nFlags);
@@ -686,7 +721,6 @@ void JqRunInternal(uint32_t nWorkIndex, int nBegin, int nEnd)
 void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 {
 	JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
-	JQ_ASSERT_NOT_LOCKED(JqState.Mutex);
 
 	JQ_ASSERT(JqSelfPos < JQ_MAX_JOB_STACK);
 
@@ -709,7 +743,7 @@ uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumQueues, uint8_t* pQueues)
 	const uint32_t nCount = nNumQueues ? nNumQueues : JQ_NUM_PIPES;
 	for(uint32_t i = 0; i < nCount; i++)
 	{
-		uint8_t	 nQueue = nNumQueues : pQueues[i] : i;
+		uint8_t	 nQueue = nNumQueues ? pQueues[i] : i;
 		uint16_t nIndex = JqQueuePop(nQueue, pSubIndex);
 		if(nIndex)
 			return nIndex;
@@ -744,8 +778,8 @@ uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumQueues, uint8_t* pQueues)
 // 		}
 // 	}
 // }
-return 0;
-}
+// return 0;
+// }
 
 // #ifdef JQ_ASSERT_SANITY
 // void JqTagChildren(uint16_t nRoot)
@@ -934,7 +968,7 @@ bool JqExecuteOne(uint8_t* nQueues, uint8_t nNumQueues)
 	if(!nWork)
 		return false;
 	JqExecuteJob(JqState.Jobs[nWork].StartedHandle, nSubIndex);
-	JqIncrementFinished(nWork, JqState.Jobs[nWork].nStartedHandle);
+	JqIncrementFinished(nWork, JqState.Jobs[nWork].StartedHandle);
 	// {
 	// 	JqMutexLock lock(JqState.Mutex);
 	// 	JqIncrementFinished(JqState.Jobs[nWork].nStartedHandle);
@@ -1049,7 +1083,7 @@ uint64_t JqClaimHandle()
 			continue;
 
 		uint16_t index = h % JQ_PIPE_BUFFER_SIZE;
-		pJob		   = JqState.Jobs[index];
+		pJob		   = &JqState.Jobs[index];
 
 		uint64_t finished = pJob.FinishedHandle.load();
 		uint64_t claimed  = pJob.ClaimedHandle.load();
@@ -1061,13 +1095,18 @@ uint64_t JqClaimHandle()
 			break;
 	}
 	// reset header
-	pJob->PendingCount		= 0;
+	pJob->PendingFinish		= 0;
+	pJob->PendingStart		= 0;
 	pJob->PreconditionCount = 1;
+	pJob->Parent			= 0;
+	pJob->DependentJob		= 0;
 	pJob->Locked			= false;
 	pJob->NumJobs			= 0;
 	pJob->Range				= 0;
 	pJob->JobFlags			= JQ_JOBFLAG_UNINITIALIZED;
 	pJob->Waiters			= 0;
+	pJob->LinkNext			= 0;
+	pJob->LinkPrev			= 0;
 
 	return h;
 }
@@ -1127,11 +1166,14 @@ void JqDecPrecondtion(uint64_t Handle, int Count)
 	}
 }
 
-JqMutex& JqGetQueudeMutex(uint16_t QueueIndex){ return JqState.MutexQueue[JobIndex % JOB_MUTEX_COUNT]
-
-} JqMutex& JqGetJobMutex(uint16_t JobIndex)
+JqMutex& JqGetQueudeMutex(uint16_t QueueIndex)
 {
-	return JqState.MutexJob[JobIndex % JOB_MUTEX_COUNT]
+	return JqState.MutexQueue[JobIndex % JOB_MUTEX_COUNT];
+}
+
+JqMutex& JqGetJobMutex(uint64 JobHandle)
+{
+	return JqState.MutexJob[JobHandle % JOB_MUTEX_COUNT]
 }
 
 void JqQueuePush(uint8_t nQueue, uint16_t nJobIndex)
@@ -1141,14 +1183,19 @@ void JqQueuePush(uint8_t nQueue, uint16_t nJobIndex)
 	JqJob&	 Job   = JqState.Jobs[nJobIndex];
 	JqQueue& Queue = JqState.Queues[nQueue];
 
-	JQ_ASSERT(Job.Precondition == 0);
-	JQ_ASSERT(Jobs.nPrio == nQueue);
+	JQ_ASSERT(Job.PreconditionCount == 0);
+	JQ_ASSERT(Job.nPrio == nQueue);
 	uint64_t Started  = Job.StartedHandle;
 	uint64_t Finished = Job.FinishedHandle;
 	uint64_t Claimed  = Job.ClaimedHandle;
 	JQ_ASSERT(Started == FinishedHandle);
 	JQ_ASSERT(JQ_LT_WRAP(Started, Claimed));
 	JQ_ASSERT(JQ_LT_WRAP(Fini, Claimed));
+
+	// std::atomic<uint64_t> PendingFinish;	 /// No. of jobs & (direct) child jobs that need to finish in order for this to be finished.
+	// std::atomic<uint64_t> PendingStart;		 /// No. of Jobs that needs to be Started
+	Job.PendingStart  = Job.NumJobs;
+	Job.PendingFinish = Job.NumJobs;
 
 	JqSingleMutexLock L(Queue.Mutex);
 	JqAssert(Job.LinkPrev == 0);
@@ -1176,7 +1223,8 @@ uint16_t JqQueuePop(uint8_t Queue, uint16_t* OutSubJob)
 	{
 		JQ_ASSERT(JobIndex < JQ_PIPE_BUFFER_SIZE);
 		JqJob& Job		= JqState.Jobs[JobIndex];
-		int	   SubIndex = --Job.PendingCount;
+		int	   SubIndex = --Job.PendingStart;
+		JQ_ASSERT(SubIndex >= 0); // should never go negative.
 		if(SubIndex == 0)
 		{
 			Queue.LinkHead = Job.LinkNext;
@@ -1186,6 +1234,7 @@ uint16_t JqQueuePop(uint8_t Queue, uint16_t* OutSubJob)
 				Queue.LinkTail = 0;
 			}
 		}
+
 		*OutSubJob = Job.NumJobs - 1 - SubIndex; // do it in order.
 	}
 	return JobIndex;
@@ -1193,23 +1242,34 @@ uint16_t JqQueuePop(uint8_t Queue, uint16_t* OutSubJob)
 
 void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
 {
-	JQ_BREAK();
-	// JQ_ASSERT_LOCKED(JqState.Mutex);
-	// uint16_t nIndex = Handle % JQ_PIPE_BUFFER_SIZE;
-	// if(JqIsDone(Precondition))
-	// {
-	// 	JqJob* pEntry	 = &JqState.Jobs[nIndex];
-	// 	pEntry->nStalled = 0;
-	// 	JqPriorityListAdd(nIndex);
-	// }
-	// else
-	// {
-	// 	uint16_t nPreconditionIndex	  = Precondition % JQ_PIPE_BUFFER_SIZE;
-	// 	JqJob*	 pEntry				  = &JqState.Jobs[nIndex];
-	// 	JqJob*	 pPreEntry			  = &JqState.Jobs[nPreconditionIndex];
-	// 	pEntry->nPreconditionSibling  = pPreEntry->nPreconditionFirst;
-	// 	pPreEntry->nPreconditionFirst = Handle;
-	// }
+	// only add if its actually not done.
+	if(!JqIsDone(Precondition))
+	{
+		uint16_t nIndex		   = Handle % JQ_PIPE_BUFFER_SIZE;
+		uint16_t nPrecondIndex = Precondition % JQ_PIPE_BUFFER_SIZE;
+		JqJob&	 Job		   = JqState.Jobs[nIndex];
+		JqJob&	 PrecondJob	   = JqState.Jobs[nPrecondIndex];
+		JQ_ASSERT(Job.PreconditionCount > 0); // as soon as the existing precond count reaches 0, it might be executed, so it no longer makes sense to add new preconditions
+											  // use mechanisms like JqReserve, to block untill precondtions have been added.
+		JqIncPrecondtion(Handle, 1);
+		bool Finished = false;
+		{
+			JqSingleMutexLock L(JqGetJobMutex(Precondition));
+			if(PrecondJob.FinishedHandle == Precondition)
+			{
+				Finished = true;
+			}
+			else
+			{
+				JQ_ASSERT(PrecondJob.DependentJob == 0); // Note: Currently only --one-- dependent job is supported.
+				PrecondJob.DependentJob = Handle;
+			}
+		}
+		if(Finished) // the precondition job finished after we took the lock, so decrement manually.
+		{
+			JqDecPrecondtion(Handle, 1);
+		}
+	}
 }
 
 uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint32_t nJobFlags, uint64_t Precondition)
@@ -1241,7 +1301,6 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t nPri
 
 	bool bAdded = false;
 	{
-		// JqMutexLock Lock(JqState.Mutex);
 		if(ReservedHandle)
 		{
 			JQ_ASSERT(nPrio == 0xff);
@@ -1582,7 +1641,9 @@ uint64_t JqGroupBegin(uint8_t nPriority)
 
 	if(pEntry->nParent)
 	{
-		JqAttachChild(nParentHandle, nNextHandle);
+		attach child nu.
+
+			JqAttachChild(nParentHandle, nNextHandle);
 	}
 	JQ_CLEAR_FUNCTION(pEntry->Function);
 	pEntry->nPrio = 0xff;

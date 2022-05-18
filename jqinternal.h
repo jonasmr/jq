@@ -324,13 +324,13 @@ struct JqSingleMutexLock
 {
 	bool	 bIsLocked;
 	JqMutex& Mutex;
-	JqMutexLock(JqMutex& Mutex)
+	JqSingleMutexLock(JqMutex& Mutex)
 		: Mutex(Mutex)
 	{
 		bIsLocked = false;
 		Lock();
 	}
-	~JqMutexLock()
+	~JqSingleMutexLock()
 	{
 		if(bIsLocked)
 		{

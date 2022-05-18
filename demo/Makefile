@@ -51,7 +51,7 @@ ASM_OBJS = $(patsubst %.S,%.o,$(ASM_SOURCES))
 OBJS = $(C_OBJS) $(CPP_OBJS) $(ASM_OBJS)
 OM = ../jqlocked.o
 OMM = ../jqmultilocked.o
-O2 = ./jq2.o
+O2 = ../jq2.o
 
 default: mm m jq2
 
@@ -96,16 +96,16 @@ demo_job_profile_mm: demo_job_profile.o $(OBJS) $(OMM)
 
 
 #jq2 demo
-demo_stress_jq2: demo_stress.o $(OBJS) $(OMM)
-	$(LD) -o demo_stress_jq2 demo_stress.o $(OBJS) $(OMM) $(LDFLAGS) $(CPPFLAGS)
+demo_stress_jq2: demo_stress.o $(OBJS) $(O2)
+	$(LD) -o demo_stress_jq2 demo_stress.o $(OBJS) $(O2) $(LDFLAGS) $(CPPFLAGS)
 
-demo_priority_jq2: demo_priority.o $(OBJS) $(OMM)
-	$(LD) -o demo_priority_jq2 demo_priority.o $(OBJS) $(OMM) $(LDFLAGS) $(CPPFLAGS)
+demo_priority_jq2: demo_priority.o $(OBJS) $(O2)
+	$(LD) -o demo_priority_jq2 demo_priority.o $(OBJS) $(O2) $(LDFLAGS) $(CPPFLAGS)
 
-demo_cancel_jq2: demo_cancel.o $(OBJS) $(OMM)
-	$(LD) -o demo_cancel_jq2 demo_cancel.o $(OBJS) $(OMM) $(LDFLAGS) $(CPPFLAGS)
+demo_cancel_jq2: demo_cancel.o $(OBJS) $(O2)
+	$(LD) -o demo_cancel_jq2 demo_cancel.o $(OBJS) $(O2) $(LDFLAGS) $(CPPFLAGS)
 
-demo_job_profile_jq2: demo_job_profile.o $(OBJS) $(OMM)
+demo_job_profile_jq2: demo_job_profile.o $(OBJS) $(O2)
 	$(LD) -o demo_job_profile_jq2 demo_job_profile.o $(OBJS) $(OMM) $(LDFLAGS) $(CPPFLAGS)
 
 
