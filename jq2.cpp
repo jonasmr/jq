@@ -589,6 +589,8 @@ void JqFinishInternal(uint16_t nJobIndex)
 
 void JqAttachChild(uint64_t Parent, uint64_t Child)
 {
+	if(!Parent)
+		return;
 	uint16_t ParentIndex = Parent % JQ_JOB_BUFFER_SIZE;
 	uint16_t ChildIndex	 = Child % JQ_JOB_BUFFER_SIZE;
 	JqJob&	 ParentJob	 = JqState.Jobs[ParentIndex];
@@ -597,8 +599,8 @@ void JqAttachChild(uint64_t Parent, uint64_t Child)
 	JQ_ASSERT(ParentJob.FinishedHandle != Parent);
 	JQ_ASSERT(ChildJob.FinishedHandle != Child);
 	// handles must be claimed
-	JQ_ASSERT(ParentJob.ClaimedHandle != Parent);
-	JQ_ASSERT(ChildJob.ClaimedHandle != Child);
+	JQ_ASSERT(ParentJob.ClaimedHandle == Parent);
+	JQ_ASSERT(ChildJob.ClaimedHandle == Child);
 
 	ParentJob.PendingFinish++;
 	JQ_ASSERT(ChildJob.Parent == 0);
@@ -1143,9 +1145,21 @@ void JqDecPrecondtion(uint64_t Handle, int Count)
 	if(Before - Count == 0)
 	{
 		// only place StartedHandle is modified
+		uint32_t NumJobs  = Job.NumJobs;
 		Job.StartedHandle = Handle;
 		uint8_t Queue	  = Job.Queue;
-		JqQueuePush(Handle, Queue);
+		JqQueuePush(Queue, Handle);
+
+		{
+			{
+				uint32_t nNumSema = JqState.QueueNumSemaphores[Queue];
+				for(uint32_t i = 0; i < nNumSema; ++i)
+				{
+					int nSemaIndex = JqState.QueueToSemaphore[Queue][i];
+					JqState.Semaphore[nSemaIndex].Signal(NumJobs);
+				}
+			}
+		}
 	}
 }
 
@@ -1165,15 +1179,15 @@ void JqQueuePush(uint8_t QueueIndex, uint16_t JobIndex)
 	JQ_ASSERT(QueueIndex < JQ_NUM_QUEUES);
 	JqJob&	 Job   = JqState.Jobs[JobIndex];
 	JqQueue& Queue = JqState.Queues[QueueIndex];
-
+	printf("JqQueuePush %d -> %d .. NumJobs %d\n", JobIndex, QueueIndex, Job.NumJobs);
 	JQ_ASSERT(Job.PreconditionCount == 0);
 	JQ_ASSERT(Job.Queue == QueueIndex);
 	uint64_t Started  = Job.StartedHandle;
 	uint64_t Finished = Job.FinishedHandle;
 	uint64_t Claimed  = Job.ClaimedHandle;
-	JQ_ASSERT(Started == Finished);
-	JQ_ASSERT(JQ_LT_WRAP(Started, Claimed));
+	JQ_ASSERT(Started == Claimed);
 	JQ_ASSERT(JQ_LT_WRAP(Finished, Claimed));
+	JQ_ASSERT(Job.NumJobs);
 
 	// std::atomic<uint64_t> PendingFinish;	 /// No. of jobs & (direct) child jobs that need to finish in order for this to be finished.
 	// std::atomic<uint64_t> PendingStart;		 /// No. of Jobs that needs to be Started
@@ -1188,12 +1202,26 @@ void JqQueuePush(uint8_t QueueIndex, uint16_t JobIndex)
 	if(Queue.LinkTail)
 	{
 		JqState.Jobs[Queue.LinkTail].LinkNext = JobIndex;
+		Queue.LinkTail						  = JobIndex;
 	}
 	else
 	{
 		JQ_ASSERT(Queue.LinkHead == 0);
 		Queue.LinkHead = Queue.LinkTail = JobIndex;
 	}
+
+	printf("dump Queue %d\n", QueueIndex);
+	uint16_t i = Queue.LinkHead;
+	while(i != 0)
+	{
+		printf("e:%d\n", i);
+		if(JqState.Jobs[i].LinkNext == 0)
+		{
+			JQ_ASSERT(Queue.LinkTail == i);
+		}
+		i = JqState.Jobs[i].LinkNext;
+	}
+	printf("done\n");
 }
 
 uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
@@ -1207,6 +1235,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 		JQ_ASSERT(JobIndex < JQ_JOB_BUFFER_SIZE);
 		JqJob& Job		= JqState.Jobs[JobIndex];
 		int	   SubIndex = --Job.PendingStart;
+		printf("JqQueuePop job %d -> %d sub %d\n", JobIndex, QueueIndex, SubIndex);
 		JQ_ASSERT(SubIndex >= 0); // should never go negative.
 		if(SubIndex == 0)
 		{
@@ -1314,8 +1343,9 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t Queu
 
 		JQ_ASSERT(NumJobs <= 0xffff);
 
-		Job.PendingStart  = NumJobs;
-		Job.PendingFinish = NumJobs;
+		Job.NumJobs		  = NumJobs;
+		Job.PendingStart  = 0;
+		Job.PendingFinish = 0;
 
 		// Job.PreconditionCount++;
 		Job.Range	 = 0;
@@ -1606,7 +1636,6 @@ uint64_t JqGroupBegin(uint8_t nPriority)
 	JqJob&	 Job	= JqState.Jobs[Index];
 
 	JQ_ASSERT(JQ_LE_WRAP(Job.FinishedHandle, Handle));
-	Job.StartedHandle = Handle;
 
 	uint64_t Parent = JqSelf();
 	if(Parent)
