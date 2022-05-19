@@ -19,7 +19,7 @@ CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
 
 
 
-CPP_SOURCES = ../microprofile/microprofile.cpp ../jqpipe.cpp  ../jqinternal.cpp
+CPP_SOURCES = ../microprofile/microprofile.cpp  ../jqinternal.cpp
 DEMO_SOURCES = demo_stress.cpp demo_priority.cpp demo_cancel.cpp
 JQ_SOURCES=../jqlocked.cpp ../jqmultilocked.cpp
 C_SOURCES =
@@ -50,13 +50,10 @@ C_OBJS = $(patsubst %.c,%.o,$(C_SOURCES))
 ASM_OBJS = $(patsubst %.S,%.o,$(ASM_SOURCES))
 OBJS = $(C_OBJS) $(CPP_OBJS) $(ASM_OBJS)
 OM = ../jqlocked.o
-OMM = ../jqmultilocked.o
 O2 = ../jq2.o
 
-default: mm m jq2
+default: m jq2
 
-ll: demo_priority_ll demo_stress_ll demo_cancel_ll
-mm: demo_priority_mm demo_stress_mm demo_cancel_mm demo_job_profile_mm
 m: demo_priority_m demo_stress_m demo_cancel_m demo_job_profile_m
 jq2: demo_priority_jq2 demo_stress_jq2 demo_cancel_jq2 demo_job_profile_jq2
 
@@ -81,19 +78,6 @@ demo_job_profile_m: demo_job_profile.o $(OBJS) $(OM)
 	$(LD) -o demo_job_profile_m demo_job_profile.o $(OBJS) $(OM) $(LDFLAGS) $(CPPFLAGS)
 
 
-#multi mutex demo
-demo_stress_mm: demo_stress.o $(OBJS) $(OMM)
-	$(LD) -o demo_stress_mm demo_stress.o $(OBJS) $(OMM) $(LDFLAGS) $(CPPFLAGS)
-
-demo_priority_mm: demo_priority.o $(OBJS) $(OMM)
-	$(LD) -o demo_priority_mm demo_priority.o $(OBJS) $(OMM) $(LDFLAGS) $(CPPFLAGS)
-
-demo_cancel_mm: demo_cancel.o $(OBJS) $(OMM)
-	$(LD) -o demo_cancel_mm demo_cancel.o $(OBJS) $(OMM) $(LDFLAGS) $(CPPFLAGS)
-
-demo_job_profile_mm: demo_job_profile.o $(OBJS) $(OMM)
-	$(LD) -o demo_job_profile_mm demo_job_profile.o $(OBJS) $(OMM) $(LDFLAGS) $(CPPFLAGS)
-
 
 #jq2 demo
 demo_stress_jq2: demo_stress.o $(OBJS) $(O2)
@@ -106,7 +90,7 @@ demo_cancel_jq2: demo_cancel.o $(OBJS) $(O2)
 	$(LD) -o demo_cancel_jq2 demo_cancel.o $(OBJS) $(O2) $(LDFLAGS) $(CPPFLAGS)
 
 demo_job_profile_jq2: demo_job_profile.o $(OBJS) $(O2)
-	$(LD) -o demo_job_profile_jq2 demo_job_profile.o $(OBJS) $(OMM) $(LDFLAGS) $(CPPFLAGS)
+	$(LD) -o demo_job_profile_jq2 demo_job_profile.o $(OBJS) $(O2) $(LDFLAGS) $(CPPFLAGS)
 
 
 -include .depend

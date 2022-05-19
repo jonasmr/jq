@@ -4,8 +4,8 @@
 #include "jq.config.h"
 #endif
 
-#ifndef JQ_PIPE_BUFFER_SIZE
-#define JQ_PIPE_BUFFER_SIZE (2048)
+#ifndef JQ_JOB_BUFFER_SIZE
+#define JQ_JOB_BUFFER_SIZE (2048)
 #endif
 
 #ifndef JQ_DEFAULT_WAIT_TIME_US
@@ -36,8 +36,8 @@
 #define JQ_MAX_JOB_STACK 8
 #endif
 
-#ifndef JQ_NUM_PIPES
-#define JQ_NUM_PIPES 8
+#ifndef JQ_NUM_QUEUES
+#define JQ_NUM_QUEUES 8
 #endif
 
 #ifndef JQ_API
@@ -271,59 +271,57 @@ struct JqStats
 };
 
 // Specify order of which to take jobs
-struct JqPipeOrder
+struct JqQueueOrder
 {
 	uint8_t nNumPipes;
-	uint8_t nPipes[JQ_NUM_PIPES];
+	uint8_t Queues[JQ_NUM_QUEUES];
 };
 
 struct JqAttributes
 {
 	uint32_t Flags;
-	uint32_t nNumWorkers;
-	uint32_t nStackSizeSmall;
-	uint32_t nStackSizeLarge;
-	uint32_t nNumPipeOrders;
+	uint32_t NumWorkers;
+	uint32_t StackSizeSmall;
+	uint32_t StackSizeLarge;
+	uint32_t NumQueueOrders;
 
-	JqPipeOrder PipeOrder[JQ_MAX_THREADS];		  // defines a set of different ways of pulling out work
-	uint8_t		WorkerOrderIndex[JQ_MAX_THREADS]; // for each worker thread, pick on of the pipe orders from abovce.
+	JqQueueOrder QueueOrder[JQ_MAX_THREADS];	   // defines a set of different ways of pulling out work
+	uint8_t		 WorkerOrderIndex[JQ_MAX_THREADS]; // for each worker thread, pick on of the pipe orders from abovce.
 };
 
 JQ_API uint64_t JqSelf();
-JQ_API uint64_t JqAdd(JqFunction JobFunc, uint8_t nPipe, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
+JQ_API uint64_t JqAdd(JqFunction JobFunc, uint8_t Queues, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
 
 // add reserved
 JQ_API uint64_t JqAddReserved(uint64_t ReservedHandle, JqFunction JobFunc, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
 
 // add successor
-JQ_API uint64_t JqAddSuccessor(uint64_t Precondition, JqFunction JobFunc, uint8_t nPipe, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
+JQ_API uint64_t JqAddSuccessor(uint64_t Precondition, JqFunction JobFunc, uint8_t Queues, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
 
-// Reserve a Job slot. this allows you to wait on work added later
-JQ_API uint64_t JqReserve(uint8_t nPipe);
-// Mark reservation as finished, without actually executing any jobs.
-JQ_API uint64_t JqCloseReserved(uint64_t Handle);
+JQ_API uint64_t JqReserve(uint8_t Queue, uint32_t JobFlags = 0); // Reserve a Job slot. this allows you to wait on work added later, or close, in case its only for a barrier
+JQ_API void		JqCloseReserved(uint64_t Handle);				 // Mark reservation as finished, without actually executing any jobs.
 
-JQ_API void		JqSpawn(JqFunction JobFunc, uint8_t nPipe, int nNumJobs = 1, int nRange = -1, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG);
+JQ_API void		JqSpawn(JqFunction JobFunc, uint8_t Queues, int nNumJobs = 1, int nRange = -1, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG);
 JQ_API void		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API void		JqWaitAll();
 JQ_API void		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API bool		JqCancel(uint64_t nJob);
 JQ_API void		JqExecuteChildren(uint64_t nJob);
-JQ_API uint64_t JqGroupBegin(uint8_t nPipe); // add a non-executing job to group all jobs added between begin/end
+JQ_API uint64_t JqGroupBegin(uint8_t Queues); // add a non-executing job to group all jobs added between begin/end
 JQ_API void		JqGroupEnd();
 JQ_API bool		JqIsDone(uint64_t nJob);
 JQ_API bool		JqIsDoneExt(uint64_t nJob, uint32_t nWaitFlag);
 JQ_API void		JqStart(int nNumWorkers);
 JQ_API void		JqStart(JqAttributes* pAttributes);
-JQ_API void		JqSetThreadPipeOrder(JqPipeOrder* pConfig);
+JQ_API void		JqSetThreadQueueOrder(JqQueueOrder* pConfig);
 JQ_API int		JqNumWorkers();
 JQ_API void		JqStop();
 JQ_API uint32_t JqSelfJobIndex();
 JQ_API int		JqGetNumWorkers();
 JQ_API void		JqConsumeStats(JqStats* pStatsOut);
 JQ_API bool		JqExecuteOne();
-JQ_API bool		JqExecuteOne(uint8_t nPipe);
+JQ_API bool		JqExecuteOne(uint8_t Queues);
 JQ_API bool		JqExecuteOne(uint8_t* pPipes, uint8_t nNumPipes);
 JQ_API void		JqStartSentinel(int nTimeout);
 JQ_API void		JqCrashAndDump();
@@ -333,3 +331,4 @@ JQ_API int64_t	JqGetTicksPerSecond();
 JQ_API int64_t	JqGetTick();
 
 JQ_API uint64_t JqGetCurrentThreadId(); // for debugging.
+JQ_API void		JqUSleep(uint64_t us);

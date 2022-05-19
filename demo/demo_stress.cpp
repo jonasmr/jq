@@ -22,7 +22,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string>
+#include <string.h>
 #ifdef _WIN32
 #include <Windows.h>
 #include <conio.h>
@@ -70,7 +70,6 @@ int64_t	 JqTick();
 int64_t	 JqTicksPerSecond();
 uint32_t g_Reset = 0;
 #include "../jq.h"
-#include "../jqnode.h"
 #include <thread>
 
 #include <atomic>
@@ -219,15 +218,7 @@ void JqTest()
 		},
 		0, 3);
 
-	uint64_t h1 = JqAdd(
-		[] {
-#ifdef _WIN32
-			JqUsleep(2000);
-#else
-			usleep(2000);
-#endif
-		},
-		0, 1);
+	uint64_t h1 = JqAdd([] { JqUSleep(2000); }, 0, 1);
 	uint64_t ex = 0;
 	bool	 bR = g_Handle.compare_exchange_strong(ex, h1);
 	JQ_ASSERT(bR);

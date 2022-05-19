@@ -22,7 +22,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string>
+#include <string.h>
 #ifdef _WIN32
 #include <Windows.h>
 #include <conio.h>
@@ -75,7 +75,6 @@ uint32_t g_Reset = 0;
 #include <thread>
 
 #include "../jq.h"
-#include "../jqnode.h"
 
 #include <atomic>
 std::atomic<int> g_nJobCount;
@@ -456,22 +455,22 @@ int main(int argc, char* argv[])
 #endif
 	static JqAttributes Attr;
 	JqInitAttributes(&Attr, JQ_TEST_WORKERS, JQ_TEST_WORKERS);
-	Attr.Flags		  = nJqInitFlags;
-	Attr.PipeOrder[0] = JqPipeOrder{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };
-	Attr.PipeOrder[1] = JqPipeOrder{ 3, { 3, 2, 1, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	Attr.PipeOrder[2] = JqPipeOrder{ 2, { 5, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	Attr.PipeOrder[3] = JqPipeOrder{ 2, { 1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	Attr.PipeOrder[4] = JqPipeOrder{ 1,
-									 {
-										 7,
-										 0xff,
-										 0xff,
-										 0xff,
-										 0xff,
-										 0xff,
-										 0xff,
-										 0xff,
-									 } };
+	Attr.Flags		   = nJqInitFlags;
+	Attr.QueueOrder[0] = JqQueueOrder{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };
+	Attr.QueueOrder[1] = JqQueueOrder{ 3, { 3, 2, 1, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	Attr.QueueOrder[2] = JqQueueOrder{ 2, { 5, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	Attr.QueueOrder[3] = JqQueueOrder{ 2, { 1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	Attr.QueueOrder[4] = JqQueueOrder{ 1,
+									   {
+										   7,
+										   0xff,
+										   0xff,
+										   0xff,
+										   0xff,
+										   0xff,
+										   0xff,
+										   0xff,
+									   } };
 
 	for(uint32_t i = 0; i < JQ_TEST_WORKERS; ++i)
 	{
@@ -479,8 +478,8 @@ int main(int argc, char* argv[])
 	}
 
 	JqStart(&Attr);
-	JqPipeOrder MyPipeConfig = JqPipeOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	JqSetThreadPipeOrder(&MyPipeConfig);
+	JqQueueOrder MyPipeConfig = JqQueueOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	JqSetThreadQueueOrder(&MyPipeConfig);
 #ifdef _WIN32
 	std::atomic<int> keypressed;
 	std::thread		 foo([&]() {

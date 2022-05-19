@@ -39,13 +39,16 @@ inline uint64_t JqCurrentThreadId()
 	pthread_threadid_np(pthread_self(), &tid);
 	return tid;
 }
+inline void JqUSleepImpl(uint64_t usec)
+{
+	usleep(usec);
+}
 
 #elif defined(_WIN32)
 #define JQ_BREAK() __debugbreak()
 #define JQ_THREAD_LOCAL __declspec(thread)
 #define JQ_STRCASECMP _stricmp
 typedef uint32_t ThreadIdType;
-#define JQ_USLEEP(us) JqUsleep(us);
 #define JqCurrentThreadId() GetCurrentThreadId()
 #include <windows.h>
 inline int64_t	 JqTicksPerSecond()
@@ -63,7 +66,7 @@ inline int64_t JqTick()
 	QueryPerformanceCounter((LARGE_INTEGER*)&ticks);
 	return ticks;
 }
-inline void JqUsleep(__int64 usec)
+inline void JqUSleepImpl(uint64_t usec)
 {
 	if(usec > 20000)
 	{
@@ -108,6 +111,11 @@ inline int64_t JqTick()
 	timespec ts;
 	clock_gettime(CLOCK_REALTIME, &ts);
 	return 1000000000ll * ts.tv_sec + ts.tv_nsec;
+}
+
+inline void JqUSleepImpl(uint64_t usec)
+{
+	usleep(usec);
 }
 
 #endif
@@ -318,7 +326,6 @@ struct JqMutexLock
 	}
 };
 
-JQ_THREAD_LOCAL JqMutex* g_SingleMutexLockMutex = nullptr;
 // Scope Mutex helper, which will also assert if the same thread is trying to lock two mutexes
 struct JqSingleMutexLock
 {
@@ -337,21 +344,8 @@ struct JqSingleMutexLock
 			Unlock();
 		}
 	}
-	void Lock()
-	{
-		JQ_ASSERT(g_SingleMutexLockMutex == nullptr);
-		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
-		Mutex.Lock();
-		bIsLocked			   = true;
-		g_SingleMutexLockMutex = &Mutex;
-	}
-	void Unlock()
-	{
-		g_SingleMutexLockMutex = nullptr;
-		JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
-		Mutex.Unlock();
-		bIsLocked = false;
-	}
+	void Lock();
+	void Unlock();
 };
 
 struct JqJobStack

@@ -76,7 +76,7 @@ uint32_t g_Reset = 0;
 #include <thread>
 
 #include "../jq.h"
-#include "../jqnode.h"
+#include <string.h>
 
 #include <atomic>
 std::atomic<int> g_nJobCount;
@@ -237,14 +237,14 @@ int main(int argc, char* argv[])
 	// static uint32_t nNumWorkers = g_nNumWorkers;
 	static JqAttributes Attr;
 	JqInitAttributes(&Attr, 1, g_NumWorkers - 1);
-	Attr.Flags		  = nJqInitFlags;
-	Attr.PipeOrder[0] = JqPipeOrder{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };
+	Attr.Flags		   = nJqInitFlags;
+	Attr.QueueOrder[0] = JqQueueOrder{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };
 	for(uint32_t i = 0; i < g_NumWorkers - 1; ++i)
 	{
 		Attr.WorkerOrderIndex[i] = 0;
 	}
 	JqStart(&Attr);
-	JqSetThreadPipeOrder(&Attr.PipeOrder[0]);
+	JqSetThreadQueueOrder(&Attr.QueueOrder[0]);
 
 #ifdef _WIN32
 	std::atomic<int> keypressed;

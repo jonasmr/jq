@@ -2,6 +2,8 @@
 #include "jq.h"
 #include <stdint.h>
 
+JQ_THREAD_LOCAL JqMutex* g_SingleMutexLockMutex = nullptr;
+
 #if JQ_LOCK_STATS
 std::atomic<uint32_t> g_JqLockOps;
 std::atomic<uint32_t> g_JqCondWait;
@@ -380,38 +382,38 @@ void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
 	} while(1);
 }
 
-void JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumPipeOrders, uint32_t nNumWorkers)
+void JqInitAttributes(JqAttributes* pAttributes, uint32_t NumQueueOrders, uint32_t NumWorkers)
 {
-	JQ_ASSERT(nNumWorkers <= JQ_MAX_THREADS);
+	JQ_ASSERT(NumWorkers <= JQ_MAX_THREADS);
 	memset(pAttributes, 0, sizeof(*pAttributes));
-	memset(&pAttributes->PipeOrder, 0xff, sizeof(pAttributes->PipeOrder));
+	memset(&pAttributes->QueueOrder, 0xff, sizeof(pAttributes->QueueOrder));
 	memset(&pAttributes->WorkerOrderIndex, 0xff, sizeof(pAttributes->WorkerOrderIndex));
 
-	pAttributes->nNumWorkers	 = nNumWorkers;
-	pAttributes->nNumPipeOrders	 = nNumPipeOrders;
-	pAttributes->nStackSizeSmall = JQ_DEFAULT_STACKSIZE_SMALL;
-	pAttributes->nStackSizeLarge = JQ_DEFAULT_STACKSIZE_LARGE;
+	pAttributes->NumWorkers		= NumWorkers;
+	pAttributes->NumQueueOrders = NumQueueOrders;
+	pAttributes->StackSizeSmall = JQ_DEFAULT_STACKSIZE_SMALL;
+	pAttributes->StackSizeLarge = JQ_DEFAULT_STACKSIZE_LARGE;
 
-	for(uint32_t i = 0; i < nNumPipeOrders; ++i)
+	for(uint32_t i = 0; i < NumQueueOrders; ++i)
 	{
-		JqPipeOrder& C = pAttributes->PipeOrder[i];
-		memset(&C.nPipes[0], 0xff, sizeof(C.nPipes));
-		for(uint32_t j = 0; j < JQ_NUM_PIPES; ++j)
+		JqQueueOrder& C = pAttributes->QueueOrder[i];
+		memset(&C.Queues[0], 0xff, sizeof(C.Queues));
+		for(uint32_t j = 0; j < JQ_NUM_QUEUES; ++j)
 		{
-			C.nPipes[j] = (uint8_t)j;
+			C.Queues[j] = (uint8_t)j;
 		}
-		C.nNumPipes = JQ_NUM_PIPES;
+		C.nNumPipes = JQ_NUM_QUEUES;
 	}
-	for(uint32_t i = 0; i < nNumWorkers; ++i)
+	for(uint32_t i = 0; i < NumWorkers; ++i)
 	{
 		pAttributes->WorkerOrderIndex[i] = 0;
 	}
 }
 
-void JqStart(int nNumWorkers)
+void JqStart(int NumWorkers)
 {
 	JqAttributes Attr;
-	JqInitAttributes(&Attr, 1, nNumWorkers);
+	JqInitAttributes(&Attr, 1, NumWorkers);
 	JqStart(&Attr);
 }
 
@@ -428,4 +430,25 @@ int64_t JqGetTick()
 uint64_t JqGetCurrentThreadId()
 {
 	return JqCurrentThreadId();
+}
+
+void JqUSleep(uint64_t usec)
+{
+	JqUSleepImpl(usec);
+}
+
+void JqSingleMutexLock::Lock()
+{
+	JQ_ASSERT(g_SingleMutexLockMutex == nullptr);
+	JQ_MICROPROFILE_VERBOSE_SCOPE("MutexLock", 0x992233);
+	Mutex.Lock();
+	bIsLocked			   = true;
+	g_SingleMutexLockMutex = &Mutex;
+}
+void JqSingleMutexLock::Unlock()
+{
+	g_SingleMutexLockMutex = nullptr;
+	JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
+	Mutex.Unlock();
+	bIsLocked = false;
 }
