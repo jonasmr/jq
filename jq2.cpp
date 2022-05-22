@@ -77,7 +77,7 @@ struct JqMutexLock;
 // void	 JqAttachChild(uint64_t nParentJob, uint64_t nChildJob);
 // uint64_t JqDetachChild(uint64_t nChildJob);
 void	 JqWorker(int nThreadId);
-void	 JqQueuePush(uint8_t nQueue, uint16_t nJobIndex);
+void	 JqQueuePush(uint8_t nQueue, uint64_t Handle);
 uint16_t JqQueuePop(uint8_t Queue, uint16_t* OutSubJob);
 void	 JqQueueRemove(uint8_t nQueue, uint16_t nJobIndex);
 bool	 JqPendingJobs(uint64_t nJob);
@@ -89,8 +89,9 @@ void JqFinishInternal(uint16_t nJobIndex);
 void JqDecPrecondtion(uint64_t Handle, int Count);
 void JqIncPrecondtion(uint64_t Handle, int Count);
 
-JqMutex& JqGetQueueMutex(uint64_t QueueIndex);
-JqMutex& JqGetJobMutex(uint64_t JobIndex);
+JqMutex&			 JqGetQueueMutex(uint64_t QueueIndex);
+JqMutex&			 JqGetJobMutex(uint64_t JobIndex);
+JqConditionVariable& JqGetJobConditionVariable(uint64_t Handle);
 
 struct JqSelfStack
 {
@@ -197,7 +198,7 @@ struct JqJob
 
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 
-#define JQ_NUM_JOB_MUTEX 32
+#define JQ_NUM_LOCKS 32
 
 struct JqQueue
 {
@@ -212,8 +213,8 @@ struct JQ_ALIGN_CACHELINE JqState_t
 {
 	JqSemaphore Semaphore[JQ_MAX_SEMAPHORES];
 
-	JqMutex				ConditionMutex;
-	JqConditionVariable WaitCond;
+	// JqMutex				ConditionMutex;
+	// JqConditionVariable WaitCond;
 
 	uint64_t SemaphoreMask[JQ_MAX_SEMAPHORES];
 	uint8_t	 QueueNumSemaphores[JQ_NUM_QUEUES];
@@ -240,8 +241,12 @@ struct JQ_ALIGN_CACHELINE JqState_t
 
 	JqQueueOrder ThreadConfig[JQ_MAX_THREADS];
 	JqJob		 Jobs[JQ_JOB_BUFFER_SIZE];
-	JqQueue		 Queues[JQ_NUM_QUEUES];
-	JqMutex		 MutexJob[JQ_NUM_JOB_MUTEX];
+
+	JqQueue Queues[JQ_NUM_QUEUES];
+
+	JqMutex MutexJob[JQ_NUM_LOCKS];
+
+	JqConditionVariable ConditionVariableJob[JQ_NUM_LOCKS];
 
 	JqMutex WaitMutex;
 
@@ -544,6 +549,7 @@ uint16_t JqIncrementStarted(uint64_t nJob)
 void JqFinishInternal(uint16_t nJobIndex)
 {
 	JQ_MICROPROFILE_VERBOSE_SCOPE("Increment Finished", 0xffff);
+	nJobIndex		   = nJobIndex % JQ_JOB_BUFFER_SIZE;
 	JqJob& Job		   = JqState.Jobs[nJobIndex];
 	int	   FinishIndex = --Job.PendingFinish;
 	JQ_ASSERT(FinishIndex >= 0);
@@ -569,7 +575,7 @@ void JqFinishInternal(uint16_t nJobIndex)
 			if(Waiters != 0)
 			{
 				JqState.Stats.nNumSema++;
-				JqState.WaitCond.NotifyAll();
+				JqGetJobConditionVariable(nJobIndex).NotifyAll();
 				Job.Waiters	   = 0;
 				Job.WaitersWas = Waiters;
 			}
@@ -1003,6 +1009,7 @@ void JqWorker(int nThreadId)
 	MicroProfileOnThreadExit();
 #endif
 }
+
 uint64_t JqNextHandle(uint64_t nJob)
 {
 	nJob++;
@@ -1012,6 +1019,7 @@ uint64_t JqNextHandle(uint64_t nJob)
 	}
 	return nJob;
 }
+
 // Claim a handle. reset header, and initialize its pending count to 1
 uint64_t JqClaimHandle()
 {
@@ -1059,11 +1067,10 @@ uint64_t JqClaimHandle()
 	{
 		h = JqState.NextHandle.fetch_add(1);
 
-		if(h == 0) // slot 0 is reserved
-			continue;
-
 		uint16_t index = h % JQ_JOB_BUFFER_SIZE;
-		pJob		   = &JqState.Jobs[index];
+		if(index == 0) // slot 0 is reserved
+			continue;
+		pJob = &JqState.Jobs[index];
 
 		uint64_t finished = pJob->FinishedHandle.load();
 		uint64_t claimed  = pJob->ClaimedHandle.load();
@@ -1170,16 +1177,22 @@ JqMutex& JqGetQueueMutex(uint64_t Queue)
 
 JqMutex& JqGetJobMutex(uint64_t Handle)
 {
-	return JqState.MutexJob[Handle % JQ_NUM_JOB_MUTEX];
+	return JqState.MutexJob[Handle % JQ_NUM_LOCKS];
 }
 
-void JqQueuePush(uint8_t QueueIndex, uint16_t JobIndex)
+JqConditionVariable& JqGetJobConditionVariable(uint64_t Handle)
 {
-	JQ_ASSERT(JobIndex < JQ_JOB_BUFFER_SIZE);
+	return JqState.ConditionVariableJob[Handle % JQ_NUM_LOCKS];
+}
+
+void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
+{
+	uint16_t JobIndex = Handle % JQ_JOB_BUFFER_SIZE;
+	// JQ_ASSERT(JobIndex < JQ_JOB_BUFFER_SIZE);
 	JQ_ASSERT(QueueIndex < JQ_NUM_QUEUES);
 	JqJob&	 Job   = JqState.Jobs[JobIndex];
 	JqQueue& Queue = JqState.Queues[QueueIndex];
-	printf("JqQueuePush %d -> %d .. NumJobs %d\n", JobIndex, QueueIndex, Job.NumJobs);
+	// printf("JqQueuePush %d -> %d .. NumJobs %d\n", JobIndex, QueueIndex, Job.NumJobs);
 	JQ_ASSERT(Job.PreconditionCount == 0);
 	JQ_ASSERT(Job.Queue == QueueIndex);
 	uint64_t Started  = Job.StartedHandle;
@@ -1201,6 +1214,7 @@ void JqQueuePush(uint8_t QueueIndex, uint16_t JobIndex)
 	Job.LinkPrev = Queue.LinkTail;
 	if(Queue.LinkTail)
 	{
+		JQ_ASSERT(JobIndex);
 		JqState.Jobs[Queue.LinkTail].LinkNext = JobIndex;
 		Queue.LinkTail						  = JobIndex;
 	}
@@ -1209,7 +1223,7 @@ void JqQueuePush(uint8_t QueueIndex, uint16_t JobIndex)
 		JQ_ASSERT(Queue.LinkHead == 0);
 		Queue.LinkHead = Queue.LinkTail = JobIndex;
 	}
-
+#if 0
 	printf("dump Queue %d\n", QueueIndex);
 	uint16_t i = Queue.LinkHead;
 	while(i != 0)
@@ -1222,6 +1236,7 @@ void JqQueuePush(uint8_t QueueIndex, uint16_t JobIndex)
 		i = JqState.Jobs[i].LinkNext;
 	}
 	printf("done\n");
+#endif
 }
 
 uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
@@ -1235,7 +1250,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 		JQ_ASSERT(JobIndex < JQ_JOB_BUFFER_SIZE);
 		JqJob& Job		= JqState.Jobs[JobIndex];
 		int	   SubIndex = --Job.PendingStart;
-		printf("JqQueuePop job %d -> %d sub %d\n", JobIndex, QueueIndex, SubIndex);
+		// printf("JqQueuePop job %d -> %d sub %d\n", JobIndex, QueueIndex, SubIndex);
 		JQ_ASSERT(SubIndex >= 0); // should never go negative.
 		if(SubIndex == 0)
 		{
@@ -1245,6 +1260,10 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 				JQ_ASSERT(Queue.LinkHead == 0);
 				Queue.LinkTail = 0;
 			}
+			if(Queue.LinkHead == 0)
+				JQ_ASSERT(Queue.LinkTail == 0);
+			if(Queue.LinkTail == 0)
+				JQ_ASSERT(Queue.LinkHead == 0);
 		}
 
 		*OutSubJob = Job.NumJobs - 1 - SubIndex; // do it in order.
@@ -1348,7 +1367,7 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t Queu
 		Job.PendingFinish = 0;
 
 		// Job.PreconditionCount++;
-		Job.Range	 = 0;
+		Job.Range	 = Range;
 		Job.JobFlags = JobFlags;
 
 		JqAttachChild(Parent, Handle);
@@ -1565,15 +1584,15 @@ void JqWait(uint64_t Job, uint32_t WaitFlag, uint32_t UsWaitTime)
 			}
 			else
 			{
-				JqSingleMutexLock lock(JqState.WaitMutex);
+				uint16_t		  nJobIndex = Job % JQ_JOB_BUFFER_SIZE;
+				JqSingleMutexLock lock(JqGetJobMutex(nJobIndex));
 				if(JqIsDoneExt(Job, WaitFlag))
 				{
 					return;
 				}
-				uint16_t nJobIndex = Job % JQ_JOB_BUFFER_SIZE;
 				JqState.Jobs[nJobIndex].Waiters++;
 				JqState.Stats.nNumWaitCond++;
-				JqState.WaitCond.Wait(JqState.WaitMutex);
+				JqGetJobConditionVariable(nJobIndex).Wait(JqState.WaitMutex);
 				JqState.Jobs[nJobIndex].Waiters--;
 			}
 		}

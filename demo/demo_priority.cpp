@@ -243,8 +243,10 @@ void JqTestPrio()
 		[pFoo, pBar, &ReservedHandle](int JobIndex) {
 			MICROPROFILE_SCOPEI("JQ_TEST", "Lots of increments", 0x77ff00);
 			pFoo->fetch_add(1);
+			// printf("JOB INDEX IS %d", JobIndex);
 			if(JobIndex == 999)
 			{
+				// printf("HERE HERE JOB INDEX IS %d\n", JobIndex);
 				JqAddReserved(
 					ReservedHandle, [pBar] { pBar->fetch_add(1); }, 2);
 			}
@@ -474,7 +476,7 @@ void JqTest()
 
 #define JQ_NODE_TEST 0
 
-#define JQ_TEST_WORKERS 24
+#define JQ_TEST_WORKERS 64
 
 int main(int argc, char* argv[])
 {
