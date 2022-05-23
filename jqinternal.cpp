@@ -2,7 +2,20 @@
 #include "jq.h"
 #include <stdint.h>
 
-JQ_THREAD_LOCAL JqMutex* g_SingleMutexLockMutex = nullptr;
+static JQ_THREAD_LOCAL JqMutex* g_SingleMutexLockMutex = nullptr;
+
+struct JqLocalJobStack
+{
+	JqJobStackList* FreeList;
+	JqJobStack*		Stack;
+};
+
+struct JqLocalJobStacks
+{
+	JqLocalJobStack Stack[2];
+};
+
+static JQ_THREAD_LOCAL JqLocalJobStacks g_ThreadLocalStacks;
 
 #if JQ_LOCK_STATS
 std::atomic<uint32_t> g_JqLockOps;
@@ -314,8 +327,26 @@ void JqFreeStackInternal(void* p, uint32_t nStackSize)
 #endif
 #endif
 
-JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)
+JqJobStack* JqAllocStack2(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)
 {
+
+	// JqJobStack*&
+	// static JQ_THREAD_LOCAL JqJobStack* g_ThreadLocalSmallStack = nullptr;
+	// static JQ_THREAD_LOCAL JqJobStack* g_ThreadLocalLargeStack = nullptr;
+
+	// struct JqLocalJobStack
+	// {
+	// 	uint32_t StackSize;
+	// 	JqJobStack* Stacks;
+	// };
+
+	// struct JqLocalJobStacks
+	// {
+	// 	JqLocalJobStack Stacks[2];
+	// };
+
+	// static JQ_THREAD_LOCAL JqLocalJobStacs g_ThreadLocalStacks = nullptr;
+
 	do
 	{
 		JqJobStackLink Value = FreeList.load();
@@ -365,8 +396,9 @@ void JqFreeAllStacks(JqJobStackList& FreeList)
 	} while(1);
 }
 
-void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
+void JqFreeStack2(JqJobStackList& FreeList, JqJobStack* pStack)
 {
+	MICROPROFILE_SCOPEI("JQ", "JqFreeStack", MP_AUTO);
 	JQ_ASSERT(pStack->pLink == nullptr);
 	do
 	{
@@ -380,6 +412,43 @@ void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
 		}
 
 	} while(1);
+}
+
+JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)
+{
+	MICROPROFILE_SCOPEI("JQ", "JqAllocStack", MP_AUTO);
+
+	JqLocalJobStack& LocalStack = g_ThreadLocalStacks.Stack[0].FreeList == &FreeList ? g_ThreadLocalStacks.Stack[0] : g_ThreadLocalStacks.Stack[1];
+	if(LocalStack.FreeList == &FreeList)
+	{
+		JQ_ASSERT(LocalStack.Stack != nullptr);
+		// reuse stack
+		JqJobStack* JobStack = LocalStack.Stack;
+		LocalStack.FreeList	 = 0;
+		LocalStack.Stack	 = nullptr;
+
+		return JobStack;
+	}
+	return JqAllocStack2(FreeList, nStackSize, nFlags);
+}
+
+void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
+{
+	MICROPROFILE_SCOPEI("JQ", "JqFreeStack", MP_AUTO);
+	JqLocalJobStack& LocalStack = g_ThreadLocalStacks.Stack[0].FreeList == &FreeList ? g_ThreadLocalStacks.Stack[0] : g_ThreadLocalStacks.Stack[1];
+	if(LocalStack.FreeList == &FreeList)
+	{
+		JqFreeStack2(FreeList, pStack);
+	}
+	else
+	{
+		if(LocalStack.FreeList)
+		{
+			JqFreeStack2(*LocalStack.FreeList, LocalStack.Stack);
+		}
+		LocalStack.FreeList = &FreeList;
+		LocalStack.Stack	= pStack;
+	}
 }
 
 void JqInitAttributes(JqAttributes* pAttributes, uint32_t NumQueueOrders, uint32_t NumWorkers)
@@ -451,4 +520,67 @@ void JqSingleMutexLock::Unlock()
 	JQ_MICROPROFILE_VERBOSE_SCOPE("MutexUnlock", 0x992233);
 	Mutex.Unlock();
 	bIsLocked = false;
+}
+static bool		g_LogResetStats = false;
+static uint64_t g_LogTickLast	= 0;
+static JqStats	g_LogStats;
+void			JqLogResetStats()
+{
+	g_LogResetStats = true;
+}
+
+// helper to log stats every
+void JqLogStats()
+{
+	static int	 Frames = 0;
+	static float fLimit = 5;
+	static bool	 bFirst = true;
+
+	JqStats& Stats = g_LogStats;
+
+	if(bFirst || g_LogResetStats)
+	{
+		g_LogResetStats = false;
+		bFirst			= false;
+		memset(&Stats, 0, sizeof(Stats));
+		g_LogTickLast = JqTick();
+		printf("\n");
+	}
+
+	if(Frames++ > fLimit)
+	{
+		JqStats Stats0;
+		JqConsumeStats(&Stats0);
+		g_LogStats.Add(Stats0);
+		static bool		bFirst			   = true;
+		static uint64_t H				   = g_LogStats.nNextHandle;
+		uint64_t		nHandleConsumption = g_LogStats.nNextHandle - H;
+		H								   = g_LogStats.nNextHandle;
+
+		bool bUseWrapping = true;
+		if(bFirst)
+		{
+			bFirst		 = false;
+			bUseWrapping = false;
+			printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %14s/%14s|%8s|%13s|%7s|%7s\n", "JobAdd", "JobFin", "JobCancel", "SubAdd", "SubFin", "Locks", "Waits", "Kicks",
+				   "JobAdd", "JobFin", "SubAdd", "SubFin", "Handles", "WrapTime", "Time", "Workers");
+		}
+
+		uint64_t nDelta			 = JqTick() - g_LogTickLast;
+		uint64_t nTicksPerSecond = JqTicksPerSecond();
+		float	 fTime			 = 1000.f * nDelta / nTicksPerSecond;
+		double	 HandlesPerMs	 = nHandleConsumption / fTime;
+		double	 HandlesPerYear	 = (0x8000000000000000 / (365llu * 24 * 60 * 60 * 60 * 1000)) / HandlesPerMs;
+
+		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption ? nHandleConsumption : 1) * (1.0 / (365 * 60.0 * 60.0 * 60.0 * 24.0));
+		(void)WrapTime;
+		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %14d/%14d|%8lld|%12.2fy|%6.2fs|%2d     ", bUseWrapping ? '\r' : ' ', Stats.nNumAdded / (float)fTime,
+			   Stats.nNumFinished / (float)fTime, Stats.nNumCancelled / (float)fTime, Stats.nNumAddedSub / (float)fTime, Stats.nNumFinishedSub / (float)fTime, Stats.nNumLocks / (float)fTime,
+			   Stats.nNumWaitCond / (float)fTime, Stats.nNumWaitKicks / (float)fTime, Stats.nNumAdded, Stats.nNumFinished, Stats.nNumAddedSub, Stats.nNumFinishedSub, nHandleConsumption,
+			   HandlesPerYear, fTime / 1000.f, JqGetNumWorkers());
+		fflush(stdout);
+
+		Frames		  = 0;
+		g_LogTickLast = JqTick();
+	}
 }

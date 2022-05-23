@@ -23,6 +23,14 @@
 //
 
 //
+//  TODO:
+// 		colors
+//		fix manymutex lock (lockless take-job)
+//		multidep
+//		child-wait
+//
+//
+//
 //
 //
 // Flow
@@ -552,6 +560,7 @@ void JqFinishInternal(uint16_t nJobIndex)
 	nJobIndex		   = nJobIndex % JQ_JOB_BUFFER_SIZE;
 	JqJob& Job		   = JqState.Jobs[nJobIndex];
 	int	   FinishIndex = --Job.PendingFinish;
+	JqState.Stats.nNumFinishedSub++;
 	JQ_ASSERT(FinishIndex >= 0);
 	if(0 == FinishIndex)
 	{
@@ -574,7 +583,7 @@ void JqFinishInternal(uint16_t nJobIndex)
 			int8_t Waiters = Job.Waiters;
 			if(Waiters != 0)
 			{
-				JqState.Stats.nNumSema++;
+				JqState.Stats.nNumWaitKicks++;
 				JqGetJobConditionVariable(nJobIndex).NotifyAll();
 				Job.Waiters	   = 0;
 				Job.WaitersWas = Waiters;
@@ -724,6 +733,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 
 uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumQueues, uint8_t* pQueues)
 {
+	JQ_MICROPROFILE_SCOPE("JQ_TAKE_JOB", MP_AUTO); // if this starts happening the job queue size should be increased..
 	const uint32_t nCount = nNumQueues ? nNumQueues : JQ_NUM_QUEUES;
 	for(uint32_t i = 0; i < nCount; i++)
 	{

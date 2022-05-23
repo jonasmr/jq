@@ -246,6 +246,7 @@ struct JqStats
 	uint32_t nNumSema;
 	uint32_t nNumLocklessPops;
 	uint32_t nNumWaitCond;
+	uint32_t nNumWaitKicks;
 	uint32_t nMemoryUsed;
 	uint64_t nNextHandle;
 	uint32_t nSkips;
@@ -330,5 +331,7 @@ JQ_API void		JqInitAttributes(JqAttributes* pAttributes, uint32_t nNumPipeOrders
 JQ_API int64_t	JqGetTicksPerSecond();
 JQ_API int64_t	JqGetTick();
 
+// Helper / debug functions
 JQ_API uint64_t JqGetCurrentThreadId(); // for debugging.
 JQ_API void		JqUSleep(uint64_t us);
+JQ_API void		JqLogStats();

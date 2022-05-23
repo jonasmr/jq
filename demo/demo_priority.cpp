@@ -194,19 +194,20 @@ extern uint32_t g_TESTID;
 
 void JqTestPrio()
 {
+	MICROPROFILE_SCOPEI("JQ_TEST", "JqTestPrio", MP_AUTO);
 	g_DontSleep = 0;
 	uint64_t J1 = JqAdd(
 		[] {
-			MICROPROFILE_SCOPEI("JQ_TEST", "P7", 0xffffff);
+			MICROPROFILE_SCOPEI("JQ_TEST", "BASE-7-JOBS", MP_GREY);
 			JobSpinWork(5000);
 		},
 		7, 3);
 	uint64_t J2 = JqAdd(
 		[] {
-			MICROPROFILE_SCOPEI("JQ_TEST", "P0", 0xff0000);
+			MICROPROFILE_SCOPEI("JQ_TEST", "BASE-1", MP_GREY);
 			JqAdd(
 				[] {
-					MICROPROFILE_SCOPEI("JQ_TEST", "P1", 0x0000ff);
+					MICROPROFILE_SCOPEI("JQ_TEST", "BASE-1-CHILD", MP_DARKSLATEGREY);
 					JqAdd([] { MICROPROFILE_SCOPEI("JQ_TEST", "P5", 0xffff00); }, 5, 500);
 					JobSpinWork(20);
 				},
@@ -220,16 +221,29 @@ void JqTestPrio()
 	std::atomic<int>  Foo;
 	std::atomic<int>  Bar;
 	std::atomic<int>  SuccessorDone;
-	std::atomic<int>* pFoo			 = &Foo;
-	std::atomic<int>* pBar			 = &Bar;
-	std::atomic<int>* pSuccessorDone = &SuccessorDone;
-	uint64_t		  ReservedHandle = JqReserve(0);
-	Foo								 = 0;
-	Bar								 = 0;
-	SuccessorDone					 = 0;
+	std::atomic<int>  ReservedSuccessorDone;
+	std::atomic<int>* pFoo					 = &Foo;
+	std::atomic<int>* pBar					 = &Bar;
+	std::atomic<int>* pSuccessorDone		 = &SuccessorDone;
+	std::atomic<int>* pReservedSuccessorDone = &ReservedSuccessorDone;
+
+	uint64_t ReservedHandle = JqReserve(0);
+	Foo						= 0;
+	Bar						= 0;
+	SuccessorDone			= 0;
+	struct
+	{
+		uint64_t ReservedHandle;
+		uint32_t Frame;
+	} H;
+	static uint32_t Frame = 0;
+	Frame++;
+	H.ReservedHandle = ReservedHandle;
+	H.Frame			 = Frame;
 
 	uint64_t ReservedWait = JqAdd(
 		[pBar, ReservedHandle] {
+			MICROPROFILE_SCOPEI("JQ_TEST", "Reserved_WAIT", MP_PINK);
 			JqWait(ReservedHandle);
 			if(2 != *pBar)
 			{
@@ -240,15 +254,23 @@ void JqTestPrio()
 		1, 1);
 
 	uint64_t J3 = JqAdd(
-		[pFoo, pBar, &ReservedHandle](int JobIndex) {
-			MICROPROFILE_SCOPEI("JQ_TEST", "Lots of increments", 0x77ff00);
+		[pFoo, pBar, &H](int JobIndex) {
+			MICROPROFILE_SCOPEI("JQ_TEST", "Lots of increments", (H.Frame & 1) == 1 ? MP_YELLOW : MP_CYAN);
+			JobSpinWork(50);
 			pFoo->fetch_add(1);
 			// printf("JOB INDEX IS %d", JobIndex);
 			if(JobIndex == 999)
 			{
 				// printf("HERE HERE JOB INDEX IS %d\n", JobIndex);
 				JqAddReserved(
-					ReservedHandle, [pBar] { pBar->fetch_add(1); }, 2);
+					H.ReservedHandle,
+					[pBar] {
+						MICROPROFILE_SCOPEI("JQ_TEST", "RESERVED", MP_PINK);
+						JobSpinWork(5000);
+
+						pBar->fetch_add(1);
+					},
+					2);
 			}
 		},
 		0, 1000);
@@ -256,13 +278,27 @@ void JqTestPrio()
 	uint64_t Successor = JqAddSuccessor(
 		J3,
 		[pFoo, pSuccessorDone]() {
+			MICROPROFILE_SCOPEI("JQ_TEST", "THE_SUCCESSOR", MP_RED);
 			if(1000 != *pFoo)
 			{
 				JQ_BREAK();
 			}
+			JobSpinWork(5000);
 
 			*pSuccessorDone = 1;
-			MICROPROFILE_SCOPEI("JQ_TEST", "THE_SUCCESSOR", 0xff0000);
+		},
+		0);
+
+	uint64_t ReservedSuccessor = JqAddSuccessor(
+		ReservedHandle,
+		[pReservedSuccessorDone, pBar]() {
+			MICROPROFILE_SCOPEI("JQ_TEST", "THE_RESERVEDSUCCESSOR", MP_RED);
+			if(2 != *pBar)
+			{
+				JQ_BREAK();
+			}
+
+			*pReservedSuccessorDone = 1;
 			JobSpinWork(5000);
 		},
 		0);
@@ -273,6 +309,12 @@ void JqTestPrio()
 	JqWait(ReservedWait);
 	JqWait(ReservedHandle);
 	JqWait(Successor);
+	JqWait(ReservedSuccessor);
+
+	if(0 == *pReservedSuccessorDone)
+	{
+		JQ_BREAK();
+	}
 	if(0 == *pSuccessorDone)
 	{
 		JQ_BREAK();
@@ -581,6 +623,7 @@ int main(int argc, char* argv[])
 		{
 			JqTestPrio();
 		}
+		JqLogStats();
 	}
 #ifdef _WIN32
 	foo.join();
