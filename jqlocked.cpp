@@ -832,17 +832,20 @@ void JqWorker(int nThreadId)
 		{
 			uint16_t nSubIndex = 0;
 			{
-				JqMutexLock lock(JqState.Mutex);
-				if(nWork)
+				JQ_MICROPROFILE_SCOPE("Pop Job", MP_AUTO);
 				{
-					JqIncrementFinished(JqState.Jobs[nWork].nStartedHandle);
+					JqMutexLock lock(JqState.Mutex);
+					if(nWork)
+					{
+						JqIncrementFinished(JqState.Jobs[nWork].nStartedHandle);
+					}
+					nSubIndex = 0;
+					nWork	  = JqTakeJob(&nSubIndex, nNumPipes, pPipes);
 				}
-				nSubIndex = 0;
-				nWork	  = JqTakeJob(&nSubIndex, nNumPipes, pPipes);
-			}
-			if(!nWork)
-			{
-				break;
+				if(!nWork)
+				{
+					break;
+				}
 			}
 			JqExecuteJob(JqState.Jobs[nWork].nStartedHandle, nSubIndex);
 		} while(1);

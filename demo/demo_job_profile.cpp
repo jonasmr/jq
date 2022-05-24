@@ -68,8 +68,6 @@ MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 
 #define JQ_STRESS_TEST 1
 #define JQ_CANCEL_TEST 0
-int64_t JqTick();
-int64_t JqTicksPerSecond();
 
 uint32_t g_Reset = 0;
 
@@ -95,15 +93,15 @@ std::atomic<int> g_nExternalStats;
 uint32_t JobSpinWork(uint32_t nUs)
 {
 	uint32_t result			 = 0;
-	uint64_t nTick			 = JqTick();
-	uint64_t nTicksPerSecond = JqTicksPerSecond();
+	uint64_t nTick			 = JqGetTick();
+	uint64_t nTicksPerSecond = JqGetTicksPerSecond();
 	do
 	{
 		for(uint32_t i = 0; i < 1000; ++i)
 		{
 			result |= i << (i & 7); // do something.. whatever
 		}
-	} while((1000000ull * (JqTick() - nTick)) / nTicksPerSecond < nUs);
+	} while((1000000ull * (JqGetTick() - nTick)) / nTicksPerSecond < nUs);
 	return result;
 }
 

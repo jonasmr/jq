@@ -68,8 +68,8 @@ MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 
 #define JQ_STRESS_TEST 1
 #define JQ_CANCEL_TEST 0
-int64_t JqTick();
-int64_t JqTicksPerSecond();
+// int64_t JqTick();
+// int64_t JqTicksPerSecond();
 
 uint32_t g_Reset = 0;
 
@@ -99,15 +99,15 @@ uint32_t JobSpinWork(uint32_t nUs)
 		return 0;
 	}
 	uint32_t result			 = 0;
-	uint64_t nTick			 = JqTick();
-	uint64_t nTicksPerSecond = JqTicksPerSecond();
+	uint64_t nTick			 = JqGetTick();
+	uint64_t nTicksPerSecond = JqGetTicksPerSecond();
 	do
 	{
 		for(uint32_t i = 0; i < 1000; ++i)
 		{
 			result |= i << (i & 7); // do something.. whatever
 		}
-	} while((1000000ull * (JqTick() - nTick)) / nTicksPerSecond < nUs);
+	} while((1000000ull * (JqGetTick() - nTick)) / nTicksPerSecond < nUs);
 	return result;
 }
 
@@ -411,14 +411,14 @@ void JqTest()
 	static JqStats	Stats;
 	static bool		bFirst		 = true;
 	bool			bIncremental = true;
-	static uint64_t TickLast	 = JqTick();
+	static uint64_t TickLast	 = JqGetTick();
 
 	if(bFirst || !bIncremental || g_Reset)
 	{
 		g_Reset = false;
 		bFirst	= false;
 		memset(&Stats, 0, sizeof(Stats));
-		TickLast = JqTick();
+		TickLast = JqGetTick();
 		printf("\n");
 	}
 
@@ -442,8 +442,8 @@ void JqTest()
 				   "JobAdd", "JobFin", "SubAdd", "SubFin", "Handles", "WrapTime", "Time", "Workers");
 		}
 
-		uint64_t nDelta			 = JqTick() - TickLast;
-		uint64_t nTicksPerSecond = JqTicksPerSecond();
+		uint64_t nDelta			 = JqGetTick() - TickLast;
+		uint64_t nTicksPerSecond = JqGetTicksPerSecond();
 		float	 fTime			 = 1000.f * nDelta / nTicksPerSecond;
 		double	 HandlesPerMs	 = nHandleConsumption / fTime;
 		double	 HandlesPerYear	 = (0x8000000000000000 / (365llu * 24 * 60 * 60 * 60 * 1000)) / HandlesPerMs;
@@ -461,7 +461,7 @@ void JqTest()
 		frames = 0;
 		if(!bIncremental)
 		{
-			TickLast = JqTick();
+			TickLast = JqGetTick();
 		}
 
 		if(fTime / 1000.f > 60.f)
@@ -492,9 +492,9 @@ void JqTest()
 		MICROPROFILE_SCOPEI("JQDEMO", "Sleep add1", 0x33ff33);
 		JobSpinWork(500);
 	}
-	uint64_t nStart = JqTick();
+	uint64_t nStart = JqGetTick();
 #if 1
-	while((JqTick() - nStart) * 1000.f / JqTicksPerSecond() < 14)
+	while((JqGetTick() - nStart) * 1000.f / JqGetTicksPerSecond() < 14)
 	{
 		g_nJobCount	 = 0;
 		g_nJobCount0 = 0;
@@ -561,7 +561,7 @@ int main(int argc, char* argv[])
 
 	for(uint32_t i = 0; i < JQ_TEST_WORKERS; ++i)
 	{
-		Attr.WorkerOrderIndex[i] = i;
+		Attr.WorkerOrderIndex[i] = i < 5 ? i : 0;
 	}
 
 	JqStart(&Attr);
