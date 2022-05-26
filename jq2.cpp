@@ -24,11 +24,12 @@
 
 //
 //  TODO:
-// 		colors
-//		fix manymutex lock (lockless take-job)
+// 		* colors
+//		* fix manymutex lock (lockless take-job)
 //		multidep
 //		child-wait
-//
+//		pop any job
+//		cancel job
 //
 //
 //
@@ -91,14 +92,20 @@ void				 JqQueueRemove(uint8_t nQueue, uint16_t nJobIndex);
 bool				 JqPendingJobs(uint64_t nJob);
 void				 JqSelfPush(uint64_t nJob, uint32_t nJobIndex);
 void				 JqSelfPop(uint64_t nJob);
+void				 JqFinishSubJob(uint16_t nJobIndex);
 void				 JqFinishInternal(uint16_t nJobIndex);
 void				 JqDecPrecondtion(uint64_t Handle, int Count);
 void				 JqIncPrecondtion(uint64_t Handle, int Count);
-void				 JqUnpackLink(uint64_t Value, uint16_t& Head, uint16_t& Tail, uint16_t& JobCount);
-uint64_t			 JqPackLink(uint16_t Head, uint16_t Tail, uint16_t JobCount);
+void				 JqUnpackQueueLink(uint64_t Value, uint16_t& Head, uint16_t& Tail, uint16_t& JobCount);
+uint64_t			 JqPackQueueLink(uint16_t Head, uint16_t Tail, uint16_t JobCount);
 JqMutex&			 JqGetQueueMutex(uint64_t QueueIndex);
 JqMutex&			 JqGetJobMutex(uint64_t JobIndex);
 JqConditionVariable& JqGetJobConditionVariable(uint64_t Handle);
+uint16_t			 JqDependentJobLinkAlloc();
+void				 JqDependentJobLinkFreeList(uint16_t Index);
+
+// JqDependentJobLink&	 JqAllocDependentJobLink();
+// void				 JqFreeDependentJobLink(JqDependentJobLink& Link);
 
 struct JqSelfStack
 {
@@ -110,23 +117,12 @@ JQ_THREAD_LOCAL JqSelfStack JqSelfStack[JQ_MAX_JOB_STACK] = { { 0 } };
 JQ_THREAD_LOCAL uint32_t	JqSelfPos					  = 0;
 JQ_THREAD_LOCAL uint32_t	JqHasLock					  = 0;
 
-// union JqJobLinkHelper
-// {
-// 	struct
-// 	{
-// 		uint16_t nNext;		 // next / head index
-// 		uint16_t nPrev;		 // prev / tail index
-// 		uint16_t nRemaining; // no of jobs started
-// 		uint16_t nVersion;	 // rolling counter to prevent accidental atomics.
-// 	};
-// 	uint64_t nValue;
-// };
-// typedef std::atomic<uint64_t> JqJobLink;
-
-// struct JQ_ALIGN_CACHELINE JqPipeList
-// {
-// 	JqJobLink Link;
-// };
+// linked list structure, for when jobs have multiple jobs that depend on them
+struct JqDependentJobLink
+{
+	uint64_t Job;
+	uint16_t Next;
+};
 
 struct JqJob
 {
@@ -140,9 +136,7 @@ struct JqJob
 	std::atomic<uint64_t> PendingStart;		 /// No. of Jobs that needs to be Started
 	std::atomic<uint64_t> PreconditionCount; /// No. of Preconditions that need to finish, before this can be enqueued.
 	uint64_t			  Parent;			 /// Handle of parent
-	uint64_t			  DependentJob;		 /// Job that is dependent on this job finishing.
-
-	//	bool				  Locked;			 /// Set when reserving a barrier
+	JqDependentJobLink	  DependentJob;		 /// Job that is dependent on this job finishing.
 
 	uint16_t NumJobs;	 /// Num Jobs to launch
 	uint64_t Range;		 /// Range to pass to jobs
@@ -153,6 +147,8 @@ struct JqJob
 
 	uint16_t LinkNext;
 	uint16_t LinkPrev;
+
+	bool Reserved;
 	// uint64_t StartedHandle;
 	// uint64_t FinishedHandle;
 
@@ -261,14 +257,15 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	std::atomic<uint32_t> FreeJobs;
 	std::atomic<uint64_t> NextHandle;
 
-	JqQueueOrder ThreadConfig[JQ_MAX_THREADS];
-	JqJob		 Jobs[JQ_JOB_BUFFER_SIZE];
-
-	JqQueue Queues[JQ_NUM_QUEUES];
-
-	JqMutex MutexJob[JQ_NUM_LOCKS];
-
+	JqQueueOrder		ThreadConfig[JQ_MAX_THREADS];
+	JqJob				Jobs[JQ_JOB_BUFFER_SIZE];
+	JqQueue				Queues[JQ_NUM_QUEUES];
+	JqMutex				MutexJob[JQ_NUM_LOCKS];
 	JqConditionVariable ConditionVariableJob[JQ_NUM_LOCKS];
+
+	JqMutex			   DependentJobLinkMutex;
+	JqDependentJobLink DependentJobLinks[JQ_JOB_BUFFER_SIZE];
+	uint16_t		   DependentJobLinkHead;
 
 	JqMutex WaitMutex;
 
@@ -441,6 +438,21 @@ void JqStart(JqAttributes* pAttr)
 	JqState.Stats.nNumLocklessPops = 0;
 	JqState.Stats.nNumWaitCond	   = 0;
 
+	for(uint16_t i = 0; i < JQ_JOB_BUFFER_SIZE; ++i)
+	{
+		// terminate at end, and tag zero as unusable
+		if(i == 0 || i == (JQ_JOB_BUFFER_SIZE - 1))
+		{
+			JqState.DependentJobLinks[i].Next = 0;
+		}
+		else
+		{
+			JqState.DependentJobLinks[i].Next = i + 1;
+		}
+		JqState.DependentJobLinks[i].Job = 0;
+	}
+	JqState.DependentJobLinkHead = 1;
+
 	for(int i = 0; i < JqState.NumWorkers; ++i)
 	{
 		JQ_THREAD_CREATE(&JqState.WorkerThreads[i]);
@@ -569,9 +581,74 @@ uint16_t JqIncrementStarted(uint64_t nJob)
 	// }
 	// return nSubIndex;
 }
+
 void JqFinishInternal(uint16_t nJobIndex)
 {
-	JQ_MICROPROFILE_VERBOSE_SCOPE("Increment Finished", 0xffff);
+	JQ_MICROPROFILE_VERBOSE_SCOPE("JqFinishSubJob", 0xffff);
+
+	nJobIndex  = nJobIndex % JQ_JOB_BUFFER_SIZE;
+	JqJob& Job = JqState.Jobs[nJobIndex];
+	JQ_ASSERT(Job.PendingStart.load() == 0);
+	JQ_ASSERT(Job.PendingFinish.load() == 0);
+	// no need to lock queue, since we are removed a long time ago
+
+	uint16_t Parent = 0;
+	// uint64_t DependentJob = 0;
+	JqDependentJobLink Dependent;
+	{
+		JqSingleMutexLock L(JqGetJobMutex(nJobIndex));
+		Parent = Job.Parent;
+		JQ_CLEAR_FUNCTION(Job.Function);
+
+		Dependent			  = Job.DependentJob;
+		Job.DependentJob.Job  = 0;
+		Job.DependentJob.Next = 0;
+		// if(Job.DependentJob)
+		// {
+		// 	DependentJob	 = Job.DependentJob;
+		// 	Job.DependentJob = 0;
+		// }
+
+		JqState.Stats.nNumFinished++;
+		// kick waiting threads.
+		int8_t Waiters = Job.Waiters;
+		if(Waiters != 0)
+		{
+			JqState.Stats.nNumWaitKicks++;
+			JqGetJobConditionVariable(nJobIndex).NotifyAll();
+			Job.Waiters	   = 0;
+			Job.WaitersWas = Waiters;
+		}
+		else
+		{
+			Job.WaitersWas = 0xff;
+		}
+		JqState.FreeJobs++;
+		Job.FinishedHandle = Job.StartedHandle.load();
+	}
+	if(Dependent.Job)
+	{
+		JqDecPrecondtion(Dependent.Job, 1);
+		uint16_t Next = Dependent.Next;
+		while(Next)
+		{
+			uint64_t Job = JqState.DependentJobLinks[Next].Job;
+			Next		 = JqState.DependentJobLinks[Next].Next;
+			JqDecPrecondtion(Job, 1);
+		}
+	}
+	if(Parent)
+		JqFinishSubJob(Parent);
+	if(Dependent.Next)
+	{
+		// Note: first element is embedded so it doesn't need freeing.
+		JqDependentJobLinkFreeList(Dependent.Next);
+	}
+}
+
+void JqFinishSubJob(uint16_t nJobIndex)
+{
+	JQ_MICROPROFILE_VERBOSE_SCOPE("JqFinishSubJob", 0xffff);
 	nJobIndex		   = nJobIndex % JQ_JOB_BUFFER_SIZE;
 	JqJob& Job		   = JqState.Jobs[nJobIndex];
 	int	   FinishIndex = --Job.PendingFinish;
@@ -579,41 +656,7 @@ void JqFinishInternal(uint16_t nJobIndex)
 	JQ_ASSERT(FinishIndex >= 0);
 	if(0 == FinishIndex)
 	{
-		// no need to lock queue, since we are removed a long time ago
-		uint16_t Parent		  = 0;
-		uint64_t DependentJob = 0;
-		{
-			JqSingleMutexLock L(JqGetJobMutex(nJobIndex));
-			Parent = Job.Parent;
-			JQ_CLEAR_FUNCTION(Job.Function);
-
-			if(Job.DependentJob)
-			{
-				DependentJob	 = Job.DependentJob;
-				Job.DependentJob = 0;
-			}
-
-			JqState.Stats.nNumFinished++;
-			// kick waiting threads.
-			int8_t Waiters = Job.Waiters;
-			if(Waiters != 0)
-			{
-				JqState.Stats.nNumWaitKicks++;
-				JqGetJobConditionVariable(nJobIndex).NotifyAll();
-				Job.Waiters	   = 0;
-				Job.WaitersWas = Waiters;
-			}
-			else
-			{
-				Job.WaitersWas = 0xff;
-			}
-			JqState.FreeJobs++;
-			Job.FinishedHandle = Job.StartedHandle.load();
-		}
-		if(DependentJob)
-			JqDecPrecondtion(DependentJob, 1);
-		if(Parent)
-			JqFinishInternal(Parent);
+		JqFinishInternal(nJobIndex);
 	}
 }
 
@@ -743,7 +786,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 	}
 	JqSelfPop(nJob);
 
-	JqFinishInternal(nJob);
+	JqFinishSubJob(nJob);
 }
 
 uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumQueues, uint8_t* pQueues)
@@ -1009,7 +1052,7 @@ void JqWorker(int nThreadId)
 			if(!nWork)
 				break;
 			JqExecuteJob(JqState.Jobs[nWork].StartedHandle, nSubIndex);
-			// JqFinishInternal(nWork);
+			// JqFinishSubJob(nWork);
 			// JqIncrementFinished(nWork, JqState.Jobs[nWork].StartedHandle);
 
 			// {
@@ -1111,7 +1154,8 @@ uint64_t JqClaimHandle()
 	pJob->PendingStart		= 0;
 	pJob->PreconditionCount = 1;
 	pJob->Parent			= 0;
-	pJob->DependentJob		= 0;
+	pJob->DependentJob.Job	= 0;
+	pJob->DependentJob.Next = 0;
 	//	pJob->Locked			= false;
 	pJob->NumJobs  = 0;
 	pJob->Range	   = 0;
@@ -1119,6 +1163,7 @@ uint64_t JqClaimHandle()
 	pJob->Waiters  = 0;
 	pJob->LinkNext = 0;
 	pJob->LinkPrev = 0;
+	pJob->Reserved = false;
 
 	return h;
 }
@@ -1179,16 +1224,22 @@ void JqDecPrecondtion(uint64_t Handle, int Count)
 		// only place StartedHandle is modified
 		uint32_t NumJobs  = Job.NumJobs;
 		Job.StartedHandle = Handle;
-		uint8_t Queue	  = Job.Queue;
-		JqQueuePush(Queue, Handle);
-
+		if(NumJobs == 0) // Barrier type Jobs never have to enter an actual queue.
 		{
+			JqFinishInternal(Index);
+		}
+		else
+		{
+			uint8_t Queue = Job.Queue;
+			JqQueuePush(Queue, Handle);
 			{
-				uint32_t nNumSema = JqState.QueueNumSemaphores[Queue];
-				for(uint32_t i = 0; i < nNumSema; ++i)
 				{
-					int nSemaIndex = JqState.QueueToSemaphore[Queue][i];
-					JqState.Semaphore[nSemaIndex].Signal(NumJobs);
+					uint32_t nNumSema = JqState.QueueNumSemaphores[Queue];
+					for(uint32_t i = 0; i < nNumSema; ++i)
+					{
+						int nSemaIndex = JqState.QueueToSemaphore[Queue][i];
+						JqState.Semaphore[nSemaIndex].Signal(NumJobs);
+					}
 				}
 			}
 		}
@@ -1210,14 +1261,14 @@ JqConditionVariable& JqGetJobConditionVariable(uint64_t Handle)
 	return JqState.ConditionVariableJob[Handle % JQ_NUM_LOCKS];
 }
 
-inline void JqUnpackLink(uint64_t Value, uint16_t& Head, uint16_t& Tail, uint16_t& JobCount)
+inline void JqUnpackQueueLink(uint64_t Value, uint16_t& Head, uint16_t& Tail, uint16_t& JobCount)
 {
 	Head	 = Value & 0xffff;
 	Tail	 = (Value >> 16) & 0xffff;
 	JobCount = (Value >> 32) & 0xffff;
 }
 
-inline uint64_t JqPackLink(uint16_t Head, uint16_t Tail, uint16_t JobCount)
+inline uint64_t JqPackQueueLink(uint16_t Head, uint16_t Tail, uint16_t JobCount)
 {
 	uint64_t Value = Head | ((uint64_t)Tail << 16) | ((uint64_t)JobCount << 32);
 	return Value;
@@ -1268,7 +1319,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	do
 	{
 		Old = Queue.Link.load();
-		JqUnpackLink(Old, Head, Tail, JobCount);
+		JqUnpackQueueLink(Old, Head, Tail, JobCount);
 		if(Head)
 			JQ_ASSERT(JobCount > 0);
 		else
@@ -1291,7 +1342,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 
 		JQ_ASSERT(JobCount);
 
-		New = JqPackLink(Head, Tail, JobCount);
+		New = JqPackQueueLink(Head, Tail, JobCount);
 	} while(!Queue.Link.compare_exchange_weak(Old, New));
 #endif
 }
@@ -1312,7 +1363,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 		JobIndex = 0;
 		SubIndex = -1;
 		Old		 = Queue.Link.load();
-		JqUnpackLink(Old, Head, Tail, JobCount);
+		JqUnpackQueueLink(Old, Head, Tail, JobCount);
 		if(!Head)
 			break; // empty
 		if(JobCount < 2)
@@ -1323,7 +1374,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 			JqSingleMutexLock L(Queue.Mutex);
 
 			Old = Queue.Link.load();
-			JqUnpackLink(Old, Head, Tail, JobCount);
+			JqUnpackQueueLink(Old, Head, Tail, JobCount);
 			if(!Head)
 				break; // empty
 
@@ -1354,7 +1405,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 
 					JQ_ASSERT(NewCount == NextJob.PendingStart.load());
 				}
-				New = JqPackLink(NewHead, NewTail, NewCount);
+				New = JqPackQueueLink(NewHead, NewTail, NewCount);
 
 				if(NewHead)
 				{
@@ -1381,7 +1432,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 			SubIndex = --JobCount;
 			JobIndex = Head;
 			JQ_ASSERT(JobCount > 0);
-			New = JqPackLink(Head, Tail, JobCount);
+			New = JqPackQueueLink(Head, Tail, JobCount);
 		}
 
 	} while(!Queue.Link.compare_exchange_weak(Old, New));
@@ -1430,7 +1481,39 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 	return JobIndex;
 }
 
-void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
+uint16_t JqDependentJobLinkAlloc()
+{
+	JqSingleMutexLock L(JqState.DependentJobLinkMutex);
+	uint16_t		  Link = JqState.DependentJobLinkHead;
+	if(!Link)
+	{
+		// If you're hitting this, then you're adding more than JQ_JOB_BUFFER_SIZE, on top of the one link thats already space for
+		// you'd probably want to make this allocator lockless and grow it significantly
+		JQ_BREAK();
+	}
+	JqState.DependentJobLinkHead		 = JqState.DependentJobLinks[Link].Next;
+	JqState.DependentJobLinks[Link].Next = 0;
+	JqState.DependentJobLinks[Link].Job	 = 0;
+	return Link;
+}
+
+void JqDependentJobLinkFreeList(uint16_t Link)
+{
+	JqSingleMutexLock L(JqState.DependentJobLinkMutex);
+	uint16_t		  Head = JqState.DependentJobLinkHead;
+	while(Link)
+	{
+		JQ_ASSERT(Link < JQ_JOB_BUFFER_SIZE);
+		uint16_t Next = JqState.DependentJobLinks[Link].Next;
+
+		JqState.DependentJobLinks[Link].Next = Head;
+		Head								 = Link;
+
+		Link = Next;
+	}
+}
+
+void JqAddPreconditionInternal(uint64_t Handle, uint64_t Precondition)
 {
 	// only add if its actually not done.
 	if(!JqIsDone(Precondition))
@@ -1442,8 +1525,18 @@ void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
 		JQ_ASSERT(Job.PreconditionCount > 0); // as soon as the existing precond count reaches 0, it might be executed, so it no longer makes sense to add new preconditions
 											  // use mechanisms like JqReserve, to block untill precondtions have been added.
 		JqIncPrecondtion(Handle, 1);
-		bool Finished = false;
+		bool	 Finished;
+		uint16_t LinkIndex = 0;
+		while(true)
 		{
+			Finished = false;
+			JQ_ASSERT(!LinkIndex); // only
+
+			if(PrecondJob.DependentJob.Job)
+			{
+				LinkIndex = JqDependentJobLinkAlloc();
+			}
+
 			JqSingleMutexLock L(JqGetJobMutex(Precondition));
 			if(PrecondJob.FinishedHandle == Precondition)
 			{
@@ -1451,15 +1544,47 @@ void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
 			}
 			else
 			{
-				JQ_ASSERT(PrecondJob.DependentJob == 0); // Note: Currently only --one-- dependent job is supported.
-				PrecondJob.DependentJob = Handle;
+				if(PrecondJob.DependentJob.Job == 0)
+				{
+					JQ_ASSERT(PrecondJob.DependentJob.Next == 0);
+					PrecondJob.DependentJob.Job = Handle;
+				}
+				else
+				{
+					if(!LinkIndex && PrecondJob.DependentJob.Job) // Note: Can't (wont!) lock two mutexes, so in this exceptional condition we retry
+						continue;
+					JqDependentJobLink& L		 = JqState.DependentJobLinks[LinkIndex];
+					L.Job						 = Handle;
+					L.Next						 = PrecondJob.DependentJob.Next;
+					PrecondJob.DependentJob.Next = LinkIndex;
+					LinkIndex					 = 0; // clear to indicate it was successfully inserted
+				}
 			}
+			break;
+		}
+		if(LinkIndex)
+		{
+			JqDependentJobLinkFreeList(LinkIndex);
 		}
 		if(Finished) // the precondition job finished after we took the lock, so decrement manually.
 		{
 			JqDecPrecondtion(Handle, 1);
 		}
 	}
+}
+
+void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
+{
+	if(!JqState.Jobs[Handle % JQ_JOB_BUFFER_SIZE].Reserved)
+	{
+		JQ_BREAK();
+		// you can only add precondtions to jobs that have been Reserved and not yet added/closed
+		// you must do
+		// h = JqReserve
+		//  -> Call JqAddPrecondition  here
+		// JqCloseReserved(h)/JqAddReserved
+	}
+	JqAddPreconditionInternal(Handle, Precondition);
 }
 
 uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags, uint64_t Precondition)
@@ -1507,6 +1632,11 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t Queu
 			JQ_ASSERT(Job.ClaimedHandle == ReservedHandle);
 			JQ_ASSERT(Job.Queue != 0xff);
 			JQ_ASSERT(Job.PreconditionCount >= 1);
+			if(!Job.Reserved)
+			{
+				JQ_BREAK(); // When reserving Job handles, you should call -either- JqCloseReserved or JqAddReserved, never both.
+			}
+			Job.Reserved = false;
 		}
 		else
 		{
@@ -1538,7 +1668,7 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t Queu
 		JqState.Stats.nNumAddedSub += NumJobs;
 		if(Precondition)
 		{
-			JqAddPrecondition(Handle, Precondition);
+			JqAddPreconditionInternal(Handle, Precondition);
 		}
 
 		// Decrementing preconditions automatically add to a queue when reaching 0
@@ -1579,8 +1709,10 @@ uint64_t JqReserve(uint8_t Queue, uint32_t JobFlags)
 	JQ_ASSERT(JQ_LE_WRAP(Job.StartedHandle, Handle));
 	JQ_ASSERT(Job.ClaimedHandle == Handle);
 	JQ_ASSERT(Job.PreconditionCount == 1);
+	JQ_ASSERT(Job.NumJobs == 0);
 
 	uint64_t Parent = 0 != (JobFlags & JQ_JOBFLAG_DETACHED) ? 0 : JqSelf();
+	Job.Reserved	= 1;
 
 	if(Parent)
 	{
@@ -1596,6 +1728,11 @@ uint64_t JqReserve(uint8_t Queue, uint32_t JobFlags)
 // Mark reservation as finished, without actually executing any jobs.
 void JqCloseReserved(uint64_t Handle)
 {
+	if(!JqState.Jobs[Handle % JQ_JOB_BUFFER_SIZE].Reserved)
+	{
+		JQ_BREAK(); // When reserving Job handles, you should call -either- JqCloseReserved or JqAddReserved, never both.
+	}
+	JqState.Jobs[Handle % JQ_JOB_BUFFER_SIZE].Reserved = false;
 	JqDecPrecondtion(Handle, 1);
 }
 

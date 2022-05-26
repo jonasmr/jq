@@ -291,18 +291,19 @@ struct JqAttributes
 };
 
 JQ_API uint64_t JqSelf();
-JQ_API uint64_t JqAdd(JqFunction JobFunc, uint8_t Queues, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
+JQ_API uint64_t JqAdd(JqFunction JobFunc, uint8_t Queue, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
 
 // add reserved
 JQ_API uint64_t JqAddReserved(uint64_t ReservedHandle, JqFunction JobFunc, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
 
 // add successor
-JQ_API uint64_t JqAddSuccessor(uint64_t Precondition, JqFunction JobFunc, uint8_t Queues, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
+JQ_API uint64_t JqAddSuccessor(uint64_t Precondition, JqFunction JobFunc, uint8_t Queue, int nNumJobs = 1, int nRange = -1, uint32_t nJobFlags = 0);
 
 JQ_API uint64_t JqReserve(uint8_t Queue, uint32_t JobFlags = 0); // Reserve a Job slot. this allows you to wait on work added later, or close, in case its only for a barrier
-JQ_API void		JqCloseReserved(uint64_t Handle);				 // Mark reservation as finished, without actually executing any jobs.
+JQ_API void		JqAddPrecondition(uint64_t Handle, uint64_t Precondition);
+JQ_API void		JqCloseReserved(uint64_t Handle); // Mark reservation as finished, without actually executing any jobs.
 
-JQ_API void		JqSpawn(JqFunction JobFunc, uint8_t Queues, int nNumJobs = 1, int nRange = -1, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG);
+JQ_API void		JqSpawn(JqFunction JobFunc, uint8_t Queue, int nNumJobs = 1, int nRange = -1, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG);
 JQ_API void		JqWait(uint64_t nJob, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API void		JqWaitAll();
 JQ_API void		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);

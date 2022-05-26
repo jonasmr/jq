@@ -196,6 +196,58 @@ void JqTestPrio()
 {
 	MICROPROFILE_SCOPEI("JQ_TEST", "JqTestPrio", MP_AUTO);
 	g_DontSleep = 0;
+
+	// Note here, that there is nothing to indicate this is a barrier, it might as well be added as a job
+	// If its a job, we add it with JqAddReserved
+	// If its a Barrier we just close it with JqCloseReserved
+	// Note, that all Preconditions must be in place first.
+	// The argument for Reserve is the queue it ends up in
+	uint64_t Barrier = JqReserve(0);
+
+	{
+		// different ways of adding dependent jobs
+		uint64_t PostBarrier0 = JqReserve(0);
+		// PostBarrier0 now requires Barrier to be reached
+		JqAddPrecondition(PostBarrier0, Barrier);
+
+		JqAddReserved(
+			PostBarrier0,
+			[]() {
+				MICROPROFILE_SCOPEI("JQ_TEST", "First PostBarrier", MP_AUTO);
+				JobSpinWork(500);
+			},
+			5);
+
+		// alternative way of adding, when there is only one precondtion
+		uint64_t PostBarrier1 = JqAddSuccessor(
+			Barrier,
+			[]() {
+				MICROPROFILE_SCOPEI("JQ_TEST", "Second PostBarrier", MP_AUTO);
+				JobSpinWork(500);
+			},
+			0, 5);
+		uint64_t PostBarrier2 = JqAddSuccessor(
+			Barrier,
+			[]() {
+				MICROPROFILE_SCOPEI("JQ_TEST", "Third PostBarrier", MP_AUTO);
+				JobSpinWork(500);
+			},
+			0, 10);
+
+		uint64_t Final = JqReserve(0);
+
+		JqAddPrecondition(Final, PostBarrier0);
+		JqAddPrecondition(Final, PostBarrier1);
+		JqAddPrecondition(Final, PostBarrier2);
+		JqAddReserved(
+			Final,
+			[]() {
+				MICROPROFILE_SCOPEI("JQ_TEST", "Final", MP_AUTO);
+				JobSpinWork(500);
+			},
+			1);
+	}
+
 	uint64_t J1 = JqAdd(
 		[] {
 			MICROPROFILE_SCOPEI("JQ_TEST", "BASE-7-JOBS", MP_GREY);
@@ -217,6 +269,8 @@ void JqTestPrio()
 		0, 2, 1);
 
 	// JQ_BREAK();
+	JqAddPrecondition(Barrier, J1);
+	JqAddPrecondition(Barrier, J2);
 
 	std::atomic<int>  Foo;
 	std::atomic<int>  Bar;
@@ -302,6 +356,9 @@ void JqTestPrio()
 			JobSpinWork(5000);
 		},
 		0);
+
+	JqAddPrecondition(Barrier, Successor);
+	JqCloseReserved(Barrier);
 
 	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
@@ -518,7 +575,7 @@ void JqTest()
 
 #define JQ_NODE_TEST 0
 
-#define JQ_TEST_WORKERS 64
+#define JQ_TEST_WORKERS 10
 
 int main(int argc, char* argv[])
 {

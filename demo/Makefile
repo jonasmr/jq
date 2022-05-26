@@ -5,7 +5,7 @@ LDFLAGS=-lpthread -lcurses
 
 CFLAGS=-I.. -I../microprofile -I. -DGLEW_STATIC -Wall
 #CFLAGS+=-fsanitize=undefined-trap -fsanitize-undefined-trap-on-error
-CFLAGS+=-g -O3 -Wno-invalid-offsetof -Wno-format
+CFLAGS+=-g -O0 -Wno-invalid-offsetof -Wno-format
 CFLAGS+=-DJQ_ASSERT_LOCKS
 CFLAGS+=-DJQ_MICROPROFILE
 CFLAGS+=-DMICROPROFILE_MAX_THREADS=128
