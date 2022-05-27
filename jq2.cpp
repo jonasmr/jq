@@ -101,7 +101,7 @@ uint64_t			 JqPackQueueLink(uint16_t Head, uint16_t Tail, uint16_t JobCount);
 JqMutex&			 JqGetQueueMutex(uint64_t QueueIndex);
 JqMutex&			 JqGetJobMutex(uint64_t JobIndex);
 JqConditionVariable& JqGetJobConditionVariable(uint64_t Handle);
-uint16_t			 JqDependentJobLinkAlloc();
+uint16_t			 JqDependentJobLinkAlloc(uint64_t Handle);
 void				 JqDependentJobLinkFreeList(uint16_t Index);
 
 // JqDependentJobLink&	 JqAllocDependentJobLink();
@@ -122,6 +122,7 @@ struct JqDependentJobLink
 {
 	uint64_t Job;
 	uint16_t Next;
+	uint64_t Owner;
 };
 
 struct JqJob
@@ -149,40 +150,6 @@ struct JqJob
 	uint16_t LinkPrev;
 
 	bool Reserved;
-	// uint64_t StartedHandle;
-	// uint64_t FinishedHandle;
-
-	// int32_t	 nRange;
-	// uint32_t nJobFlags;
-
-	// uint16_t nNumJobs;
-	// // uint16_t nNumStarted;
-	// uint16_t nNumFinished;
-
-	// // parent/child tree
-	// uint16_t nParent;
-	// uint16_t nFirstChild;
-	// uint16_t nSibling;
-
-	// // priority linked list
-
-	// // uint16_t nLinkNext;
-	// // uint16_t nLinkPrev;
-
-	// uint8_t nPrio;
-	// uint8_t Waiters;
-	// uint8_t WaitersWas;
-	// // int8_t nWaitIndex;
-
-	// uint64_t nPreconditionFirst;   // first job that has this job as a precondition.
-	// uint64_t nPreconditionSibling; // In case this job is registered as a precodition, linked list from the job its waiting on.
-
-	// uint8_t nStalled;
-
-	// // uint32_t nSignalCount;//debug
-
-	// // priority linked list
-	// JqJobLink Link;
 
 #ifdef JQ_ASSERT_SANITY
 	int nTag;
@@ -263,9 +230,10 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	JqMutex				MutexJob[JQ_NUM_LOCKS];
 	JqConditionVariable ConditionVariableJob[JQ_NUM_LOCKS];
 
-	JqMutex			   DependentJobLinkMutex;
-	JqDependentJobLink DependentJobLinks[JQ_JOB_BUFFER_SIZE];
-	uint16_t		   DependentJobLinkHead;
+	JqMutex				  DependentJobLinkMutex;
+	JqDependentJobLink	  DependentJobLinks[JQ_JOB_BUFFER_SIZE];
+	uint16_t			  DependentJobLinkHead;
+	std::atomic<uint32_t> DependentJobLinkCounter;
 
 	JqMutex WaitMutex;
 
@@ -1481,19 +1449,24 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 	return JobIndex;
 }
 
-uint16_t JqDependentJobLinkAlloc()
+uint16_t JqDependentJobLinkAlloc(uint64_t Owner)
 {
 	JqSingleMutexLock L(JqState.DependentJobLinkMutex);
-	uint16_t		  Link = JqState.DependentJobLinkHead;
+
+	JqState.DependentJobLinkCounter++;
+
+	uint16_t Link = JqState.DependentJobLinkHead;
+	// printf("** DEP JOB ALLOCATE   %5d :: %d :: %5d\n", Link, JqState.DependentJobLinkCounter.load(), Owner);
 	if(!Link)
 	{
 		// If you're hitting this, then you're adding more than JQ_JOB_BUFFER_SIZE, on top of the one link thats already space for
 		// you'd probably want to make this allocator lockless and grow it significantly
 		JQ_BREAK();
 	}
-	JqState.DependentJobLinkHead		 = JqState.DependentJobLinks[Link].Next;
-	JqState.DependentJobLinks[Link].Next = 0;
-	JqState.DependentJobLinks[Link].Job	 = 0;
+	JqState.DependentJobLinkHead		  = JqState.DependentJobLinks[Link].Next;
+	JqState.DependentJobLinks[Link].Next  = 0;
+	JqState.DependentJobLinks[Link].Job	  = 0;
+	JqState.DependentJobLinks[Link].Owner = 0;
 	return Link;
 }
 
@@ -1504,13 +1477,19 @@ void JqDependentJobLinkFreeList(uint16_t Link)
 	while(Link)
 	{
 		JQ_ASSERT(Link < JQ_JOB_BUFFER_SIZE);
+		JqState.DependentJobLinkCounter--;
+		// printf("** DEP JOB FREE       %5d :: %d :: %5d\n", Link, JqState.DependentJobLinkCounter.load(), JqState.DependentJobLinks[Link].Owner);
+
 		uint16_t Next = JqState.DependentJobLinks[Link].Next;
 
-		JqState.DependentJobLinks[Link].Next = Head;
-		Head								 = Link;
+		JqState.DependentJobLinks[Link].Next  = Head;
+		JqState.DependentJobLinks[Link].Owner = 0;
+		JqState.DependentJobLinks[Link].Job	  = 0;
+		Head								  = Link;
 
 		Link = Next;
 	}
+	JqState.DependentJobLinkHead = Head;
 }
 
 void JqAddPreconditionInternal(uint64_t Handle, uint64_t Precondition)
@@ -1534,7 +1513,7 @@ void JqAddPreconditionInternal(uint64_t Handle, uint64_t Precondition)
 
 			if(PrecondJob.DependentJob.Job)
 			{
-				LinkIndex = JqDependentJobLinkAlloc();
+				LinkIndex = JqDependentJobLinkAlloc(Precondition);
 			}
 
 			JqSingleMutexLock L(JqGetJobMutex(Precondition));

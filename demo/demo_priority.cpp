@@ -203,6 +203,7 @@ void JqTestPrio()
 	// Note, that all Preconditions must be in place first.
 	// The argument for Reserve is the queue it ends up in
 	uint64_t Barrier = JqReserve(0);
+	uint64_t Final	 = JqReserve(0);
 
 	{
 		// different ways of adding dependent jobs
@@ -234,18 +235,9 @@ void JqTestPrio()
 			},
 			0, 10);
 
-		uint64_t Final = JqReserve(0);
-
 		JqAddPrecondition(Final, PostBarrier0);
 		JqAddPrecondition(Final, PostBarrier1);
 		JqAddPrecondition(Final, PostBarrier2);
-		JqAddReserved(
-			Final,
-			[]() {
-				MICROPROFILE_SCOPEI("JQ_TEST", "Final", MP_AUTO);
-				JobSpinWork(500);
-			},
-			1);
 	}
 
 	uint64_t J1 = JqAdd(
@@ -357,8 +349,17 @@ void JqTestPrio()
 		},
 		0);
 
-	JqAddPrecondition(Barrier, Successor);
+	JqAddPrecondition(Final, Successor);
+
 	JqCloseReserved(Barrier);
+
+	JqAddReserved(
+		Final,
+		[]() {
+			MICROPROFILE_SCOPEI("JQ_TEST", "Final", MP_AUTO);
+			JobSpinWork(500);
+		},
+		1);
 
 	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
@@ -575,7 +576,7 @@ void JqTest()
 
 #define JQ_NODE_TEST 0
 
-#define JQ_TEST_WORKERS 10
+#define JQ_TEST_WORKERS 64
 
 int main(int argc, char* argv[])
 {

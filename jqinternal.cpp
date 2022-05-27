@@ -536,22 +536,22 @@ void JqLogStats()
 	static float fLimit = 5;
 	static bool	 bFirst = true;
 
-	JqStats& Stats = g_LogStats;
+	// JqStats& Stats = g_LogStats;
 
 	if(bFirst || g_LogResetStats)
 	{
 		g_LogResetStats = false;
 		bFirst			= false;
-		memset(&Stats, 0, sizeof(Stats));
+		memset(&g_LogStats, 0, sizeof(g_LogStats));
 		g_LogTickLast = JqTick();
 		printf("\n");
 	}
 
 	if(Frames++ > fLimit)
 	{
-		JqStats Stats0;
-		JqConsumeStats(&Stats0);
-		g_LogStats.Add(Stats0);
+		JqStats Stats;
+		JqConsumeStats(&Stats);
+		g_LogStats.Add(Stats);
 		static bool		bFirst			   = true;
 		static uint64_t H				   = g_LogStats.nNextHandle;
 		uint64_t		nHandleConsumption = g_LogStats.nNextHandle - H;
@@ -571,13 +571,14 @@ void JqLogStats()
 		float	 fTime			 = 1000.f * nDelta / nTicksPerSecond;
 		double	 HandlesPerMs	 = nHandleConsumption / fTime;
 		double	 HandlesPerYear	 = (0x8000000000000000 / (365llu * 24 * 60 * 60 * 60 * 1000)) / HandlesPerMs;
+		(void)HandlesPerYear;
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption ? nHandleConsumption : 1) * (1.0 / (365 * 60.0 * 60.0 * 60.0 * 24.0));
 		(void)WrapTime;
 		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %14d/%14d|%8lld|%12.2fy|%6.2fs|%2d     ", bUseWrapping ? '\r' : ' ', Stats.nNumAdded / (float)fTime,
 			   Stats.nNumFinished / (float)fTime, Stats.nNumCancelled / (float)fTime, Stats.nNumAddedSub / (float)fTime, Stats.nNumFinishedSub / (float)fTime, Stats.nNumLocks / (float)fTime,
-			   Stats.nNumWaitCond / (float)fTime, Stats.nNumWaitKicks / (float)fTime, Stats.nNumAdded, Stats.nNumFinished, Stats.nNumAddedSub, Stats.nNumFinishedSub, nHandleConsumption,
-			   HandlesPerYear, fTime / 1000.f, JqGetNumWorkers());
+			   Stats.nNumWaitCond / (float)fTime, Stats.nNumWaitKicks / (float)fTime, g_LogStats.nNumAdded, g_LogStats.nNumFinished, g_LogStats.nNumAddedSub, g_LogStats.nNumFinishedSub,
+			   nHandleConsumption, HandlesPerYear, fTime / 1000.f, JqGetNumWorkers());
 		fflush(stdout);
 
 		Frames		  = 0;
