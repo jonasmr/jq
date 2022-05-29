@@ -576,7 +576,7 @@ void JqTest()
 
 #define JQ_NODE_TEST 0
 
-#define JQ_TEST_WORKERS 64
+#define JQ_TEST_WORKERS 8
 
 int main(int argc, char* argv[])
 {

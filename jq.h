@@ -56,6 +56,8 @@
 #define JQ_LOCK_STATS 1
 #endif
 
+#define JQ_INVALID_QUEUE 0xff
+
 #ifndef JQ_BREAK
 #ifdef _WIN32
 #define JQ_BREAK() __debugbreak()

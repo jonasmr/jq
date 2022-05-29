@@ -929,7 +929,7 @@ bool JqCancel(uint64_t nJob)
 	return true;
 }
 
-void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
+void JqAddPreconditionInternal(uint64_t Handle, uint64_t Precondition)
 {
 	JQ_ASSERT_LOCKED(JqState.Mutex);
 	uint16_t nIndex = Handle % JQ_JOB_BUFFER_SIZE;
@@ -947,6 +947,11 @@ void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
 		pEntry->nPreconditionSibling  = pPreEntry->nPreconditionFirst;
 		pPreEntry->nPreconditionFirst = Handle;
 	}
+}
+void JqAddPrecondition(uint64_t Handle, uint64_t Precondition)
+{
+	JqMutexLock Lock(JqState.Mutex);
+	JqAddPreconditionInternal(Handle, Precondition);
 }
 
 uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint32_t nJobFlags, uint64_t Precondition)
@@ -1017,7 +1022,7 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t nPri
 		else
 		{
 			pEntry->nStalled = 1;
-			JqAddPrecondition(nHandle, Precondition);
+			JqAddPreconditionInternal(nHandle, Precondition);
 		}
 	}
 	if(!Precondition)

@@ -61,7 +61,7 @@
 // Reserve
 //	* Allocate a header, set its preq count to 1
 //
-// Release Reseverd  (can be used to do barriers)
+// Release Reserved  (can be used to do barriers)
 // 	* decrement preq count by 1
 //
 //
@@ -78,17 +78,17 @@
 #include "jqinternal.h"
 
 #define JQ_NUM_JOBS (JQ_JOB_BUFFER_SIZE - 1)
-
 #define JQ_JOBFLAG_UNINITIALIZED 0x80
+#define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
+#define JQ_NUM_LOCKS 32
+#define JQ_LOCKLESS_POP 2
+#define JQ_LOCKLESS_PEEK_COUNT 0 // How many jobs do we allow peeking ahead? (Only for JQ_LOCKLESS_POP == 2)
 
 struct JqMutexLock;
 
-// void	 JqAttachChild(uint64_t nParentJob, uint64_t nChildJob);
-// uint64_t JqDetachChild(uint64_t nChildJob);
 void				 JqWorker(int nThreadId);
 void				 JqQueuePush(uint8_t nQueue, uint64_t Handle);
 uint16_t			 JqQueuePop(uint8_t Queue, uint16_t* OutSubJob);
-void				 JqQueueRemove(uint8_t nQueue, uint16_t nJobIndex);
 bool				 JqPendingJobs(uint64_t nJob);
 void				 JqSelfPush(uint64_t nJob, uint32_t nJobIndex);
 void				 JqSelfPop(uint64_t nJob);
@@ -98,6 +98,8 @@ void				 JqDecPrecondtion(uint64_t Handle, int Count);
 void				 JqIncPrecondtion(uint64_t Handle, int Count);
 void				 JqUnpackQueueLink(uint64_t Value, uint16_t& Head, uint16_t& Tail, uint16_t& JobCount);
 uint64_t			 JqPackQueueLink(uint16_t Head, uint16_t Tail, uint16_t JobCount);
+void				 JqUnpackStartAndQueue(uint64_t Value, uint16_t& PendingStart, uint8_t& Queue);
+uint64_t			 JqPackStartAndQueue(uint16_t PendingStart, uint8_t Queue);
 JqMutex&			 JqGetQueueMutex(uint64_t QueueIndex);
 JqMutex&			 JqGetJobMutex(uint64_t JobIndex);
 JqConditionVariable& JqGetJobConditionVariable(uint64_t Handle);
@@ -133,11 +135,11 @@ struct JqJob
 	std::atomic<uint64_t> FinishedHandle; /// Handle which was last finished
 	std::atomic<uint64_t> ClaimedHandle;  /// Handle which has claimed this header
 
-	std::atomic<uint64_t> PendingFinish;	 /// No. of jobs & (direct) child jobs that need to finish in order for this to be finished.
-	std::atomic<uint64_t> PendingStart;		 /// No. of Jobs that needs to be Started
-	std::atomic<uint64_t> PreconditionCount; /// No. of Preconditions that need to finish, before this can be enqueued.
-	uint64_t			  Parent;			 /// Handle of parent
-	JqDependentJobLink	  DependentJob;		 /// Job that is dependent on this job finishing.
+	std::atomic<uint64_t> PendingFinish;		/// No. of jobs & (direct) child jobs that need to finish in order for this to be finished.
+	std::atomic<uint64_t> PendingStartAndQueue; /// No. of Jobs that needs to be Started, and the queue which is it inserted to
+	std::atomic<uint64_t> PreconditionCount;	/// No. of Preconditions that need to finish, before this can be enqueued.
+	uint64_t			  Parent;				/// Handle of parent
+	JqDependentJobLink	  DependentJob;			/// Job that is dependent on this job finishing.
 
 	uint16_t NumJobs;	 /// Num Jobs to launch
 	uint64_t Range;		 /// Range to pass to jobs
@@ -146,8 +148,8 @@ struct JqJob
 	uint8_t	 Waiters;	 /// Set when waiting
 	uint8_t	 WaitersWas; /// Prev wait flag(debug only)
 
-	uint16_t LinkNext;
-	uint16_t LinkPrev;
+	uint16_t Next;
+	uint16_t Prev;
 
 	bool Reserved;
 
@@ -166,13 +168,8 @@ struct JqJob
 #pragma warning(disable : 4324)
 #endif
 
-#define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
-
-#define JQ_NUM_LOCKS 32
-
-#define JQ_LOCKLESS_POP 1
-
 #if JQ_LOCKLESS_POP
+
 // Locked queue, from which we allow lockless inspection of emptiness + popping of jobs that -don't- change the head
 struct JQ_ALIGN_CACHELINE JqQueue
 {
@@ -554,9 +551,13 @@ void JqFinishInternal(uint16_t nJobIndex)
 {
 	JQ_MICROPROFILE_VERBOSE_SCOPE("JqFinishSubJob", 0xffff);
 
-	nJobIndex  = nJobIndex % JQ_JOB_BUFFER_SIZE;
-	JqJob& Job = JqState.Jobs[nJobIndex];
-	JQ_ASSERT(Job.PendingStart.load() == 0);
+	nJobIndex	 = nJobIndex % JQ_JOB_BUFFER_SIZE;
+	JqJob&	 Job = JqState.Jobs[nJobIndex];
+	uint16_t PendingStart;
+	uint8_t	 Queue;
+	uint64_t PendingStartAndQueue = Job.PendingStartAndQueue.load();
+	JqUnpackStartAndQueue(PendingStartAndQueue, PendingStart, Queue);
+	JQ_ASSERT(PendingStart == 0);
 	JQ_ASSERT(Job.PendingFinish.load() == 0);
 	// no need to lock queue, since we are removed a long time ago
 
@@ -1118,8 +1119,12 @@ uint64_t JqClaimHandle()
 			break;
 	}
 	// reset header
-	pJob->PendingFinish		= 0;
-	pJob->PendingStart		= 0;
+	pJob->PendingFinish = 0;
+#if JQ_LOCKLESS_POP == 2
+	pJob->PendingStartAndQueue = JqPackStartAndQueue(0, 0xff);
+#else
+	pJob->PendingStartAndQueue = JqPackStartAndQueue(0, 0);
+#endif
 	pJob->PreconditionCount = 1;
 	pJob->Parent			= 0;
 	pJob->DependentJob.Job	= 0;
@@ -1129,8 +1134,8 @@ uint64_t JqClaimHandle()
 	pJob->Range	   = 0;
 	pJob->JobFlags = JQ_JOBFLAG_UNINITIALIZED;
 	pJob->Waiters  = 0;
-	pJob->LinkNext = 0;
-	pJob->LinkPrev = 0;
+	pJob->Next	   = 0;
+	pJob->Prev	   = 0;
 	pJob->Reserved = false;
 
 	return h;
@@ -1242,6 +1247,18 @@ inline uint64_t JqPackQueueLink(uint16_t Head, uint16_t Tail, uint16_t JobCount)
 	return Value;
 }
 
+inline void JqUnpackStartAndQueue(uint64_t Value, uint16_t& PendingStart, uint8_t& Queue)
+{
+	PendingStart = Value & 0xffff;
+	Queue		 = (Value >> 8) & 0xff;
+}
+
+inline uint64_t JqPackStartAndQueue(uint16_t PendingStart, uint8_t Queue)
+{
+	uint64_t Value = PendingStart | (Queue << 16);
+	return Value;
+}
+
 void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 {
 	uint16_t JobIndex = Handle % JQ_JOB_BUFFER_SIZE;
@@ -1249,9 +1266,12 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	JQ_ASSERT(QueueIndex < JQ_NUM_QUEUES);
 	JqJob&	 Job   = JqState.Jobs[JobIndex];
 	JqQueue& Queue = JqState.Queues[QueueIndex];
+
 	// printf("JqQueuePush %d -> %d .. NumJobs %d\n", JobIndex, QueueIndex, Job.NumJobs);
+
 	JQ_ASSERT(Job.PreconditionCount == 0);
 	JQ_ASSERT(Job.Queue == QueueIndex);
+
 	uint64_t Started  = Job.StartedHandle;
 	uint64_t Finished = Job.FinishedHandle;
 	uint64_t Claimed  = Job.ClaimedHandle;
@@ -1259,30 +1279,66 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	JQ_ASSERT(JQ_LT_WRAP(Finished, Claimed));
 	JQ_ASSERT(Job.NumJobs);
 
-	uint16_t NumJobs  = Job.NumJobs;
-	Job.PendingStart  = NumJobs;
+	uint16_t NumJobs = Job.NumJobs;
+	JQ_ASSERT(NumJobs < 0xffff);
 	Job.PendingFinish = NumJobs;
-
 	JqSingleMutexLock L(Queue.Mutex);
 
 #if !JQ_LOCKLESS_POP
-	Job.LinkPrev = Queue.LinkTail;
+
+	Job.PendingStartAndQueue = JqPackStartAndQueue(NumJobs, 0);
+
+	Job.Prev = Queue.LinkTail;
 	if(Queue.LinkTail)
 	{
 		JQ_ASSERT(JobIndex);
-		JqState.Jobs[Queue.LinkTail].LinkNext = JobIndex;
-		Queue.LinkTail						  = JobIndex;
+		JqState.Jobs[Queue.LinkTail].Next = JobIndex;
+		Queue.LinkTail					  = JobIndex;
 	}
 	else
 	{
 		JQ_ASSERT(Queue.LinkHead == 0);
 		Queue.LinkHead = Queue.LinkTail = JobIndex;
 	}
+#elif JQ_LOCKLESS_POP == 2
+
+	Job.PendingStartAndQueue = JqPackStartAndQueue(NumJobs, QueueIndex);
+
+	uint16_t Head, Tail, JobCount;
+
+	JQ_ASSERT(Job.Prev == 0);
+	JQ_ASSERT(Job.Next == 0);
+
+	uint64_t Old = Queue.Link.load();
+	JqUnpackQueueLink(Old, Head, Tail, JobCount);
+	if(Head)
+		JQ_ASSERT(JobCount == 0);
+	else
+		JQ_ASSERT(!Tail);
+
+	Job.Prev = Tail;
+	if(Tail)
+	{
+		JQ_ASSERT(JobIndex);
+		JqState.Jobs[Tail].Next = JobIndex;
+		Tail					= JobIndex;
+	}
+	else
+	{
+		JQ_ASSERT(Head == 0);
+		Tail	 = JobIndex;
+		Head	 = JobIndex;
+		JobCount = 0;
+	}
+	Queue.Link = JqPackQueueLink(Head, Tail, JobCount);
+	printf("pushed %d(%d) -> %d ... %d/%d\n", Handle, JobCount, QueueIndex, Head, Tail);
+
 #else
 
 	// Note: We have to use atomics, as lockless decrements of job count will occur. Tail/Head will not be modified without taking the lock
 	uint16_t Head, Tail, JobCount;
 	uint64_t Old, New;
+	Job.PendingStartAndQueue = JqPackStartAndQueue(NumJobs, 0);
 
 	do
 	{
@@ -1293,12 +1349,12 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 		else
 			JQ_ASSERT(!Tail);
 
-		Job.LinkPrev = Tail;
+		Job.Prev = Tail;
 		if(Tail)
 		{
 			JQ_ASSERT(JobIndex);
-			JqState.Jobs[Tail].LinkNext = JobIndex;
-			Tail						= JobIndex;
+			JqState.Jobs[Tail].Next = JobIndex;
+			Tail					= JobIndex;
 		}
 		else
 		{
@@ -1312,6 +1368,128 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 
 		New = JqPackQueueLink(Head, Tail, JobCount);
 	} while(!Queue.Link.compare_exchange_weak(Old, New));
+
+#endif
+}
+
+// Tries to take a job at JobIndex, iff its still in Queue QueueIndex
+//  - If its the last job, it will lock the queue and remove the Job from the queue
+//  - if its not the last, it will -not- lock
+//  - if all jobs are popped, and it has yet to be removed from the queue, it'll return its next in OutNextHandle, to allow peeking on
+uint16_t JqQueuePopInternal(uint16_t JobIndex, uint8_t QueueIndex, uint16_t* OutSubJob, uint16_t* OutNextJob, bool PopAll)
+{
+#if 0 == JQ_LOCKLESS_POP
+	JQ_BREAK();
+	return 0;
+#else
+	JobIndex		  = JobIndex % JQ_JOB_BUFFER_SIZE;
+	uint16_t SubIndex = 0xffff;
+	JqJob&	 Job	  = JqState.Jobs[JobIndex];
+	uint16_t NumJobs  = Job.NumJobs;
+	uint8_t	 JobQueue;
+	uint16_t JobSubIndex;
+	uint64_t Old, New;
+	uint16_t PopCount;
+	do
+	{
+		JobQueue	= 0xff;
+		JobSubIndex = 0xffff;
+		PopCount	= 0;
+		Old			= Job.PendingStartAndQueue.load();
+		JqUnpackStartAndQueue(Old, JobSubIndex, JobQueue);
+		if(JobQueue != QueueIndex)
+			return 0; // Job at JobIndex is in a different queue, so bail
+
+		if(JobSubIndex == 0) // last element has been popped, so we won't be able to pop any job
+		{
+			// return the next pointer. caller can use this to peek for more work.
+			// Note that this is not strictly synchronized, but peeking checks that it is indeed from the correct queue
+			*OutNextJob = Job.Next;
+
+			return 0;
+		}
+		if(PopAll)
+		{
+			PopCount	= JobSubIndex;
+			JobSubIndex = 0;
+		}
+		else
+		{
+			PopCount = 1;
+			JobSubIndex--;
+		}
+		JQ_ASSERT(JobSubIndex != 0xffff);
+		New = JqPackStartAndQueue(JobSubIndex, JobQueue);
+	} while(!Job.PendingStartAndQueue.compare_exchange_weak(Old, New));
+
+	// thread hitting zero is resposible for locking and removing from the queue
+	if(JobSubIndex == 0)
+	{
+		JqQueue& Q = JqState.Queues[QueueIndex];
+		JQ_MICROPROFILE_SCOPE("LockedPop", MP_AUTO);
+
+		JqSingleMutexLock L(Q.Mutex);
+		// This occurs when all jobs are executed or cancelled, before actually getting in the queue.
+		if(!(Job.Next == 0 && Job.Prev == 0))
+		{
+			uint16_t Head, Tail, JobCount;
+			uint64_t Old = Q.Link;
+			JqUnpackQueueLink(Old, Head, Tail, JobCount);
+			printf("Pop %d -> %d ... %d/%d\n", JobIndex, QueueIndex, Head, Tail);
+
+			uint16_t NewHead = Head;
+			uint16_t NewTail = Tail;
+			JQ_ASSERT(JobCount == 0);
+			if(Head == Tail)
+			{
+				JQ_ASSERT(Head == JobIndex);
+				NewHead = NewTail = 0;
+			}
+			else if(Head == JobIndex)
+			{
+				JQ_ASSERT(Job.Prev == 0);
+				JQ_ASSERT(Tail != JobIndex);
+				NewHead = Job.Next;
+			}
+			else if(Tail == JobIndex)
+			{
+				JQ_ASSERT(Job.Next == 0);
+				JQ_ASSERT(Head != JobIndex);
+				NewTail = Job.Prev;
+			}
+			else
+			{
+				JQ_ASSERT(JobIndex != Tail);
+				JQ_ASSERT(JobIndex != Head);
+				JQ_ASSERT(Job.Next);
+				JQ_ASSERT(Job.Prev);
+
+				JqJob& PrevJob = JqState.Jobs[Job.Prev];
+				JqJob& NextJob = JqState.Jobs[Job.Next];
+				JQ_ASSERT(PrevJob.Next == JobIndex);
+				JQ_ASSERT(NextJob.Prev == JobIndex);
+				PrevJob.Next = Job.Next;
+				NextJob.Prev = Job.Prev;
+			}
+			Q.Link	 = JqPackQueueLink(NewHead, NewTail, 0);
+			Job.Next = 0;
+			Job.Prev = 0;
+		}
+		else
+		{
+			printf("PopSkip %d -> %d ... \n", JobIndex, QueueIndex);
+		}
+	}
+	if(PopAll)
+	{
+		*OutSubJob = 0;
+	}
+	else
+	{
+		*OutSubJob = NumJobs - 1 - SubIndex;
+	}
+
+	return PopCount;
 #endif
 }
 
@@ -1320,7 +1498,72 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 	JQ_ASSERT(QueueIndex < JQ_NUM_QUEUES);
 	JqQueue& Queue = JqState.Queues[QueueIndex];
 	JQ_MICROPROFILE_SCOPE("Pop", MP_AUTO);
-#if JQ_LOCKLESS_POP
+#if 2 == JQ_LOCKLESS_POP
+
+	uint16_t PopCount = 0;
+	uint16_t JobIndex = 0;
+	uint16_t SubIndex = 0xffff;
+	do
+	{
+		PopCount		  = 0;
+		JobIndex		  = 0;
+		SubIndex		  = 0xffff;
+		uint16_t PeekNext = 0;
+		uint16_t Head, Tail, JobCount;
+		uint64_t Old, New;
+		(void)New;
+
+		Old = Queue.Link.load();
+		JqUnpackQueueLink(Old, Head, Tail, JobCount);
+#if JQ_LOCKLESS_PEEK_COUNT
+
+		uint16_t PopLocation = Head;
+
+		for(int i = 0; i < JQ_LOCKLESS_PEEK_COUNT + 1; ++i)
+		{
+			if(!PopLocation)
+				break;
+			if(0 != (PopCount = JqQueuePopInternal(PopLocation, QueueIndex, &SubIndex, &PeekNext, false)))
+			{
+				JobIndex = PopLocation;
+				break;
+			}
+			else
+			{
+				PopLocation = PeekNext;
+			}
+		}
+		if(JobIndex)
+		{
+			break;
+		}
+#else
+
+		if(!Head) // Nothing to pop
+			break;
+		if(0 != (PopCount = JqQueuePopInternal(Head, QueueIndex, &SubIndex, &PeekNext, false)))
+		{
+			JobIndex = Head;
+			break;
+		}
+		else
+		{
+			if(!PeekNext)
+			{
+				break;
+			}
+		}
+
+#endif
+	} while(true);
+
+	if(JobIndex)
+	{
+		*OutSubJob = SubIndex;
+	}
+	return JobIndex;
+
+#elif 1 == JQ_LOCKLESS_POP
 	uint16_t JobIndex;
 	int		 SubIndex;
 
@@ -1355,23 +1598,23 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 				JqJob& Job = JqState.Jobs[Head];
 				if(Head == Tail) // last element in queue
 				{
-					JQ_ASSERT(Job.LinkNext == 0);
+					JQ_ASSERT(Job.Next == 0);
 					NewHead	 = 0;
 					NewTail	 = 0;
 					NewCount = 0;
 				}
 				else
 				{
-					JQ_ASSERT(Job.LinkNext);
+					JQ_ASSERT(Job.Next);
 
-					NewHead		   = Job.LinkNext;
+					NewHead		   = Job.Next;
 					JqJob& NextJob = JqState.Jobs[NewHead];
-					JQ_ASSERT(NextJob.LinkPrev == Head);
-					NextJob.LinkPrev = 0;
+					JQ_ASSERT(NextJob.Prev == Head);
+					NextJob.Prev = 0;
 
 					NewCount = NextJob.NumJobs;
 
-					JQ_ASSERT(NewCount == NextJob.PendingStart.load());
+					// JQ_ASSERT(NewCount == NextJob.PendingStart.load());
 				}
 				New = JqPackQueueLink(NewHead, NewTail, NewCount);
 
@@ -1384,8 +1627,8 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 					JQ_ASSERT(NewTail == 0);
 				}
 
-				Job.LinkNext = 0;
-				JQ_ASSERT(Job.LinkPrev == 0);
+				Job.Next = 0;
+				JQ_ASSERT(Job.Prev == 0);
 
 				bool Success = Queue.Link.compare_exchange_strong(Old, New);
 
@@ -1407,8 +1650,10 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 
 	if(JobIndex)
 	{
-		JqJob& Job			  = JqState.Jobs[JobIndex];
-		int	   UnusedSubIndex = --Job.PendingStart; // not used anymore, kept directly with head.
+		JqJob& Job = JqState.Jobs[JobIndex];
+		/// note: queue part is unused here.
+		// JqUnpackStartAndQueue
+		int UnusedSubIndex = --Job.PendingStartAndQueue; // not used anymore, kept directly with head.
 		(void)UnusedSubIndex;
 		JQ_ASSERT(UnusedSubIndex >= 0 && UnusedSubIndex < Job.NumJobs);
 
@@ -1424,13 +1669,13 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 	{
 		JQ_ASSERT(JobIndex < JQ_JOB_BUFFER_SIZE);
 		JqJob& Job		= JqState.Jobs[JobIndex];
-		int	   SubIndex = --Job.PendingStart;
+		int	   SubIndex = --Job.PendingStartAndQueue;
 		// printf("JqQueuePop job %d -> %d sub %d\n", JobIndex, QueueIndex, SubIndex);
 
 		JQ_ASSERT(SubIndex >= 0); // should never go negative.
 		if(SubIndex == 0)
 		{
-			Queue.LinkHead = Job.LinkNext;
+			Queue.LinkHead = Job.Next;
 			if(JobIndex == Queue.LinkTail)
 			{
 				JQ_ASSERT(Queue.LinkHead == 0);
@@ -1590,6 +1835,11 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t Queu
 	{
 		NumJobs = JqState.NumWorkers;
 	}
+	if(NumJobs >= 0xffff)
+	{
+		// Not supported right now.
+		JQ_BREAK();
+	}
 
 	uint64_t Handle = 0;
 	{
@@ -1630,8 +1880,12 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t Queu
 
 		JQ_ASSERT(NumJobs <= 0xffff);
 
-		Job.NumJobs		  = NumJobs;
-		Job.PendingStart  = 0;
+		Job.NumJobs = NumJobs;
+#if JQ_LOCKLESS_POP == 2
+		Job.PendingStartAndQueue = JqPackStartAndQueue(0, 0xff);
+#else
+		Job.PendingStartAndQueue = JqPackStartAndQueue(0, 0);
+#endif
 		Job.PendingFinish = 0;
 
 		// Job.PreconditionCount++;
