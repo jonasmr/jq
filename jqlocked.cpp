@@ -80,6 +80,7 @@ struct JqJob
 	uint64_t nPreconditionSibling; // In case this job is registered as a precodition, linked list from the job its waiting on.
 
 	uint8_t nStalled;
+	uint8_t nReserved;
 
 	// uint32_t nSignalCount;//debug
 
@@ -985,6 +986,7 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t nPri
 		{
 			JQ_ASSERT(pEntry->nStartedHandle == ReservedHandle);
 			JQ_ASSERT(pEntry->nPrio != 0xff);
+			JQ_ASSERT(pEntry->nReserved == 1);
 		}
 		else
 		{
@@ -1002,6 +1004,7 @@ uint64_t JqAddInternal(uint64_t ReservedHandle, JqFunction JobFunc, uint8_t nPri
 		pEntry->nNumFinished   = 0;
 		pEntry->nRange		   = nRange;
 		pEntry->nJobFlags	   = nJobFlags;
+		pEntry->nReserved	   = 0;
 
 		uint64_t nParentHandle = nParent;
 		pEntry->nParent		   = nParentHandle % JQ_JOB_BUFFER_SIZE;
@@ -1076,6 +1079,7 @@ uint64_t JqReserve(uint8_t nPipe, uint32_t JobFlags)
 	pEntry->nNumStarted	   = 1;
 	pEntry->nNumFinished   = 0;
 	pEntry->nRange		   = 0;
+	pEntry->nReserved	   = 1;
 
 	uint64_t Parent = 0 != (JobFlags & JQ_JOBFLAG_DETACHED) ? 0 : JqSelf();
 
@@ -1100,7 +1104,11 @@ uint64_t JqReserve(uint8_t nPipe, uint32_t JobFlags)
 // Mark reservation as finished, without actually executing any jobs.
 void JqCloseReserved(uint64_t Handle)
 {
-	JQ_BREAK();
+	JqMutexLock Lock(JqState.Mutex);
+	JqJob*		pEntry = &JqState.Jobs[Handle % JQ_JOB_BUFFER_SIZE];
+	JQ_ASSERT(pEntry->nReserved == 1);
+	pEntry->nReserved = 0;
+	JqIncrementFinished(Handle);
 }
 
 void JqDump()

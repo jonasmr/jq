@@ -205,6 +205,14 @@ void JqTestPrio()
 	uint64_t Barrier = JqReserve(0);
 	uint64_t Final	 = JqReserve(0);
 
+	std::atomic<int> TwoStart;
+	std::atomic<int> TwoEnd;
+	TwoStart					= 0;
+	TwoEnd						= 0;
+	std::atomic<int>* pTwoStart = &TwoStart;
+	std::atomic<int>* pTwoEnd	= &TwoEnd;
+
+	// printf("Two two %d %d\n", pTwoStart->load(), pTwoEnd->load());
 	{
 		// different ways of adding dependent jobs
 		uint64_t PostBarrier0 = JqReserve(0);
@@ -241,13 +249,14 @@ void JqTestPrio()
 	}
 
 	uint64_t J1 = JqAdd(
-		[] {
+		[](int index) {
 			MICROPROFILE_SCOPEI("JQ_TEST", "BASE-7-JOBS", MP_GREY);
 			JobSpinWork(5000);
 		},
 		7, 3);
 	uint64_t J2 = JqAdd(
-		[] {
+		[pTwoStart, pTwoEnd] {
+			pTwoStart->fetch_add(1);
 			MICROPROFILE_SCOPEI("JQ_TEST", "BASE-1", MP_GREY);
 			JqAdd(
 				[] {
@@ -257,6 +266,7 @@ void JqTestPrio()
 				},
 				1, 20);
 			JobSpinWork(2000);
+			pTwoEnd->fetch_add(1);
 		},
 		0, 2, 1);
 
@@ -304,7 +314,7 @@ void JqTestPrio()
 			MICROPROFILE_SCOPEI("JQ_TEST", "Lots of increments", (H.Frame & 1) == 1 ? MP_YELLOW : MP_CYAN);
 			JobSpinWork(50);
 			pFoo->fetch_add(1);
-			// printf("JOB INDEX IS %d", JobIndex);
+			// printf("JOB INDEX IS %d\n", JobIndex);
 			if(JobIndex == 999)
 			{
 				// printf("HERE HERE JOB INDEX IS %d\n", JobIndex);
@@ -361,6 +371,35 @@ void JqTestPrio()
 		},
 		1);
 
+	uint64_t J32_0 = JqAddSuccessor(
+		Final,
+		[] {
+			MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-1", MP_GREY);
+			// JobSpinWork(100);
+		},
+		0, 32);
+	uint64_t J32_1 = JqAddSuccessor(
+		Final,
+		[] {
+			MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-2", MP_GREY);
+			// JobSpinWork(100);
+		},
+		0, 32);
+	uint64_t J32_2 = JqAddSuccessor(
+		Final,
+		[] {
+			MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-3", MP_GREY);
+			// JobSpinWork(100);
+		},
+		0, 32);
+	uint64_t J32_3 = JqAddSuccessor(
+		Final,
+		[] {
+			MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-4", MP_GREY);
+			// JobSpinWork(100);
+		},
+		0, 32);
+
 	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
 	JqWait(J3);
@@ -368,6 +407,10 @@ void JqTestPrio()
 	JqWait(ReservedHandle);
 	JqWait(Successor);
 	JqWait(ReservedSuccessor);
+	JqWait(J32_0);
+	JqWait(J32_1);
+	JqWait(J32_2);
+	JqWait(J32_3);
 
 	if(0 == *pReservedSuccessorDone)
 	{
@@ -576,7 +619,7 @@ void JqTest()
 
 #define JQ_NODE_TEST 0
 
-#define JQ_TEST_WORKERS 8
+#define JQ_TEST_WORKERS 64
 
 int main(int argc, char* argv[])
 {
