@@ -94,7 +94,7 @@ bool				 JqQueueEmpty(uint8_t Queue);
 bool				 JqPendingJobs(uint64_t Job);
 void				 JqSelfPush(uint64_t Job, uint32_t JobIndex);
 void				 JqSelfPop(uint64_t Job);
-void				 JqFinishSubJob(uint16_t JobIndex);
+void				 JqFinishSubJob(uint16_t JobIndex, uint32_t Count);
 void				 JqFinishInternal(uint16_t JobIndex);
 void				 JqDecPrecondtion(uint64_t Handle, int Count);
 void				 JqIncPrecondtion(uint64_t Handle, int Count);
@@ -107,6 +107,7 @@ JqMutex&			 JqGetJobMutex(uint64_t JobIndex);
 JqConditionVariable& JqGetJobConditionVariable(uint64_t Handle);
 uint16_t			 JqDependentJobLinkAlloc(uint64_t Handle);
 void				 JqDependentJobLinkFreeList(uint16_t Index);
+uint16_t			 JqQueuePopInternal(uint16_t JobIndex, uint8_t QueueIndex, uint16_t* OutSubJob, uint16_t* OutNextJob, uint16_t* OutMustRetry, bool PopAll);
 
 // JqDependentJobLink&	 JqAllocDependentJobLink();
 // void				 JqFreeDependentJobLink(JqDependentJobLink& Link);
@@ -136,6 +137,7 @@ struct JqJob
 	std::atomic<uint64_t> StartedHandle;  /// Handle which has been added to the queue
 	std::atomic<uint64_t> FinishedHandle; /// Handle which was last finished
 	std::atomic<uint64_t> ClaimedHandle;  /// Handle which has claimed this header
+	std::atomic<uint64_t> Cancel;		  /// Largest Cancelled Handle
 
 	std::atomic<uint64_t> PendingFinish;		/// No. of jobs & (direct) child jobs that need to finish in order for this to be finished.
 	std::atomic<uint64_t> PendingStartAndQueue; /// No. of Jobs that needs to be Started, and the queue which is it inserted to
@@ -609,7 +611,7 @@ void JqFinishInternal(uint16_t nJobIndex)
 		}
 	}
 	if(Parent)
-		JqFinishSubJob(Parent);
+		JqFinishSubJob(Parent, 1);
 	if(Dependent.Next)
 	{
 		// Note: first element is embedded so it doesn't need freeing.
@@ -617,12 +619,13 @@ void JqFinishInternal(uint16_t nJobIndex)
 	}
 }
 
-void JqFinishSubJob(uint16_t nJobIndex)
+void JqFinishSubJob(uint16_t nJobIndex, uint32_t FinishCount = 1)
 {
 	JQ_MICROPROFILE_VERBOSE_SCOPE("JqFinishSubJob", 0xffff);
 	nJobIndex		   = nJobIndex % JQ_JOB_BUFFER_SIZE;
 	JqJob& Job		   = JqState.Jobs[nJobIndex];
-	int	   FinishIndex = --Job.PendingFinish;
+	int	   before	   = Job.PendingFinish.fetch_sub(FinishCount);
+	int	   FinishIndex = before - FinishCount;
 	JqState.Stats.nNumFinishedSub++;
 	JQ_ASSERT(FinishIndex >= 0);
 	if(0 == FinishIndex)
@@ -743,21 +746,24 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 	JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
 
 	JQ_ASSERT(JqSelfPos < JQ_MAX_JOB_STACK);
+	uint16_t nWorkIndex = nJob % JQ_JOB_BUFFER_SIZE;
 
-	JqSelfPush(nJob, nSubIndex);
+	if(JqState.Jobs[nWorkIndex].Cancel.load() != nJob)
 	{
-		uint16_t nWorkIndex = nJob % JQ_JOB_BUFFER_SIZE;
-		uint16_t nNumJobs	= JqState.Jobs[nWorkIndex].NumJobs;
-		int		 nRange		= JqState.Jobs[nWorkIndex].Range;
-		int		 nFraction	= nRange / nNumJobs;
-		int		 nRemainder = nRange - nFraction * nNumJobs;
-		int		 nStart		= JqGetRangeStart(nSubIndex, nFraction, nRemainder);
-		int		 nEnd		= JqGetRangeStart(nSubIndex + 1, nFraction, nRemainder);
-		JqRunInternal(nWorkIndex, nStart, nEnd);
+		JqSelfPush(nJob, nSubIndex);
+		{
+			uint16_t nNumJobs	= JqState.Jobs[nWorkIndex].NumJobs;
+			int		 nRange		= JqState.Jobs[nWorkIndex].Range;
+			int		 nFraction	= nRange / nNumJobs;
+			int		 nRemainder = nRange - nFraction * nNumJobs;
+			int		 nStart		= JqGetRangeStart(nSubIndex, nFraction, nRemainder);
+			int		 nEnd		= JqGetRangeStart(nSubIndex + 1, nFraction, nRemainder);
+			JqRunInternal(nWorkIndex, nStart, nEnd);
+		}
+		JqSelfPop(nJob);
 	}
-	JqSelfPop(nJob);
 
-	JqFinishSubJob(nJob);
+	JqFinishSubJob(nJob, 1);
 }
 
 uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumQueues, uint8_t* pQueues)
@@ -1132,29 +1138,44 @@ JQ_API void JqSpawn(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange,
 	JqWait(nJob, nWaitFlag);
 }
 
-bool JqCancel(uint64_t nJob)
+bool JqCancel(uint64_t Handle)
 {
+	// two cases
+	//  	- If the job is already in a queue (and possibly have some instances running), we claim all the remaining start entries, and decrement them as finished
+	// 		  if we're the last ones here, we will end up finishing job. if we're not last, the running jobs will decrement and finish the leftovers
+	//  	- If it hasn't been added, we just set the cancelled handle.
 
-	// todo: implement
-	JQ_BREAK();
-	// JqMutexLock Lock(JqState.Mutex);
-	// uint16_t	nIndex = nJob % JQ_JOB_BUFFER_SIZE;
+	if(JqIsDone(Handle))
+		return false;
+	uint16_t JobIndex = Handle % JQ_NUM_JOBS;
+	JqJob&	 Job	  = JqState.Jobs[JobIndex];
 
-	// JqJob* pEntry = &JqState.Jobs[nIndex];
-	// if(pEntry->StartedHandle != nJob)
-	// 	return false;
-	// if(pEntry->nNumStarted != 0)
-	// 	return false;
-	// uint32_t nNumJobs = pEntry->nNumJobs;
-	// pEntry->nNumJobs  = 0;
+	uint64_t CancelHandle;
+	do
+	{
+		CancelHandle = Job.Cancel.load();
+		if(!JQ_LT_WRAP(Handle, CancelHandle))
+		{
+			JQ_ASSERT(JqIsDone(Handle));
+			return false; // something later was cancelled
+		}
 
-	// JqPriorityListRemove(nIndex);
-	// JqCheckFinished(nJob);
-	// JQ_ASSERT(JqIsDone(nJob));
+	} while(!Job.Cancel.compare_exchange_weak(CancelHandle, Handle));
 
-	// JqState.Stats.nNumCancelled++;
-	// JqState.Stats.nNumCancelledSub += nNumJobs;
-	return true;
+	uint16_t Start;
+	uint8_t	 Queue;
+	uint64_t StartAndQueue = Job.PendingStartAndQueue.load();
+	JqUnpackStartAndQueue(StartAndQueue, Start, Queue);
+
+	if(Start) // Jobs been added and there is more to finish
+	{
+		uint16_t SubJob	   = 0;
+		uint16_t NextJob   = 0;
+		uint16_t MustRetry = 0;
+		uint16_t PopCount  = JqQueuePopInternal(JobIndex, Queue, &SubJob, &NextJob, &MustRetry, true);
+		JqFinishSubJob(Handle, PopCount);
+	}
+	return false;
 }
 void JqIncPrecondtion(uint64_t Handle, int Count)
 {
@@ -1191,23 +1212,11 @@ void JqDecPrecondtion(uint64_t Handle, int Count)
 			uint8_t Queue = Job.Queue;
 			JqQueuePush(Queue, Handle);
 			{
-				if(0)
+				uint32_t nNumSema = JqState.QueueNumSemaphores[Queue];
+				for(uint32_t i = 0; i < nNumSema; ++i)
 				{
-					// JQ_MAX_SEMAPHORES
-					for(uint32_t i = 0; i < JQ_MAX_SEMAPHORES; ++i)
-					{
-						// int nSemaIndex = JqState.QueueToSemaphore[Queue][i];
-						JqState.Semaphore[i].Signal(-1);
-					}
-				}
-				else
-				{
-					uint32_t nNumSema = JqState.QueueNumSemaphores[Queue];
-					for(uint32_t i = 0; i < nNumSema; ++i)
-					{
-						int nSemaIndex = JqState.QueueToSemaphore[Queue][i];
-						JqState.Semaphore[nSemaIndex].Signal(NumJobs);
-					}
+					int nSemaIndex = JqState.QueueToSemaphore[Queue][i];
+					JqState.Semaphore[nSemaIndex].Signal(NumJobs);
 				}
 			}
 		}
