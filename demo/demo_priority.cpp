@@ -371,35 +371,37 @@ void JqTestPrio()
 		},
 		1);
 
-	uint64_t J32_0 = JqAddSuccessor(
-		Final,
-		[] {
-			MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-1", MP_GREY);
-			// JobSpinWork(100);
-		},
-		0, 32);
-	uint64_t J32_1 = JqAddSuccessor(
-		Final,
-		[] {
-			MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-2", MP_GREY);
-			// JobSpinWork(100);
-		},
-		0, 32);
-	uint64_t J32_2 = JqAddSuccessor(
-		Final,
-		[] {
-			MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-3", MP_GREY);
-			// JobSpinWork(100);
-		},
-		0, 32);
-	uint64_t J32_3 = JqAddSuccessor(
-		Final,
-		[] {
-			MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-4", MP_GREY);
-			// JobSpinWork(100);
-		},
-		0, 32);
-
+	for(uint32_t i = 0; i < 10; ++i)
+	{
+		JqAddSuccessor(
+			Final,
+			[] {
+				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-1", MP_GREY);
+				// JobSpinWork(100);
+			},
+			0, 32);
+		JqAddSuccessor(
+			Final,
+			[] {
+				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-2", MP_GREY);
+				// JobSpinWork(100);
+			},
+			0, 32);
+		JqAddSuccessor(
+			Final,
+			[] {
+				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-3", MP_GREY);
+				// JobSpinWork(100);
+			},
+			0, 32);
+		JqAddSuccessor(
+			Final,
+			[] {
+				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-4", MP_GREY);
+				// JobSpinWork(100);
+			},
+			0, 32);
+	}
 	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
 	JqWait(J3);
@@ -407,10 +409,10 @@ void JqTestPrio()
 	JqWait(ReservedHandle);
 	JqWait(Successor);
 	JqWait(ReservedSuccessor);
-	JqWait(J32_0);
-	JqWait(J32_1);
-	JqWait(J32_2);
-	JqWait(J32_3);
+	// JqWait(J32_0);
+	// JqWait(J32_1);
+	// JqWait(J32_2);
+	// JqWait(J32_3);
 
 	if(0 == *pReservedSuccessorDone)
 	{

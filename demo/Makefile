@@ -5,7 +5,7 @@ LDFLAGS=-lpthread -lcurses
 
 CFLAGS=-I.. -I../microprofile -I. -DGLEW_STATIC -Wall
 #CFLAGS+=-fsanitize=undefined-trap -fsanitize-undefined-trap-on-error
-CFLAGS+=-g -O0 -Wno-invalid-offsetof -Wno-format
+CFLAGS+=-g -O2 -Wno-invalid-offsetof -Wno-format
 CFLAGS+=-DJQ_ASSERT_LOCKS
 CFLAGS+=-DJQ_MICROPROFILE
 CFLAGS+=-DMICROPROFILE_MAX_THREADS=128
@@ -14,6 +14,7 @@ CPPFLAGS=$(CFLAGS)
 #CPPFLAGS+=-stdlib=libc++ -std=c++11
 
 CPPFLAGS+=-DMICROPROFILE_GPU_TIMERS=0
+CPPFLAGS+=-DJQ_MICROPROFILE_VERBOSE
 #CPPFLAGS+=-DJQ_MICROPROFILE
 
 

@@ -27,11 +27,13 @@
 // 		* colors
 //		* fix manymutex lock (lockless take-job)
 //		* multidep
-//		peeking
+//		* peeking
 //		child-wait
 //		* pop any job
-//		cancel job
+//		* cancel job
 //
+// 		cleanup tests
+//		delete old version
 //		upgrade microprofile
 //		switch to ng
 //
@@ -82,8 +84,12 @@
 #define JQ_JOBFLAG_UNINITIALIZED 0x80
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 #define JQ_NUM_LOCKS 32
-#define JQ_LOCKLESS_POP 1
-#define JQ_LOCKLESS_PEEK_COUNT 0 // How many jobs do we allow peeking ahead? (Only for JQ_LOCKLESS_POP == 2)
+#define JQ_LOCKLESS_POP 2
+
+// How many jobs do we allow peeking ahead? (Only for JQ_LOCKLESS_POP == 2). Current measurements says it doesn't really help that much, even for synthetic benchmarks, that should benefit from it
+#define JQ_LOCKLESS_PEEK_COUNT 0
+
+static_assert(JQ_NUM_QUEUES <= 64, "Currently a queue mask is being put in a uint64_t");
 
 struct JqMutexLock;
 
@@ -96,7 +102,7 @@ void				 JqSelfPush(uint64_t Job, uint32_t JobIndex);
 void				 JqSelfPop(uint64_t Job);
 void				 JqFinishSubJob(uint16_t JobIndex, uint32_t Count);
 void				 JqFinishInternal(uint16_t JobIndex);
-void				 JqDecPrecondtion(uint64_t Handle, int Count);
+void				 JqDecPrecondtion(uint64_t Handle, int Count, uint64_t* QueueTriggerMask = 0);
 void				 JqIncPrecondtion(uint64_t Handle, int Count);
 void				 JqUnpackQueueLink(uint64_t Value, uint16_t& Head, uint16_t& Tail, uint16_t& JobCount);
 uint64_t			 JqPackQueueLink(uint16_t Head, uint16_t Tail, uint16_t JobCount);
@@ -108,6 +114,7 @@ JqConditionVariable& JqGetJobConditionVariable(uint64_t Handle);
 uint16_t			 JqDependentJobLinkAlloc(uint64_t Handle);
 void				 JqDependentJobLinkFreeList(uint16_t Index);
 uint16_t			 JqQueuePopInternal(uint16_t JobIndex, uint8_t QueueIndex, uint16_t* OutSubJob, uint16_t* OutNextJob, uint16_t* OutMustRetry, bool PopAll);
+void				 JqTriggerQueues(uint64_t QueueTriggerMask);
 
 // JqDependentJobLink&	 JqAllocDependentJobLink();
 // void				 JqFreeDependentJobLink(JqDependentJobLink& Link);
@@ -601,19 +608,24 @@ void JqFinishInternal(uint16_t nJobIndex)
 	}
 	if(Dependent.Job)
 	{
-		JqDecPrecondtion(Dependent.Job, 1);
+		JQ_MICROPROFILE_VERBOSE_SCOPE("DecPrecondtion", MP_AUTO);
+		uint64_t QueueTriggerMask = 0;
+		JqDecPrecondtion(Dependent.Job, 1, &QueueTriggerMask);
 		uint16_t Next = Dependent.Next;
 		while(Next)
 		{
 			uint64_t Job = JqState.DependentJobLinks[Next].Job;
 			Next		 = JqState.DependentJobLinks[Next].Next;
-			JqDecPrecondtion(Job, 1);
+			JqDecPrecondtion(Job, 1, &QueueTriggerMask);
 		}
+		// Trigger only once. the overhead for kicking all the queues can be substantial
+		JqTriggerQueues(QueueTriggerMask);
 	}
 	if(Parent)
 		JqFinishSubJob(Parent, 1);
 	if(Dependent.Next)
 	{
+
 		// Note: first element is embedded so it doesn't need freeing.
 		JqDependentJobLinkFreeList(Dependent.Next);
 	}
@@ -768,7 +780,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 
 uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumQueues, uint8_t* pQueues)
 {
-	JQ_MICROPROFILE_SCOPE("JQ_TAKE_JOB", MP_AUTO); // if this starts happening the job queue size should be increased..
+	JQ_MICROPROFILE_VERBOSE_SCOPE("JqTakeJob", MP_AUTO); // if this starts happening the job queue size should be increased..
 	const uint32_t nCount = nNumQueues ? nNumQueues : JQ_NUM_QUEUES;
 	for(uint32_t i = 0; i < nCount; i++)
 	{
@@ -1188,7 +1200,40 @@ void JqIncPrecondtion(uint64_t Handle, int Count)
 	JQ_ASSERT(Before > 0);
 }
 
-void JqDecPrecondtion(uint64_t Handle, int Count)
+void JqTriggerQueues(uint64_t QueueTriggerMask)
+{
+	JQ_MICROPROFILE_VERBOSE_SCOPE("TriggerQueues", MP_AUTO);
+	bool SemaphoreTrigger[JQ_MAX_SEMAPHORES];
+	for(bool& Trigger : SemaphoreTrigger)
+		Trigger = false;
+	uint8_t Queue = 0;
+	while(QueueTriggerMask)
+	{
+		if(QueueTriggerMask & 1)
+		{
+			JQ_ASSERT(Queue < JQ_NUM_QUEUES);
+			uint32_t nNumSema = JqState.QueueNumSemaphores[Queue];
+			for(uint32_t i = 0; i < nNumSema; ++i)
+			{
+				int nSemaIndex				 = JqState.QueueToSemaphore[Queue][i];
+				SemaphoreTrigger[nSemaIndex] = true;
+			}
+		}
+		QueueTriggerMask <<= 1;
+		Queue++;
+	}
+	uint32_t NumWorkers = JqState.NumWorkers;
+	for(uint32_t i = 0; i < JQ_MAX_SEMAPHORES; ++i)
+	{
+		if(SemaphoreTrigger[i])
+		{
+			// Trigger all in the case of batch
+			JqState.Semaphore[i].Signal(NumWorkers);
+		}
+	}
+}
+
+void JqDecPrecondtion(uint64_t Handle, int Count, uint64_t* QueueTriggerMask)
 {
 	uint16_t Index = Handle % JQ_JOB_BUFFER_SIZE;
 	JqJob&	 Job   = JqState.Jobs[Index];
@@ -1211,7 +1256,14 @@ void JqDecPrecondtion(uint64_t Handle, int Count)
 		{
 			uint8_t Queue = Job.Queue;
 			JqQueuePush(Queue, Handle);
+			if(QueueTriggerMask)
 			{
+				JQ_ASSERT(Queue < 64);
+				*QueueTriggerMask |= (1llu << Queue);
+			}
+			else
+			{
+				JQ_MICROPROFILE_VERBOSE_SCOPE("TriggerQueues2", MP_AUTO);
 				uint32_t nNumSema = JqState.QueueNumSemaphores[Queue];
 				for(uint32_t i = 0; i < nNumSema; ++i)
 				{
@@ -1265,6 +1317,7 @@ inline uint64_t JqPackStartAndQueue(uint16_t PendingStart, uint8_t Queue)
 
 void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 {
+	JQ_MICROPROFILE_SCOPE("JqQueuePush", MP_AUTO);
 	uint16_t JobIndex = Handle % JQ_JOB_BUFFER_SIZE;
 	// JQ_ASSERT(JobIndex < JQ_JOB_BUFFER_SIZE);
 	JQ_ASSERT(QueueIndex < JQ_NUM_QUEUES);
@@ -1519,7 +1572,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 {
 	JQ_ASSERT(QueueIndex < JQ_NUM_QUEUES);
 	JqQueue& Queue = JqState.Queues[QueueIndex];
-	JQ_MICROPROFILE_SCOPE("Pop", MP_AUTO);
+	JQ_MICROPROFILE_VERBOSE_SCOPE("Pop", MP_AUTO);
 #if 2 == JQ_LOCKLESS_POP
 
 	uint16_t PopCount  = 0;
@@ -1541,15 +1594,17 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 
 		Old = Queue.Link.load();
 		JqUnpackQueueLink(Old, Head, Tail, JobCount);
-#if JQ_LOCKLESS_PEEK_COUNT
+#if 1 || JQ_LOCKLESS_PEEK_COUNT
 
+		if(!Head) // Nothing to pop
+			break;
 		uint16_t PopLocation = Head;
 
 		for(int i = 0; i < JQ_LOCKLESS_PEEK_COUNT + 1; ++i)
 		{
 			if(!PopLocation)
 				break;
-			if(0 != (PopCount = JqQueuePopInternal(PopLocation, QueueIndex, &SubIndex, &PeekNext, false)))
+			if(0 != (PopCount = JqQueuePopInternal(PopLocation, QueueIndex, &SubIndex, &PeekNext, &MustRetry, false)))
 			{
 				JobIndex = PopLocation;
 				break;
@@ -1615,7 +1670,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
 		{
 			JQ_ASSERT(JobCount == 1);
 			// we'll be hitting 0, so we have to lock
-			JQ_MICROPROFILE_SCOPE("LockedPop", MP_AUTO);
+			JQ_MICROPROFILE_VERBOSE_SCOPE("LockedPop", MP_AUTO);
 			JqSingleMutexLock L(Queue.Mutex);
 
 			Old = Queue.Link.load();
