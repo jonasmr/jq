@@ -33,7 +33,7 @@
 #endif
 
 #ifndef JQ_MAX_JOB_STACK
-#define JQ_MAX_JOB_STACK 8
+#define JQ_MAX_JOB_STACK 64
 #endif
 
 #ifndef JQ_NUM_QUEUES
@@ -55,6 +55,8 @@
 #ifndef JQ_LOCK_STATS
 #define JQ_LOCK_STATS 1
 #endif
+
+#define JQ_MAX_SUBJOBS (0xfffe) // Max times a single job can run
 
 #define JQ_INVALID_QUEUE 0xff
 
@@ -311,8 +313,8 @@ JQ_API void		JqWaitAll();
 JQ_API void		JqWaitAll(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API uint64_t JqWaitAny(uint64_t* pJobs, uint32_t nNumJobs, uint32_t nWaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API bool		JqCancel(uint64_t nJob);
-JQ_API void		JqExecuteChildren(uint64_t nJob);
-JQ_API uint64_t JqGroupBegin(uint8_t Queues); // add a non-executing job to group all jobs added between begin/end
+JQ_API bool		JqExecuteChild(uint64_t nJob); // execute 1 child job.
+JQ_API uint64_t JqGroupBegin(uint8_t Queues);  // add a non-executing job to group all jobs added between begin/end
 JQ_API void		JqGroupEnd();
 JQ_API bool		JqIsDone(uint64_t nJob);
 JQ_API bool		JqIsDoneExt(uint64_t nJob, uint32_t nWaitFlag);
