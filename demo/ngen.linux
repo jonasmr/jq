@@ -1,0 +1,15 @@
+
+
+cflags 				-DTARGET_X86_64
+cflags				-DMICROPROFILE_GPU_TIMERS=0
+cflags.debug 		-D_DEBUG -O0
+cflags.release 		-D_DEBUG -O2
+cflags				-g
+cflags				-Wno-format
+
+ldflags 			-lpthread
+ldflags 			-ldl -rdynamic -lcrypto -lssl
+ldflags 			-lpthread
+ldflags 			-lcurses
+
+ldflags 			-latomic
