@@ -1,3 +1,6 @@
 [submodule "microprofile"]
 	path = microprofile
 	url = git@github.com:jonasmr/microprofile.git
+[submodule "demo/ngen"]
+	path = demo/ngen
+	url = https://github.com/jonasmr/ngen.git

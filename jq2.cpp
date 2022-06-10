@@ -32,13 +32,16 @@
 //		* pop any job
 //		* cancel job
 //		* wait all
+// 		run sanitizers
 //		review wait child.
 //		comment / code pass
+// 		fix spawn to always take one
 //
 // 		cleanup tests
 //		delete old version
 //		upgrade microprofile
 //		switch to ng
+//		new doc
 //
 // Flow
 //
@@ -792,6 +795,8 @@ uint16_t JqPendingStarts(uint64_t Handle)
 }
 
 // this code is O(n) where n is the no. of nodes (JQ_NUM_JOBS)
+// This uses JqState.Parents array, which is a mirror of each Jobs Parent member, to allow us to do this relatively quickly
+//
 // I wish this could be written in a simpler way
 uint16_t JqTakeChildJob(uint64_t Handle, uint16_t* OutSubIndex)
 {
@@ -812,7 +817,6 @@ uint16_t JqTakeChildJob(uint64_t Handle, uint16_t* OutSubIndex)
 	ChildState ExtractState[JQ_NUM_JOBS] = { ES_UNKNOWN };
 	uint16_t   Stack[JQ_NUM_JOBS]		 = { 0 };
 
-	// int NumChildren = 0;
 	if(JqPendingStarts(Handle))
 	{
 		// try the job itself.
@@ -824,6 +828,10 @@ uint16_t JqTakeChildJob(uint64_t Handle, uint16_t* OutSubIndex)
 
 	for(uint64_t j = (Handle + 1); j != (Handle + JQ_NUM_JOBS); ++j)
 	{
+		// for each node, traverse back to its root.
+		// if is a child of the job we are searching for, try to take it
+		// if not, tag it so we don't traverse it again.
+		// This
 		uint32_t   Index	 = j % JQ_NUM_JOBS;
 		ChildState RootState = ExtractState[Index];
 		JQ_ASSERT(RootState != ES_TAGGED);
@@ -865,7 +873,7 @@ uint16_t JqTakeChildJob(uint64_t Handle, uint16_t* OutSubIndex)
 			} while(RunState == S_RUNNING);
 
 			// unwind the stored stuff and tag accordingly
-			// if the root is a child, tag all as childrent
+			// if the root is a child, tag all as children
 			// if we detected a loop or root is not a child, tag all as non-children
 			if(RunState == S_OVERFLOW || LastState == ES_NOT_CHILD || LastState == ES_TAGGED)
 			{
@@ -888,7 +896,7 @@ uint16_t JqTakeChildJob(uint64_t Handle, uint16_t* OutSubIndex)
 						FailIndex = i;
 						break;
 					}
-					if(Job.Parent != LastParent)
+					if(Job.Parent != LastParent) // if parent is changed, the child tree is invalid
 					{
 						FailIndex = i;
 						break;
@@ -899,7 +907,6 @@ uint16_t JqTakeChildJob(uint64_t Handle, uint16_t* OutSubIndex)
 						break;
 					}
 					// if we are here, job should be safe to take
-					// not that this is not -100%- safe, as obviously, the job -could- finish inbetween any single line where we get a cswitch
 
 					if(JqTakeJobFromHandle(Claimed, OutSubIndex))
 						return Handle;
@@ -972,15 +979,6 @@ void JqWorker(int nThreadId)
 #endif
 }
 
-uint64_t JqNextHandle(uint64_t nJob)
-{
-	nJob++;
-	if(0 == (nJob % JQ_JOB_BUFFER_SIZE))
-	{
-		nJob++;
-	}
-	return nJob;
-}
 void JqHandleJobQueueFull()
 {
 	if(JQ_QUEUE_FULL_EXECUTE_JOBS)
@@ -1036,14 +1034,13 @@ uint64_t JqClaimHandle()
 	pJob->Parent			= 0;
 	pJob->DependentJob.Job	= 0;
 	pJob->DependentJob.Next = 0;
-	//	pJob->Locked			= false;
-	pJob->NumJobs  = 0;
-	pJob->Range	   = 0;
-	pJob->JobFlags = JQ_JOBFLAG_UNINITIALIZED;
-	pJob->Waiters  = 0;
-	pJob->Next	   = 0;
-	pJob->Prev	   = 0;
-	pJob->Reserved = false;
+	pJob->NumJobs			= 0;
+	pJob->Range				= 0;
+	pJob->JobFlags			= JQ_JOBFLAG_UNINITIALIZED;
+	pJob->Waiters			= 0;
+	pJob->Next				= 0;
+	pJob->Prev				= 0;
+	pJob->Reserved			= false;
 
 	return h;
 }
