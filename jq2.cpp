@@ -103,9 +103,13 @@
 // How many jobs do we allow peeking ahead? (Only for JQ_LOCKLESS_POP == 2). Current measurements says it doesn't really help that much, even for synthetic benchmarks, that should benefit from it
 #define JQ_LOCKLESS_PEEK_COUNT 0
 
+// Split the finish counter into three 16bit parts
+// [32]    is used to lock
+// [16-31] is used to count children
+// [0-15]  is used to count actual jobs
 #define JOB_FINISH_LOCK (0x100000000llu)
-#define JOB_FINISH_PARENT (0x000010000llu)
-#define JOB_FINISH_PARENT_MASK (0x0ffff0000llu)
+#define JOB_FINISH_CHILD (0x000010000llu)
+#define JOB_FINISH_CHILD_MASK (0x0ffff0000llu)
 #define JOB_FINISH_PLAIN (0x000000001llu)
 #define JOB_FINISH_PLAIN_MASK (0x00000ffffllu)
 
@@ -572,7 +576,7 @@ void JqFinishInternal(uint16_t JobIndex)
 		JqTriggerQueues(QueueTriggerMask);
 	}
 	if(Parent)
-		JqFinishSubJob(Parent, JOB_FINISH_PARENT);
+		JqFinishSubJob(Parent, JOB_FINISH_CHILD);
 	if(Dependent.Next)
 	{
 
@@ -611,7 +615,7 @@ void JqAttachChild(uint64_t Parent, uint64_t Child)
 	JQ_ASSERT(ParentJob.ClaimedHandle == Parent);
 	JQ_ASSERT(ChildJob.ClaimedHandle == Child);
 
-	ParentJob.PendingFinish.fetch_add(JOB_FINISH_PARENT);
+	ParentJob.PendingFinish.fetch_add(JOB_FINISH_CHILD);
 	JQ_ASSERT(ChildJob.Parent == 0);
 	ChildJob.Parent				= Parent;
 	JqState.Parents[ChildIndex] = Parent;
@@ -1153,14 +1157,15 @@ void JqDecPrecondtion(uint64_t Handle, int Count, uint64_t* QueueTriggerMask)
 	if(Before - Count == 0)
 	{
 		// only place StartedHandle is modified
-		uint32_t NumJobs  = Job.NumJobs;
-		Job.StartedHandle = Handle;
+		uint32_t NumJobs = Job.NumJobs;
 		if(NumJobs == 0) // Barrier type Jobs never have to enter an actual queue.
 		{
+			Job.StartedHandle = Handle;
 			JqFinishInternal(Index);
 		}
 		else
 		{
+			// Started handle is updated by JqQueuePush
 			uint8_t Queue = Job.Queue;
 			JqQueuePush(Queue, Handle);
 			if(QueueTriggerMask)
@@ -1237,7 +1242,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	uint64_t Started  = Job.StartedHandle;
 	uint64_t Finished = Job.FinishedHandle;
 	uint64_t Claimed  = Job.ClaimedHandle;
-	JQ_ASSERT(Started == Claimed);
+	JQ_ASSERT(JQ_LT_WRAP(Started, Claimed));
 	JQ_ASSERT(JQ_LT_WRAP(Finished, Claimed));
 	JQ_ASSERT(Job.NumJobs);
 
@@ -1246,6 +1251,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	JQ_ASSERT(Job.PendingFinish == 0);
 
 	Job.PendingFinish = NumJobs;
+	Job.StartedHandle = Handle;
 
 	JqSingleMutexLock L(Queue.Mutex);
 
@@ -1987,9 +1993,14 @@ bool JqIsDoneExt(JqHandle Handle, uint32_t nWaitFlags)
 	bool	 bIsDone = JqIsDone(Handle);
 	if(!bIsDone && 0 != (nWaitFlags & JQ_WAITFLAG_IGNORE_CHILDREN))
 	{
-		JQ_BREAK(); // todo, implement support for counting child jobs seperately.
-					// uint64_t nIndex = nJob % JQ_JOB_BUFFER_SIZE;
-					// return JqState.Jobs[nIndex].nNumJobs == JqState.Jobs[nIndex].NumFinished;
+		uint64_t Index		   = H % JQ_JOB_BUFFER_SIZE;
+		uint64_t StartedHandle = JqState.Jobs[Index].StartedHandle;
+		if(JQ_LE_WRAP(StartedHandle, H))
+		{
+			uint64_t PendingFinish = JqState.Jobs[Index].PendingFinish.load();
+			// this counts how many non-children needs to finish
+			return 0 == (PendingFinish & JOB_FINISH_PLAIN_MASK);
+		}
 	}
 	return bIsDone;
 }
