@@ -15,7 +15,7 @@
 						"working_dir": "${project_path}/demo/"
 					},
     		"linux" : {
-						"shell_cmd": "make -j 16",
+						"shell_cmd": "ninja all",
 						"file_regex": "(...*?):([0-9]*):([0-9]*):",
 						"working_dir": "${project_path}/demo/"
 					}
