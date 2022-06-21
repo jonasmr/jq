@@ -161,12 +161,9 @@ void JobBenchmark()
 	uint64_t TicksPerSecond = JqGetTicksPerSecond();
 	uint64_t Start			= JqGetTick();
 
-	uint64_t Stage1Job = JqAdd([](int Index) { Stage1(Index); }, 0, STAGES);
-	// uint64_t Stage2Job = JqAddSuccessor(
-	// 	Stage1Job, [](int Index) { Stage2(Index); }, 0, STAGES);
+	JqHandle Stage1Job = JqAdd([](int Index) { Stage1(Index); }, 0, STAGES);
 
 	JqWait(Stage1Job);
-	//	JqWait(Stage2Job);
 
 	uint64_t End = JqGetTick();
 

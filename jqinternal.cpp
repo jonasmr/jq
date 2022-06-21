@@ -451,21 +451,21 @@ void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
 	}
 }
 
-void JqInitAttributes(JqAttributes* pAttributes, uint32_t NumQueueOrders, uint32_t NumWorkers)
+void JqInitAttributes(JqAttributes* Attributes, uint32_t NumQueueOrders, uint32_t NumWorkers)
 {
 	JQ_ASSERT(NumWorkers <= JQ_MAX_THREADS);
-	memset(pAttributes, 0, sizeof(*pAttributes));
-	memset(&pAttributes->QueueOrder, 0xff, sizeof(pAttributes->QueueOrder));
-	memset(&pAttributes->WorkerOrderIndex, 0xff, sizeof(pAttributes->WorkerOrderIndex));
+	memset(Attributes, 0, sizeof(*Attributes));
+	memset(&Attributes->QueueOrder, 0xff, sizeof(Attributes->QueueOrder));
+	memset(&Attributes->WorkerOrderIndex, 0xff, sizeof(Attributes->WorkerOrderIndex));
 
-	pAttributes->NumWorkers		= NumWorkers;
-	pAttributes->NumQueueOrders = NumQueueOrders;
-	pAttributes->StackSizeSmall = JQ_DEFAULT_STACKSIZE_SMALL;
-	pAttributes->StackSizeLarge = JQ_DEFAULT_STACKSIZE_LARGE;
+	Attributes->NumWorkers	   = NumWorkers;
+	Attributes->NumQueueOrders = NumQueueOrders;
+	Attributes->StackSizeSmall = JQ_DEFAULT_STACKSIZE_SMALL;
+	Attributes->StackSizeLarge = JQ_DEFAULT_STACKSIZE_LARGE;
 
 	for(uint32_t i = 0; i < NumQueueOrders; ++i)
 	{
-		JqQueueOrder& C = pAttributes->QueueOrder[i];
+		JqQueueOrder& C = Attributes->QueueOrder[i];
 		memset(&C.Queues[0], 0xff, sizeof(C.Queues));
 		for(uint32_t j = 0; j < JQ_NUM_QUEUES; ++j)
 		{
@@ -475,7 +475,7 @@ void JqInitAttributes(JqAttributes* pAttributes, uint32_t NumQueueOrders, uint32
 	}
 	for(uint32_t i = 0; i < NumWorkers; ++i)
 	{
-		pAttributes->WorkerOrderIndex[i] = 0;
+		Attributes->WorkerOrderIndex[i] = 0;
 	}
 }
 
@@ -553,8 +553,8 @@ void JqLogStats()
 		JqConsumeStats(&Stats);
 		g_LogStats.Add(Stats);
 		static bool		bFirst			   = true;
-		static uint64_t H				   = g_LogStats.nNextHandle;
-		uint64_t		nHandleConsumption = g_LogStats.nNextHandle - H;
+		static JqHandle H				   = g_LogStats.nNextHandle;
+		uint64_t		nHandleConsumption = g_LogStats.nNextHandle.H - H.H;
 		H								   = g_LogStats.nNextHandle;
 
 		bool bUseWrapping = true;

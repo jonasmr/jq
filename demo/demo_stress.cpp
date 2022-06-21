@@ -158,7 +158,7 @@ void JobTree()
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
 	JobSpinWork(100);
 	int		 lala[3]   = { 0, 0, 0 };
-	uint64_t nJobTree0 = JqAdd([&](int s, int e) { JobTree0((void*)&lala[0], s, e); }, 2, 3);
+	JqHandle nJobTree0 = JqAdd([&](int s, int e) { JobTree0((void*)&lala[0], s, e); }, 2, 3);
 	g_nExternalStats++;
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree Wait", 0xff5555);
 	JqWait(nJobTree0);
@@ -205,20 +205,20 @@ void JqTest()
 #if 1
 	// attempt at doing a blocking test
 	g_Handle.store(0);
-	uint64_t h0 = JqAdd(
+	JqHandle h0 = JqAdd(
 		[] {
-			uint64_t nHandle = 0;
+			JqHandle nHandle;
 			do
 			{
-				nHandle = g_Handle.load();
-			} while(nHandle == 0);
+				nHandle.H = g_Handle.load();
+			} while(nHandle.H == 0);
 			JqWait(nHandle, JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK);
 		},
 		0, 3);
 
-	uint64_t h1 = JqAdd([] { JqUSleep(2000); }, 0, 1);
+	JqHandle h1 = JqAdd([] { JqUSleep(2000); }, 0, 1);
 	uint64_t ex = 0;
-	bool	 bR = g_Handle.compare_exchange_strong(ex, h1);
+	bool	 bR = g_Handle.compare_exchange_strong(ex, h1.H);
 	JQ_ASSERT(bR);
 	JqWait(h0);
 #endif
@@ -230,8 +230,8 @@ void JqTest()
 		JqConsumeStats(&Stats0);
 		Stats.Add(Stats0);
 		static bool		bFirst			   = true;
-		static uint64_t H				   = Stats.nNextHandle;
-		uint64_t		nHandleConsumption = Stats.nNextHandle - H;
+		static JqHandle H				   = Stats.nNextHandle;
+		uint64_t		nHandleConsumption = Stats.nNextHandle.H - H.H;
 		H								   = Stats.nNextHandle;
 
 		bool bUseWrapping = true;
@@ -291,7 +291,7 @@ void JqTest()
 		g_nJobCount1 = 0;
 		g_nJobCount2 = 0;
 
-		uint64_t nJobMedium = JqAdd(JobTree, 0, JOB_COUNT);
+		JqHandle nJobMedium = JqAdd(JobTree, 0, JOB_COUNT);
 #if 0
 		if(JqExecuteOne(1))
 		{

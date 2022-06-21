@@ -162,7 +162,7 @@ void JobTree()
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree", 0xff5555);
 	JobSpinWork(100);
 	int		 lala[3]   = { 0, 0, 0 };
-	uint64_t nJobTree0 = JqAdd([&](int s, int e) { JobTree0((void*)&lala[0], s, e); }, 2, 3);
+	JqHandle nJobTree0 = JqAdd([&](int s, int e) { JobTree0((void*)&lala[0], s, e); }, 2, 3);
 	g_nExternalStats++;
 	MICROPROFILE_SCOPEI("JQDEMO", "JobTree Wait", 0xff5555);
 	JqWait(nJobTree0);
@@ -191,13 +191,13 @@ extern uint32_t g_TESTID;
 void JqTestPrio()
 {
 	g_DontSleep = 0;
-	uint64_t J1 = JqAdd(
+	JqHandle J1 = JqAdd(
 		[](int b, int e) {
 			MICROPROFILE_SCOPEI("JQ_TEST", "P7", 0xffffff);
 			JobSpinWork(5000);
 		},
 		7, 3);
-	uint64_t J2 = JqAdd(
+	JqHandle J2 = JqAdd(
 		[](int b, int e) {
 			MICROPROFILE_SCOPEI("JQ_TEST", "P0", 0xff0000);
 			JqAdd(
@@ -217,7 +217,7 @@ void JqTestPrio()
 
 struct SCancelJobState
 {
-	uint64_t		 nHandle;
+	JqHandle		 nHandle;
 	std::atomic<int> nStarted;
 	std::atomic<int> nFinished;
 	int				 nCancelled;
@@ -232,7 +232,7 @@ void JqTestCancel()
 	SCancelJobState* Cancel		 = new SCancelJobState[nNumJobs];
 	g_CancelFinished			 = 0;
 	// start a bunch of jobs, cancel half of them
-	uint64_t nGroup = JqGroupBegin(0);
+	JqHandle nGroup = JqGroupBegin(0);
 	for(int i = 0; i < nNumJobs; ++i)
 	{
 		SCancelJobState* pState	   = &Cancel[i];
