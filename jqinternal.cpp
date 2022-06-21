@@ -355,12 +355,12 @@ JqJobStack* JqAllocStack2(JqJobStackList& FreeList, uint32_t nStackSize, uint32_
 		if(!pHead)
 			break;
 
-		JqJobStack*	   pNext	= pHead->pLink;
+		JqJobStack*	   pNext	= pHead->Link;
 		JqJobStackLink NewValue = { pNext, Value.nCounter + 1 };
 		if(FreeList.compare_exchange_strong(Value, NewValue))
 		{
-			JQ_ASSERT((nFlags & JQ_JOBFLAG_SMALL_STACK) == (pHead->nFlags & JQ_JOBFLAG_SMALL_STACK));
-			pHead->pLink = nullptr;
+			JQ_ASSERT((nFlags & JQ_JOBFLAG_SMALL_STACK) == (pHead->Flags & JQ_JOBFLAG_SMALL_STACK));
+			pHead->Link = nullptr;
 			return pHead;
 		}
 	} while(1);
@@ -383,14 +383,14 @@ void JqFreeAllStacks(JqJobStackList& FreeList)
 		{
 			return;
 		}
-		JqJobStackLink NewValue = { pHead->pLink, Value.nCounter + 1 };
+		JqJobStackLink NewValue = { pHead->Link, Value.nCounter + 1 };
 		if(FreeList.compare_exchange_strong(Value, NewValue))
 		{
 #ifdef JQ_MICROPROFILE
 			MICROPROFILE_COUNTER_SUB("jq/stack/count", 1);
-			MICROPROFILE_COUNTER_SUB("jq/stack/bytes", pHead->nStackSize);
+			MICROPROFILE_COUNTER_SUB("jq/stack/bytes", pHead->Size);
 #endif
-			JqFreeStackInternal(pHead->StackBottom(), pHead->nStackSize);
+			JqFreeStackInternal(pHead->StackBottom(), pHead->Size);
 		}
 
 	} while(1);
@@ -399,12 +399,12 @@ void JqFreeAllStacks(JqJobStackList& FreeList)
 void JqFreeStack2(JqJobStackList& FreeList, JqJobStack* pStack)
 {
 	MICROPROFILE_SCOPEI("JQ", "JqFreeStack", MP_AUTO);
-	JQ_ASSERT(pStack->pLink == nullptr);
+	JQ_ASSERT(pStack->Link == nullptr);
 	do
 	{
 		JqJobStackLink Value	= FreeList.load();
 		JqJobStack*	   pHead	= Value.pHead;
-		pStack->pLink			= pHead;
+		pStack->Link			= pHead;
 		JqJobStackLink NewValue = { pStack, Value.nCounter + 1 };
 		if(FreeList.compare_exchange_strong(Value, NewValue))
 		{

@@ -348,27 +348,27 @@ struct JqSingleMutexLock
 	void Unlock();
 };
 
+class JqFunction;
+
 struct JqJobStack
 {
 	uint64_t   GUARD[2];
 	JqFContext ContextReturn;
-	JqFContext pContextJob;
+	JqFContext ContextJob;
 
-	JqJobStack* pLink; // when in use: Previous. When freed, next element in free list
-	JqPipe*		pPipe;
+	JqJobStack* Link; // when in use: Previous. When freed, next element in free list
+	JqFunction* Function;
 
-	uint32_t nExternalId;
-	uint32_t nFlags;
-	uint32_t nPipeIndex3;
-	uint32_t nJobIndex3;
-	int		 nBegin;
-	int		 nEnd;
-	int		 nStackSize;
-	void*	 StackBottom()
+	uint32_t Flags;
+
+	int	  Begin;
+	int	  End;
+	int	  Size;
+	void* StackBottom()
 	{
 		intptr_t t = (intptr_t)this;
 		t += Offset();
-		t -= nStackSize;
+		t -= Size;
 		return (void*)t;
 	}
 	void* StackTop()
@@ -385,20 +385,20 @@ struct JqJobStack
 	{
 		return (sizeof(JqJobStack) + 15) & (~15);
 	}
-	static JqJobStack* Init(void* pStack, int nStackSize, uint32_t nFlags)
+	static JqJobStack* Init(void* Stack, int StackSize, uint32_t Flags)
 	{
-		intptr_t t = (intptr_t)pStack;
-		t += nStackSize;
+		intptr_t t = (intptr_t)Stack;
+		t += StackSize;
 		t -= Offset();
-		JqJobStack* pJobStack = (JqJobStack*)t;
-		new(pJobStack) JqJobStack;
-		pJobStack->pLink	   = 0;
-		pJobStack->nExternalId = 0;
-		pJobStack->nFlags	   = nFlags;
-		pJobStack->nStackSize  = nStackSize;
-		pJobStack->GUARD[0]	   = (uint64_t)0xececececececececll;
-		pJobStack->GUARD[1]	   = (uint64_t)0xececececececececll;
-		return pJobStack;
+		JqJobStack* JobStack = (JqJobStack*)t;
+		new(JobStack) JqJobStack;
+		JobStack->Link	   = 0;
+		JobStack->Function = 0;
+		JobStack->Flags	   = Flags;
+		JobStack->Size	   = StackSize;
+		JobStack->GUARD[0] = (uint64_t)0xececececececececll;
+		JobStack->GUARD[1] = (uint64_t)0xececececececececll;
+		return JobStack;
 	}
 };
 

@@ -35,7 +35,7 @@
 // 		run sanitizers
 //		review wait child.
 //		comment / code pass
-// 		fix spawn to always take one
+// 		* fix spawn to always take one
 //		* make handles
 //
 // 		cleanup demos
@@ -45,8 +45,8 @@
 //		new doc
 //		test win32
 //		fix so there is only one queue impl.
-//
-//
+//		test spawn
+//		test wait for only children
 //
 // Flow
 //
@@ -103,6 +103,9 @@
 // How many jobs do we allow peeking ahead? (Only for JQ_LOCKLESS_POP == 2). Current measurements says it doesn't really help that much, even for synthetic benchmarks, that should benefit from it
 #define JQ_LOCKLESS_PEEK_COUNT 0
 
+#define JQ_JOBFLAG_EXTERNAL_MASK 0x3f
+#define JQ_JOBFLAG_INTERNAL_SPAWN 0x40
+
 // Split the finish counter into three 16bit parts
 // [32]    is used to lock
 // [16-31] is used to count children
@@ -139,9 +142,9 @@ uint16_t			 JqDependentJobLinkAlloc(uint64_t Handle);
 void				 JqDependentJobLinkFreeList(uint16_t Index);
 uint16_t			 JqQueuePopInternal(uint16_t JobIndex, uint8_t QueueIndex, uint16_t* OutSubJob, uint16_t* OutNextJob, bool PopAll);
 void				 JqTriggerQueues(uint64_t QueueTriggerMask);
-
-// JqDependentJobLink&	 JqAllocDependentJobLink();
-// void				 JqFreeDependentJobLink(JqDependentJobLink& Link);
+JqHandle			 JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags, JqHandle PreconditionHandle);
+void				 JqRunInternal(JqFunction* Function, int Begin, int End, uint32_t JobFlags);
+void				 JqRunInternal(uint32_t WorkIndex, int Begin, int End);
 
 struct JqSelfStack
 {
@@ -176,12 +179,13 @@ struct JqJob
 	uint64_t			  Parent;				/// Handle of parent
 	JqDependentJobLink	  DependentJob;			/// Job that is dependent on this job finishing.
 
-	uint16_t NumJobs;	 /// Num Jobs to launch
-	uint64_t Range;		 /// Range to pass to jobs
-	uint32_t JobFlags;	 /// Job Flags
-	uint8_t	 Queue;		 /// Priority of the job
-	uint8_t	 Waiters;	 /// Set when waiting
-	uint8_t	 WaitersWas; /// Prev wait flag(debug only)
+	uint16_t NumJobs;		 /// Num Jobs to Finish
+	uint16_t NumJobsToStart; /// Num Jobs to Start
+	uint64_t Range;			 /// Range to pass to jobs
+	uint32_t JobFlags;		 /// Job Flags
+	uint8_t	 Queue;			 /// Priority of the job
+	uint8_t	 Waiters;		 /// Set when waiting
+	uint8_t	 WaitersWas;	 /// Prev wait flag(debug only)
 
 	uint16_t Next;
 	uint16_t Prev;
@@ -664,7 +668,7 @@ int JqGetNumWorkers()
 void JqContextRun(JqTransfer T)
 {
 	JqJobStack* pJobData = (JqJobStack*)T.data;
-	JqState.Jobs[pJobData->nExternalId].Function(pJobData->nBegin, pJobData->nEnd);
+	(*pJobData->Function)(pJobData->Begin, pJobData->End);
 	jq_jump_fcontext(T.fctx, (void*)447);
 	JQ_BREAK();
 }
@@ -675,37 +679,39 @@ JqJobStackList& JqGetJobStackList(uint32_t nFlags)
 	return bSmall ? JqState.StackSmall : JqState.StackLarge;
 }
 
-void JqRunInternal(uint32_t nWorkIndex, int nBegin, int nEnd)
+void JqRunInternal(JqFunction* Function, int Begin, int End, uint32_t JobFlags)
 {
-	JQ_ASSERT(JqState.Jobs[nWorkIndex].PreconditionCount == 0);
-
 	if(JQ_INIT_USE_SEPERATE_STACK == (JqState.Attributes.Flags & JQ_INIT_USE_SEPERATE_STACK))
 	{
-		uint32_t	nFlags	   = JqState.Jobs[nWorkIndex].JobFlags;
-		bool		bSmall	   = 0 != (nFlags & JQ_JOBFLAG_SMALL_STACK);
-		uint32_t	nStackSize = bSmall ? JqState.Attributes.StackSizeSmall : JqState.Attributes.StackSizeLarge;
-		JqJobStack* pJobData   = JqAllocStack(JqGetJobStackList(nFlags), nStackSize, nFlags);
-		void*		pVerify	   = g_pJqJobStacks;
-		JQ_ASSERT(pJobData->pLink == nullptr);
-		pJobData->pLink		  = g_pJqJobStacks;
-		pJobData->nBegin	  = nBegin;
-		pJobData->nEnd		  = nEnd;
-		pJobData->nExternalId = nWorkIndex;
-		g_pJqJobStacks		  = pJobData;
-		pJobData->pContextJob = jq_make_fcontext(pJobData->StackTop(), pJobData->StackSize(), JqContextRun);
-		JqTransfer T		  = jq_jump_fcontext(pJobData->pContextJob, (void*)pJobData);
+		bool		Small	  = 0 != (JobFlags & JQ_JOBFLAG_SMALL_STACK);
+		uint32_t	StackSize = Small ? JqState.Attributes.StackSizeSmall : JqState.Attributes.StackSizeLarge;
+		JqJobStack* JobData	  = JqAllocStack(JqGetJobStackList(JobFlags), StackSize, JobFlags);
+		void*		Verify	  = g_pJqJobStacks;
+		JQ_ASSERT(JobData->Link == nullptr);
+		JobData->Link		= g_pJqJobStacks;
+		JobData->Begin		= Begin;
+		JobData->End		= End;
+		JobData->Function	= Function;
+		g_pJqJobStacks		= JobData;
+		JobData->ContextJob = jq_make_fcontext(JobData->StackTop(), JobData->StackSize(), JqContextRun);
+		JqTransfer T		= jq_jump_fcontext(JobData->ContextJob, (void*)JobData);
 		JQ_ASSERT(T.data == (void*)447);
-		g_pJqJobStacks	= pJobData->pLink;
-		pJobData->pLink = nullptr;
-		JQ_ASSERT(pVerify == g_pJqJobStacks);
-		JQ_ASSERT(pJobData->GUARD[0] == 0xececececececececll);
-		JQ_ASSERT(pJobData->GUARD[1] == 0xececececececececll);
-		JqFreeStack(JqGetJobStackList(nFlags), pJobData);
+		g_pJqJobStacks = JobData->Link;
+		JobData->Link  = nullptr;
+		JQ_ASSERT(Verify == g_pJqJobStacks);
+		JQ_ASSERT(JobData->GUARD[0] == 0xececececececececll);
+		JQ_ASSERT(JobData->GUARD[1] == 0xececececececececll);
+		JqFreeStack(JqGetJobStackList(JobFlags), JobData);
 	}
 	else
 	{
-		JqState.Jobs[nWorkIndex].Function(nBegin, nEnd);
+		(*Function)(Begin, End);
 	}
+}
+void JqRunInternal(uint32_t WorkIndex, int Begin, int End)
+{
+	JQ_ASSERT(JqState.Jobs[WorkIndex].PreconditionCount == 0);
+	JqRunInternal(&JqState.Jobs[WorkIndex].Function, Begin, End, JqState.Jobs[WorkIndex].JobFlags);
 }
 
 void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
@@ -1054,11 +1060,29 @@ uint64_t JqClaimHandle()
 	return h;
 }
 
-JQ_API void JqSpawn(JqFunction JobFunc, uint8_t nPrio, int nNumJobs, int nRange, uint32_t nWaitFlag)
+JQ_API void JqSpawn(JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t WaitFlag)
 {
+	JqHandle Handle = JqHandle{ 0 };
+	if(0 == NumJobs)
+	{
+		return;
+	}
+	else if(1 == NumJobs)
+	{
+		// capture any jobs added as children
+		Handle = JqGroupBegin(Queue);
+		JqRunInternal(&JobFunc, 0, Range, (WaitFlag & JQ_JOBFLAG_EXTERNAL_MASK));
+		JqGroupEnd();
+	}
+	else
+	{
+		Handle = JqAddInternal(JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_INTERNAL_SPAWN | (WaitFlag & JQ_JOBFLAG_EXTERNAL_MASK), JqHandle{ 0 });
+		// Spawn tells the add that you want it to skip index 0, because its called immediately.
+		// this is an atomic supported operation, so we always -force- spawn to claim the first entry
+		JqExecuteJob(Handle.H, 0);
+	}
 
-	JqHandle nJob = JqAdd(JobFunc, nPrio, nNumJobs, nRange);
-	JqWait(nJob, nWaitFlag);
+	JqWait(Handle, WaitFlag);
 }
 
 bool JqCancel(JqHandle Handle)
@@ -1246,18 +1270,19 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	JQ_ASSERT(JQ_LT_WRAP(Finished, Claimed));
 	JQ_ASSERT(Job.NumJobs);
 
-	uint16_t NumJobs = Job.NumJobs;
-	JQ_ASSERT(NumJobs < 0xffff);
-	JQ_ASSERT(Job.PendingFinish == 0);
+	uint16_t NumJobs		= Job.NumJobs;
+	uint16_t NumJobsToStart = Job.NumJobsToStart;
 
-	Job.PendingFinish = NumJobs;
+	JQ_ASSERT(NumJobs < 0xffff);
+
+	// fnidderlort. det her skal skrives i add for at virke..
 	Job.StartedHandle = Handle;
 
 	JqSingleMutexLock L(Queue.Mutex);
+	JQ_ASSERT(Job.PendingFinish.load() >= NumJobsToStart);
 
 #if !JQ_LOCKLESS_POP
-
-	Job.PendingStartAndQueue = JqPackStartAndQueue(NumJobs, 0);
+	Job.PendingStartAndQueue = JqPackStartAndQueue(NumJobsToStart, 0);
 
 	Job.Prev = Queue.LinkTail;
 	if(Queue.LinkTail)
@@ -1273,7 +1298,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	}
 #elif JQ_LOCKLESS_POP == 2
 
-	Job.PendingStartAndQueue = JqPackStartAndQueue(NumJobs, QueueIndex);
+	Job.PendingStartAndQueue = JqPackStartAndQueue(NumJobsToStart, QueueIndex);
 
 	uint16_t Head, Tail, JobCount;
 
@@ -1309,7 +1334,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	// Note: We have to use atomics, as lockless decrements of job count will occur. Tail/Head will not be modified without taking the lock
 	uint16_t Head, Tail, JobCount;
 	uint64_t Old, New;
-	Job.PendingStartAndQueue = JqPackStartAndQueue(NumJobs, 0);
+	Job.PendingStartAndQueue = JqPackStartAndQueue(NumJobsToStart, 0);
 
 	do
 	{
@@ -1813,6 +1838,10 @@ void JqAddPrecondition(JqHandle Handle, JqHandle Precondition)
 
 JqHandle JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags, JqHandle PreconditionHandle)
 {
+	if(JobFlags & JQ_JOBFLAG_INTERNAL_SPAWN)
+	{
+		JQ_ASSERT(NumJobs > 1);
+	}
 	// Add:
 	//	* Allocate header (inc counter)
 	//	* Update header as reserved
@@ -1881,13 +1910,14 @@ JqHandle JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queu
 
 		JQ_ASSERT(NumJobs <= 0xffff);
 
-		Job.NumJobs = NumJobs;
+		Job.NumJobs		   = NumJobs;
+		Job.NumJobsToStart = (0 != (JobFlags & JQ_JOBFLAG_INTERNAL_SPAWN)) ? NumJobs - 1 : NumJobs;
 #if JQ_LOCKLESS_POP == 2
 		Job.PendingStartAndQueue = JqPackStartAndQueue(0, 0xff);
 #else
 		Job.PendingStartAndQueue = JqPackStartAndQueue(0, 0);
 #endif
-		Job.PendingFinish = 0;
+		Job.PendingFinish = NumJobs;
 
 		// Job.PreconditionCount++;
 		Job.Range	 = Range;
@@ -1914,19 +1944,19 @@ JqHandle JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queu
 
 JqHandle JqAdd(JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags)
 {
-	return JqAddInternal(JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JobFlags, JqHandle{ 0 });
+	return JqAddInternal(JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, JqHandle{ 0 });
 }
 
 // add reserved
 JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, int NumJobs, int Range, uint32_t JobFlags)
 {
-	return JqAddInternal(ReservedHandle, JobFunc, 0xff, NumJobs, Range, JobFlags, JqHandle{ 0 });
+	return JqAddInternal(ReservedHandle, JobFunc, 0xff, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, JqHandle{ 0 });
 }
 
 // add successor
 JqHandle JqAddSuccessor(JqHandle PreconditionHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags)
 {
-	return JqAddInternal(JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JobFlags, PreconditionHandle);
+	return JqAddInternal(JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, PreconditionHandle);
 }
 
 // Reserve a Job slot. this allows you to wait on work added later
@@ -2025,6 +2055,7 @@ void JqWaitAll()
 
 void JqWait(JqHandle Handle, uint32_t WaitFlag, uint32_t UsWaitTime)
 {
+	WaitFlag &= JQ_JOBFLAG_EXTERNAL_MASK;
 	uint64_t H = Handle.H;
 	if(JqIsDone(Handle))
 	{
