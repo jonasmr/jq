@@ -213,6 +213,8 @@ inline void JqUSleepImpl(uint64_t usec)
 #define JQ_GE_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a << (bits)) - (uint64_t)(b << (bits)))) >= 0)
 #define JQ_GT_WRAP_SHIFT(a, b, bits) (((int64_t)((uint64_t)(a << (bits)) - (uint64_t)(b << (bits)))) > 0)
 
+#define JQ_GET_INDEX(H) ((H) % (JQ_JOB_BUFFER_SIZE))
+
 #ifdef _WIN32
 #define JQ_ALIGN_CACHELINE __declspec(align(JQ_CACHE_LINE_SIZE))
 #define JQ_ALIGN_16 __declspec(align(16))
@@ -416,3 +418,4 @@ void  JqFreeStackInternal(void* pStack, uint32_t nStackSize);
 JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags);
 void		JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack);
 void		JqFreeAllStacks(JqJobStackList& FreeList);
+uint32_t	JqGetNumCpus();

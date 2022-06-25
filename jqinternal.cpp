@@ -454,6 +454,14 @@ void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
 void JqInitAttributes(JqAttributes* Attributes, uint32_t NumQueueOrders, uint32_t NumWorkers)
 {
 	JQ_ASSERT(NumWorkers <= JQ_MAX_THREADS);
+	if(NumWorkers == 0)
+	{
+		NumWorkers = JqGetNumCpus();
+	}
+	if(NumQueueOrders == 0)
+	{
+		NumQueueOrders = 1;
+	}
 	memset(Attributes, 0, sizeof(*Attributes));
 	memset(&Attributes->QueueOrder, 0xff, sizeof(Attributes->QueueOrder));
 	memset(&Attributes->WorkerOrderIndex, 0xff, sizeof(Attributes->WorkerOrderIndex));
@@ -584,4 +592,9 @@ void JqLogStats()
 		Frames		  = 0;
 		g_LogTickLast = JqTick();
 	}
+}
+
+uint32_t JqGetNumCpus()
+{
+	return std::thread::hardware_concurrency();
 }

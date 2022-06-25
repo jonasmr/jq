@@ -316,9 +316,9 @@ JQ_API void		JqWait(JqHandle Handle, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, u
 JQ_API void		JqWaitAll();
 JQ_API void		JqWaitAll(JqHandle* Jobs, uint32_t NumJobs, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t UsWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API JqHandle JqWaitAny(JqHandle* Jobs, uint32_t NumJobs, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t UsWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API bool		JqCancel(JqHandle Handle);
+JQ_API void		JqCancel(JqHandle Handle);
 JQ_API bool		JqExecuteChild(JqHandle Handle); // execute 1 child job.
-JQ_API JqHandle JqGroupBegin(uint8_t Queues);	 // add a non-executing job to group all jobs added between begin/end
+JQ_API JqHandle JqGroupBegin();					 // add a non-executing job to group all jobs added between begin/end
 JQ_API void		JqGroupEnd();
 JQ_API bool		JqIsDone(JqHandle Handle);
 JQ_API bool		JqIsDoneExt(JqHandle Handle, uint32_t WaitFlag);
