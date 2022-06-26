@@ -397,6 +397,90 @@ void JqTestCancel()
 	delete[] Cancel;
 }
 
+void JqTestSpawn()
+{
+	std::atomic<int> v;
+	v						   = 0;
+	std::atomic<int>* pv	   = &v;
+	uint64_t		  ThreadId = JqGetCurrentThreadId();
+
+	// verify its never run
+	JqSpawn([] { JQ_BREAK(); }, 0, 0);
+
+	// verify its always run on current thread
+	JqSpawn(
+		[ThreadId, pv] {
+			pv->fetch_add(1);
+			if(ThreadId != JqGetCurrentThreadId())
+				JQ_BREAK();
+		},
+		0, 1);
+	if(v.load() != 1)
+	{
+		JQ_BREAK();
+	}
+
+	// verify its run 50 times
+	JqSpawn(
+		[ThreadId, pv](int index) {
+			pv->fetch_add(1);
+			if(index == 0)
+				if(ThreadId != JqGetCurrentThreadId())
+					JQ_BREAK();
+		},
+		0, 50);
+	if(v.load() != 51)
+	{
+		JQ_BREAK();
+	}
+}
+
+void JqTestWaitExecuteChildren()
+{
+	printf("todo: test this");
+}
+
+void JqTestWaitIgnoreChildren()
+{
+	std::atomic<int> parent, child;
+	parent = 0;
+	child  = 0;
+
+	std::atomic<int>* pparent = &parent;
+	std::atomic<int>* pchild  = &child;
+#define PARENTS 5
+#define CHILDREN 50
+
+	JqHandle Job = JqAdd(
+		[pparent, pchild] {
+			pparent->fetch_add(1);
+
+			JqAdd(
+				[pchild] {
+					JobSpinWork(1000);
+					pchild->fetch_add(1);
+				},
+				0, CHILDREN);
+		},
+		0, PARENTS);
+
+	JqWait(Job, JQ_WAITFLAG_IGNORE_CHILDREN | JQ_DEFAULT_WAIT_FLAG);
+	if(parent.load() != PARENTS)
+		JQ_BREAK();
+	if(child.load() > CHILDREN * PARENTS)
+		JQ_BREAK();
+
+	if(child.load() == CHILDREN * PARENTS)
+		printf("all children executed. this hints that JQ_WAITFLAG_IGNORE_CHILDREN might not ignore children");
+
+	JqWait(Job);
+	if(child.load() != CHILDREN * PARENTS)
+		JQ_BREAK();
+
+#undef PARENTS
+#undef CHILDREN
+}
+
 int main(int argc, char* argv[])
 {
 
@@ -499,6 +583,8 @@ int main(int argc, char* argv[])
 		{
 			JqTestPrio();
 			JqTestCancel();
+			JqTestSpawn();
+			JqTestWaitIgnoreChildren();
 		}
 		JqLogStats();
 	}

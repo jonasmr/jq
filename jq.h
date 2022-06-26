@@ -344,3 +344,4 @@ JQ_API int64_t	JqGetTick();
 JQ_API uint64_t JqGetCurrentThreadId(); // for debugging.
 JQ_API void		JqUSleep(uint64_t us);
 JQ_API void		JqLogStats();
+JQ_API uint64_t JqGetCurrentThreadId();
