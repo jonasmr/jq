@@ -84,9 +84,12 @@ JqConditionVariable::~JqConditionVariable()
 
 void JqConditionVariable::Wait(JqMutex& Mutex)
 {
-	JQLSC(g_JqCondWait.fetch_add(1));
 
 #ifdef JQ_ASSERT_LOCKS
+	if(JqCurrentThreadId() != Mutex.nThreadId)
+	{
+		JQ_BREAK();
+	}
 	Mutex.nLockCount--;
 	if(0 == Mutex.nLockCount)
 	{
@@ -213,6 +216,11 @@ void JqConditionVariable::Wait(JqMutex& Mutex)
 {
 
 #ifdef JQ_ASSERT_LOCKS
+	if(JqCurrentThreadId() != Mutex.nThreadId)
+	{
+		JQ_BREAK();
+	}
+
 	Mutex.nLockCount--;
 	if(0 == Mutex.nLockCount)
 	{

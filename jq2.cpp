@@ -47,6 +47,9 @@
 //		fix so there is only one queue impl.
 //		test spawn
 //		test wait for only children
+// 		* fix unlocking on the wrong mutex when doing full wait in JqWait
+//		* assert in ConditionVariable wait that the mutex passed in is actually locked
+// 		make bench test a bit more.
 //
 // Flow
 //
@@ -271,8 +274,6 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	JqDependentJobLink	  DependentJobLinks[JQ_JOB_BUFFER_SIZE];
 	uint16_t			  DependentJobLinkHead;
 	std::atomic<uint32_t> DependentJobLinkCounter;
-
-	JqMutex WaitMutex;
 
 	JqState_t()
 		: NumWorkers(0)
@@ -2124,14 +2125,15 @@ void JqWait(JqHandle Handle, uint32_t WaitFlag, uint32_t UsWaitTime)
 			else
 			{
 				uint16_t		  nJobIndex = H % JQ_JOB_BUFFER_SIZE;
-				JqSingleMutexLock lock(JqGetJobMutex(nJobIndex));
+				JqMutex&		  Mutex		= JqGetJobMutex(nJobIndex);
+				JqSingleMutexLock lock(Mutex);
 				if(JqIsDoneExt(Handle, WaitFlag))
 				{
 					return;
 				}
 				JqState.Jobs[nJobIndex].Waiters++;
 				JqState.Stats.nNumWaitCond++;
-				JqGetJobConditionVariable(nJobIndex).Wait(JqState.WaitMutex);
+				JqGetJobConditionVariable(nJobIndex).Wait(Mutex);
 				JqState.Jobs[nJobIndex].Waiters--;
 			}
 		}
