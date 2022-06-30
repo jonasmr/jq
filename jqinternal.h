@@ -290,10 +290,8 @@ struct JqSemaphore
 	HANDLE Handle;
 	LONG   nMaxCount;
 #else
-	JqMutex				  Mutex;
-	JqConditionVariable	  Cond;
-	std::atomic<uint32_t> nReleaseCount;
-	uint32_t			  nMaxCount;
+	std::atomic<uint32_t> Futex;
+	uint32_t			  MaxCount;
 #endif
 };
 

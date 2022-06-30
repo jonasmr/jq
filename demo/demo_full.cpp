@@ -314,6 +314,93 @@ void JqTestPrio()
 			},
 			0, 32);
 	}
+	{
+		// test JQ_WAITFLAG_EXECUTE_SUCCESSORS.
+		// by now there is a ton of work, so it'll be a while. make a small job tree, and wait on it here.
+		uint64_t		 ThreadId = JqGetCurrentThreadId();
+		std::atomic<int> v;
+		v					 = 0;
+		std::atomic<int>* pv = &v;
+#define FANOUT 3
+		MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-Time", MP_AUTO);
+		JobSpinWork(100);
+		if(1)
+		{
+			JqHandle SmallTree = JqAdd(
+				[pv, ThreadId] {
+					MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-0", MP_AUTO);
+					JqAdd(
+						[pv, ThreadId] {
+							MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-1", MP_AUTO);
+							JqAdd(
+								[pv, ThreadId] {
+									MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-2", MP_AUTO);
+									if(ThreadId == JqGetCurrentThreadId())
+									{
+										MICROPROFILE_SCOPEI("ChildWait", "Child-Wait-ok", MP_AUTO);
+										pv->fetch_add(1);
+									}
+									else
+									{
+										MICROPROFILE_SCOPEI("ChildWait", "Child-Wait-fail", MP_AUTO);
+									}
+								},
+								0, FANOUT);
+						},
+						0, FANOUT);
+				},
+				0, FANOUT);
+			MICROPROFILE_SCOPEI("ChildWait", "ChildWaitTime", MP_AUTO);
+			JqWait(SmallTree, JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SPIN);
+			if(v.load() != (FANOUT * FANOUT * FANOUT))
+			{
+				printf("only %d was executed locally", v.load());
+			}
+			else
+			{
+				printf("only %d was executed locally", v.load());
+			}
+		}
+
+#undef FANOUT
+	}
+	{
+		// Test JqSpawn
+		std::atomic<int> v;
+		v						   = 0;
+		std::atomic<int>* pv	   = &v;
+		uint64_t		  ThreadId = JqGetCurrentThreadId();
+
+		// verify its never run
+		JqSpawn([] { JQ_BREAK(); }, 0, 0);
+
+		// verify its always run on current thread
+		JqSpawn(
+			[ThreadId, pv] {
+				pv->fetch_add(1);
+				if(ThreadId != JqGetCurrentThreadId())
+					JQ_BREAK();
+			},
+			0, 1);
+		if(v.load() != 1)
+		{
+			JQ_BREAK();
+		}
+
+		// verify its run 50 times
+		JqSpawn(
+			[ThreadId, pv](int index) {
+				pv->fetch_add(1);
+				if(index == 0)
+					if(ThreadId != JqGetCurrentThreadId())
+						JQ_BREAK();
+			},
+			0, 50);
+		if(v.load() != 51)
+		{
+			JQ_BREAK();
+		}
+	}
 	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
 	JqWait(J3);
@@ -399,40 +486,6 @@ void JqTestCancel()
 
 void JqTestSpawn()
 {
-	std::atomic<int> v;
-	v						   = 0;
-	std::atomic<int>* pv	   = &v;
-	uint64_t		  ThreadId = JqGetCurrentThreadId();
-
-	// verify its never run
-	JqSpawn([] { JQ_BREAK(); }, 0, 0);
-
-	// verify its always run on current thread
-	JqSpawn(
-		[ThreadId, pv] {
-			pv->fetch_add(1);
-			if(ThreadId != JqGetCurrentThreadId())
-				JQ_BREAK();
-		},
-		0, 1);
-	if(v.load() != 1)
-	{
-		JQ_BREAK();
-	}
-
-	// verify its run 50 times
-	JqSpawn(
-		[ThreadId, pv](int index) {
-			pv->fetch_add(1);
-			if(index == 0)
-				if(ThreadId != JqGetCurrentThreadId())
-					JQ_BREAK();
-		},
-		0, 50);
-	if(v.load() != 51)
-	{
-		JQ_BREAK();
-	}
 }
 
 void JqTestWaitExecuteChildren()

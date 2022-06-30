@@ -2,6 +2,12 @@
 #include "jq.h"
 #include <stdint.h>
 
+#ifndef _WIN32
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
+
 static JQ_THREAD_LOCAL JqMutex* g_SingleMutexLockMutex = nullptr;
 
 struct JqLocalJobStack
@@ -250,42 +256,48 @@ void JqConditionVariable::NotifyAll()
 
 JqSemaphore::JqSemaphore()
 {
-	nMaxCount = 0xffffffff;
-	nReleaseCount.store(0);
+	MaxCount = 0xffffffff;
+	Futex.store(0);
 }
 JqSemaphore::~JqSemaphore()
 {
 }
-void JqSemaphore::Init(int nCount)
+void JqSemaphore::Init(int Count)
 {
-	nMaxCount = nCount;
+	MaxCount = Count;
+	Futex.store(0);
 }
-void JqSemaphore::Signal(uint32_t nCount)
+
+void JqSemaphore::Signal(uint32_t Count)
 {
 	JQLSC(g_JqSemaSignal.fetch_add(1));
 
-	if(nReleaseCount.load() == nMaxCount)
 	{
-		return;
-	}
-	{
-		JqMutexLock l(Mutex);
-		uint32_t	nCurrent = nReleaseCount.load();
-		if(nCurrent + nCount > nMaxCount)
-			nCount = nMaxCount - nCurrent;
-		nReleaseCount.fetch_add(nCount);
-		JQ_ASSERT(nReleaseCount.load() <= nMaxCount);
-		if(nReleaseCount.load() == nMaxCount)
+		uint32_t	   AddCount = 0;
+		uint32_t	   Old		= 0;
+		uint32_t	   New		= 0;
+		const uint32_t Max		= MaxCount;
+		uint32_t*	   FutexPtr = reinterpret_cast<uint32_t*>(&Futex);
+
+		do
 		{
-			Cond.NotifyAll();
-		}
-		else
-		{
-			for(uint32_t i = 0; i < nReleaseCount; ++i)
+			// Add Count, but clamp to MaxCount(can't ever increas above that)
+			Old = Futex.load();
+			JQ_ASSERT((int)Old >= 0);
+			JQ_ASSERT(Old <= Max);
+
+			New		 = Old + Count;
+			New		 = New > Max ? Max : New;
+			AddCount = New - Old;
+			if(New == Old)
 			{
-				Cond.NotifyOne();
+				// max reached, nothing to signal
+				return;
 			}
-		}
+
+		} while(!Futex.compare_exchange_weak(Old, New));
+
+		syscall(SYS_futex, FutexPtr, FUTEX_WAKE_PRIVATE, AddCount, 0, 0, 0);
 	}
 }
 
@@ -294,12 +306,25 @@ void JqSemaphore::Wait()
 	JQLSC(g_JqSemaWait.fetch_add(1));
 
 	JQ_MICROPROFILE_SCOPE("Wait", 0xc0c0c0);
-	JqMutexLock l(Mutex);
-	while(!nReleaseCount)
+	uint32_t* FutexPtr = reinterpret_cast<uint32_t*>(&Futex);
+
+	uint32_t Old = 0;
+	do
 	{
-		Cond.Wait(Mutex);
-	}
-	nReleaseCount--;
+		Old = Futex.load();
+		JQ_ASSERT((int)Old >= 0);
+		if(Old == 0)
+		{
+			syscall(SYS_futex, FutexPtr, FUTEX_WAIT_PRIVATE, 0, 0, 0, 0);
+		}
+		else
+		{
+			if(Futex.compare_exchange_weak(Old, Old - 1))
+			{
+				break;
+			}
+		}
+	} while(true);
 }
 
 #endif
