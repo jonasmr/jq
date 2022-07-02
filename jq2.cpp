@@ -102,7 +102,7 @@
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 #define JQ_NUM_LOCKS 32
 
-#define JQ_LOCKLESS_QUEUE 1
+#define JQ_LOCKLESS_QUEUE 0
 
 #define JQ_LOCKLESS_POP 2
 
@@ -1523,7 +1523,8 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	uint64_t Started = Job.StartedHandle;
 	uint64_t Finished = Job.FinishedHandle;
 	uint64_t Claimed = Job.ClaimedHandle;
-	JQ_ASSERT(JQ_LT_WRAP(Started, Claimed));
+	// JQ_ASSERT(JQ_LT_WRAP(Started, Claimed));
+	JQ_ASSERT(Started == Claimed);
 	JQ_ASSERT(JQ_LT_WRAP(Finished, Claimed));
 	JQ_ASSERT(Job.NumJobs);
 
