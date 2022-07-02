@@ -102,7 +102,7 @@
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 #define JQ_NUM_LOCKS 32
 
-#define JQ_LOCKLESS_QUEUE 1
+#define JQ_LOCKLESS_QUEUE 0
 
 #define JQ_LOCKLESS_POP 2
 
@@ -1523,7 +1523,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	uint64_t Started = Job.StartedHandle;
 	uint64_t Finished = Job.FinishedHandle;
 	uint64_t Claimed = Job.ClaimedHandle;
-	JQ_ASSERT(JQ_LT_WRAP(Started, Claimed));
+	JQ_ASSERT(Started == Claimed);
 	JQ_ASSERT(JQ_LT_WRAP(Finished, Claimed));
 	JQ_ASSERT(Job.NumJobs);
 
@@ -1710,8 +1710,6 @@ uint16_t JqQueuePopInternal(uint16_t JobIndex, uint8_t QueueIndex, uint16_t* Out
 		uint16_t s;
 		uint8_t	 q;
 		JqUnpackStartAndQueue(v, s, q);
-
-		printf("%8d/%8d PopAll popped %d ... -> %d/%d\n", JobIndex, PopCount, s, q);
 	}
 
 	// thread hitting zero is resposible for locking and removing from the queue
@@ -1834,62 +1832,6 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubIndex)
 			return Value;
 		}
 	} while(1);
-
-	// uint16_t PopCount = 0;
-	// uint16_t JobIndex = 0;
-	// uint16_t SubIndex = 0xffff;
-	// do
-	// {
-	// 	PopCount = 0;
-	// 	JobIndex = 0;
-
-	// 	SubIndex = 0xffff;
-
-	// 	uint16_t PeekNext = 0;
-	// 	uint16_t Head, Tail, JobCount;
-
-	// 	uint64_t Old, New;
-	// 	(void)New;
-
-	// 	Old = Queue.Link.load();
-	// 	JqUnpackQueueLink(Old, Head, Tail, JobCount);
-	// 	if(!Head) // Nothing to pop
-	// 		break;
-	// 	uint16_t PopLocation = Head;
-
-	// 	for(int i = 0; i < JQ_LOCKLESS_PEEK_COUNT + 1; ++i)
-	// 	{
-	// 		if(!PopLocation)
-	// 			break;
-	// 		if(0 != (PopCount = JqQueuePopInternal(PopLocation, QueueIndex, &SubIndex, &PeekNext, false)))
-	// 		{
-	// 			JobIndex = PopLocation;
-	// 			break;
-	// 		}
-	// 		else
-	// 		{
-	// 			JobIndex	= 0;
-	// 			PopLocation = PeekNext;
-	// 		}
-	// 	}
-	// 	if(JobIndex)
-	// 	{
-	// 		break;
-	// 	}
-	// } while(true);
-
-	// if(JobIndex)
-	// {
-	// 	*OutSubJob = SubIndex;
-	// }
-	// if(!JobIndex)
-	// {
-	// 	// if(!JqQueueEmpty(QueueIndex))
-	// 	// {
-	// 	// 	JQ_BREAK();
-	// 	// }
-	// }
-	// return JobIndex;
 }
 #else
 uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubJob)
@@ -2616,10 +2558,10 @@ void JqDumpState()
 #else
 			JqUnpackStartAndQueue(Job.PendingStartAndQueue.load(), PendingStart, Queue);
 #endif
-			printf("%c %04x / %08x / %08x / %08x | %05d / %05d / %2x | %3d %08x %08x %04x | %3d / %02x / %02x / %04x / %04x\n", Job.Reserved ? 'R' : ' ', i,
-				   Job.ClaimedHandle.load() / JQ_JOB_BUFFER_SIZE, Job.StartedHandle.load() / JQ_JOB_BUFFER_SIZE, Job.FinishedHandle.load() / JQ_JOB_BUFFER_SIZE, Job.PendingFinish.load(), PendingStart,
-				   Queue, Job.PreconditionCount.load(), Job.Parent / JQ_JOB_BUFFER_SIZE, Job.DependentJob.Job / JQ_JOB_BUFFER_SIZE, Job.DependentJob.Next, Job.NumJobs, Job.Queue, Job.Waiters,
-				   Job.Next, Job.Prev);
+			printf("%c %04x / %08llx / %08llx / %08llx | %05d / %05d / %2x | %3lld %08llx %08llx %04x | %3d / %02x / %02x / %04x / %04x\n", Job.Reserved ? 'R' : ' ', i,
+				   Job.ClaimedHandle.load() / JQ_JOB_BUFFER_SIZE, Job.StartedHandle.load() / JQ_JOB_BUFFER_SIZE, Job.FinishedHandle.load() / JQ_JOB_BUFFER_SIZE, (uint16_t)Job.PendingFinish.load(),
+				   PendingStart, Queue, Job.PreconditionCount.load(), Job.Parent / JQ_JOB_BUFFER_SIZE, Job.DependentJob.Job / JQ_JOB_BUFFER_SIZE, Job.DependentJob.Next, Job.NumJobs, Job.Queue,
+				   Job.Waiters, Job.Next, Job.Prev);
 		}
 	}
 }

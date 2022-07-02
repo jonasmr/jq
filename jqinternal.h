@@ -51,7 +51,7 @@ inline void JqUSleepImpl(uint64_t usec)
 typedef uint32_t ThreadIdType;
 #define JqCurrentThreadId() GetCurrentThreadId()
 #include <windows.h>
-inline int64_t	 JqTicksPerSecond()
+inline int64_t JqTicksPerSecond()
 {
 	static int64_t nTicksPerSecond = 0;
 	if(nTicksPerSecond == 0)
@@ -102,7 +102,7 @@ inline void JqUSleepImpl(uint64_t usec)
 typedef uint64_t ThreadIdType;
 #define JQ_USLEEP(us) usleep(us);
 #define JqCurrentThreadId() (uint64_t) pthread_self()
-inline int64_t	 JqTicksPerSecond()
+inline int64_t JqTicksPerSecond()
 {
 	return 1000000000ll;
 }
@@ -253,7 +253,7 @@ struct JqMutex
 #ifdef _WIN32
 	CRITICAL_SECTION CriticalSection;
 #else
-	pthread_mutex_t		  Mutex;
+	pthread_mutex_t Mutex;
 #endif
 
 #ifdef JQ_ASSERT_LOCKS
@@ -273,9 +273,17 @@ struct JqConditionVariable
 #ifdef _WIN32
 	CONDITION_VARIABLE Cond;
 #else
-	pthread_cond_t		  Cond;
+	pthread_cond_t Cond;
 #endif
 };
+
+#if defined(__APPLE__)
+#define JQ_SEMAPHORE_DEFAULT
+#elif defined(_WIN32)
+#define JQ_SEMAPHORE_WIN32
+#else
+#define JQ_SEMAPHORE_FUTEX
+#endif
 
 struct JqSemaphore
 {
@@ -286,10 +294,15 @@ struct JqSemaphore
 
 	void Init(int nMaxCount);
 
-#ifdef _WIN32
+#if defined(JQ_SEMAPHORE_DEFAULT)
+	JqMutex				  Mutex;
+	JqConditionVariable	  Cond;
+	std::atomic<uint32_t> nReleaseCount;
+	uint32_t			  nMaxCount;
+#elif defined(JQ_SEMAPHORE_WIN32)
 	HANDLE Handle;
 	LONG   nMaxCount;
-#else
+#elif defined(JQ_SEMAPHORE_FUTEX)
 	std::atomic<uint32_t> Futex;
 	uint32_t			  MaxCount;
 #endif
