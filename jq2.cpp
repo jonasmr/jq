@@ -154,18 +154,80 @@ void				 JqTriggerQueues(uint64_t QueueTriggerMask);
 JqHandle			 JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags, JqHandle PreconditionHandle);
 void				 JqRunInternal(JqFunction* Function, int Begin, int End, uint32_t JobFlags);
 void				 JqRunInternal(uint32_t WorkIndex, int Begin, int End);
-
-bool JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob);
+bool				 JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob);
 
 struct JqSelfStack
 {
 	uint64_t Job;
 	uint32_t JobIndex;
 };
+enum JqWorkerState
+{
+	JWS_NOT_WORKER,
+	JWS_WORKING,
+	JWS_IDLE,
+};
+enum JqDebugStackState
+{
+	JDS_EXECUTE,
+	JDS_WAIT,
+	JDS_WAIT_ALL,
+	JDS_INVALID,
+};
 
-JQ_THREAD_LOCAL JqSelfStack JqSelfStack[JQ_MAX_JOB_STACK] = { { 0 } };
-JQ_THREAD_LOCAL uint32_t	JqSelfPos					  = 0;
-JQ_THREAD_LOCAL uint32_t	JqHasLock					  = 0;
+struct JqDebugState
+{
+	uint64_t		  Handle;
+	uint32_t		  Flags;
+	JqDebugStackState State;
+	uint16_t		  SubIndex;
+};
+#define JQ_MAX_DEBUG_STACK (3 * JQ_MAX_JOB_STACK)
+struct JqThreadState
+{
+	JqSelfStack SelfStack[JQ_MAX_JOB_STACK];
+	uint32_t	SelfPos;
+	uint32_t	HasLock;
+
+	uint32_t	  Initialized;
+	JqWorkerState WorkerState;
+
+	JqDebugState DebugStack[JQ_MAX_JOB_STACK];
+	uint32_t	 DebugPos;
+
+	JqThreadState* NextThreadState;
+};
+
+JQ_THREAD_LOCAL JqThreadState ThreadState;
+JqMutex						  ThreadStateLock;
+JqThreadState*				  FirstThreadState = nullptr;
+JqThreadState&				  JqGetThreadState();
+
+struct JqDebugStackScope
+{
+	JqDebugStackScope(JqDebugStackState StackState, uint64_t Handle, uint32_t Flags, uint16_t SubIndex = 0)
+	{
+		JqThreadState& State = JqGetThreadState();
+		JQ_ASSERT(State.DebugPos < JQ_MAX_DEBUG_STACK);
+		JqDebugState& DebugState = State.DebugStack[State.DebugPos++];
+		DebugState.State		 = StackState;
+		DebugState.Flags		 = Flags;
+		DebugState.Handle		 = Handle;
+		DebugState.SubIndex		 = SubIndex;
+	}
+	~JqDebugStackScope()
+	{
+		JqThreadState& State = JqGetThreadState();
+		JQ_ASSERT(State.DebugPos > 0);
+		State.DebugPos--;
+	}
+};
+
+#define JQ_TOKEN_PASTE0(a, b) a##b
+#define JQ_TOKEN_PASTE(a, b) JQ_TOKEN_PASTE0(a, b)
+
+#define JQ_DEBUG_SCOPE(State, Handle, Flags, SubIndex) JqDebugStackScope JQ_TOKEN_PASTE(jq_debug, __LINE__) = JqDebugStackScope(State, Handle, Flags, SubIndex)
+//#define JQ_DEBUG_SCOPE(State, Handle, Flags) JQ_DEBUG_SCOPE(State, Handle, Flags, 0)
 
 // linked list structure, for when jobs have multiple jobs that depend on them
 struct JqDependentJobLink
@@ -843,22 +905,28 @@ int JqGetRangeStart(int nIndex, int nFraction, int nRemainder)
 
 void JqSelfPush(uint64_t Job, uint32_t SubIndex)
 {
-	JqSelfStack[JqSelfPos].Job		= Job;
-	JqSelfStack[JqSelfPos].JobIndex = SubIndex;
-	JqSelfPos++;
+	JqThreadState& State = JqGetThreadState();
+
+	State.SelfStack[State.SelfPos].Job		= Job;
+	State.SelfStack[State.SelfPos].JobIndex = SubIndex;
+	State.SelfPos++;
 }
 
 void JqSelfPop(uint64_t Job)
 {
-	JQ_ASSERT(JqSelfPos != 0);
-	JqSelfPos--;
-	JQ_ASSERT(JqSelfStack[JqSelfPos].Job == Job);
+	JqThreadState& State = JqGetThreadState();
+
+	JQ_ASSERT(State.SelfPos != 0);
+	State.SelfPos--;
+	JQ_ASSERT(State.SelfStack[State.SelfPos].Job == Job);
 }
 
 uint32_t JqSelfJobIndex()
 {
-	JQ_ASSERT(JqSelfPos != 0);
-	return JqSelfStack[JqSelfPos - 1].JobIndex;
+	JqThreadState& State = JqGetThreadState();
+
+	JQ_ASSERT(State.SelfPos != 0);
+	return State.SelfStack[State.SelfPos - 1].JobIndex;
 }
 
 int JqGetNumWorkers()
@@ -917,9 +985,12 @@ void JqRunInternal(uint32_t WorkIndex, int Begin, int End)
 
 void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 {
-	JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
+	JQ_DEBUG_SCOPE(JDS_EXECUTE, nJob, 0, nSubIndex);
 
-	JQ_ASSERT(JqSelfPos < JQ_MAX_JOB_STACK);
+	JQ_MICROPROFILE_SCOPE("Execute", 0xc0c0c0);
+	JqThreadState& State = JqGetThreadState();
+
+	JQ_ASSERT(State.SelfPos < JQ_MAX_JOB_STACK);
 	uint16_t nWorkIndex = nJob % JQ_JOB_BUFFER_SIZE;
 	JQ_ASSERT(nWorkIndex);
 
@@ -1203,10 +1274,10 @@ bool JqExecuteOne(uint8_t* nQueues, uint8_t nNumQueues)
 
 void JqWorker(int nThreadId)
 {
-
-	uint8_t* pQueues	= JqState.QueueList[nThreadId];
-	uint32_t nNumQueues = JqState.NumQueues[nThreadId];
-	g_nJqNumQueues		= nNumQueues; // even though its never usedm, its tagged because changing it is not supported.
+	JqGetThreadState().WorkerState = JWS_WORKING;
+	uint8_t* pQueues			   = JqState.QueueList[nThreadId];
+	uint32_t nNumQueues			   = JqState.NumQueues[nThreadId];
+	g_nJqNumQueues				   = nNumQueues; // even though its never usedm, its tagged because changing it is not supported.
 	memcpy(g_JqQueues, pQueues, nNumQueues);
 	int nSemaphoreIndex = JqState.SemaphoreIndex[nThreadId];
 
@@ -1227,8 +1298,11 @@ void JqWorker(int nThreadId)
 			JqExecuteJob(JqState.Jobs[nWork].StartedHandle, nSubIndex);
 		} while(1);
 
+		JqGetThreadState().WorkerState = JWS_IDLE;
 		JqState.Semaphore[nSemaphoreIndex].Wait();
+		JqGetThreadState().WorkerState = JWS_WORKING;
 	}
+	JqGetThreadState().WorkerState = JWS_NOT_WORKER;
 #ifdef JQ_MICROPROFILE
 	MicroProfileOnThreadExit();
 #endif
@@ -2375,6 +2449,8 @@ bool JqPendingJobs(uint64_t nJob)
 
 void JqWaitAll()
 {
+	JQ_DEBUG_SCOPE(JDS_WAIT_ALL, 0, 0, 0);
+
 	while(JqState.ActiveJobs > 0)
 	{
 		if(!JqExecuteOne())
@@ -2392,6 +2468,8 @@ void JqWait(JqHandle Handle, uint32_t WaitFlag, uint32_t UsWaitTime)
 	{
 		return;
 	}
+	JQ_DEBUG_SCOPE(JDS_WAIT, Handle.H, WaitFlag, 0);
+
 	while(!JqIsDoneExt(Handle, WaitFlag))
 	{
 
@@ -2532,7 +2610,29 @@ void JqGroupEnd()
 
 JqHandle JqSelf()
 {
-	return JqHandle{ JqSelfPos ? JqSelfStack[JqSelfPos - 1].Job : 0 };
+	JqThreadState& State = JqGetThreadState();
+
+	return JqHandle{ State.SelfPos ? State.SelfStack[State.SelfPos - 1].Job : 0 };
+}
+
+JqThreadState& JqGetThreadState()
+{
+	if(!ThreadState.Initialized)
+	{
+		JqMutexLock L(ThreadStateLock);
+		JQ_ASSERT(!ThreadState.Initialized);
+		{
+			ThreadState.SelfPos			= 0;
+			ThreadState.HasLock			= 0;
+			ThreadState.WorkerState		= JWS_NOT_WORKER;
+			ThreadState.DebugPos		= 0;
+			ThreadState.Initialized		= 1;
+			ThreadState.NextThreadState = FirstThreadState;
+			FirstThreadState			= &ThreadState;
+			// todo: unregister on thread exit..
+		}
+	}
+	return ThreadState;
 }
 
 void JqDumpState()
