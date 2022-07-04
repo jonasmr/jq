@@ -199,10 +199,11 @@ struct JqThreadState
 	uint32_t	  Initialized;
 	JqWorkerState WorkerState;
 
-	JqDebugState DebugStack[JQ_MAX_JOB_STACK];
-	uint32_t	 DebugPos;
-	JqMutex**	 SingleMutexPtr;
-
+	JqDebugState   DebugStack[JQ_MAX_JOB_STACK];
+	uint32_t	   DebugPos;
+	JqMutex**	   SingleMutexPtr;
+	uint32_t*	   pJqNumQueues;
+	uint8_t*	   pJqQueues;
 	JqThreadState* NextThreadState;
 };
 
@@ -2635,7 +2636,11 @@ JqThreadState& JqGetThreadState()
 			ThreadState.ThreadId		= JqGetCurrentThreadId();
 			ThreadState.NextThreadState = FirstThreadState;
 			ThreadState.SingleMutexPtr	= JqGetSingleMutexPtr();
-			FirstThreadState			= &ThreadState;
+			ThreadState.pJqNumQueues	= &g_nJqNumQueues;
+			ThreadState.pJqQueues		= &g_JqQueues[0];
+
+			FirstThreadState = &ThreadState;
+
 			// todo: unregister on thread exit..
 		}
 	}
@@ -2658,7 +2663,10 @@ void JqDumpState()
 		JqThreadState* State = FirstThreadState;
 		while(State)
 		{
-			printf("%16p: %p %10s %3d\n", (void*)State->ThreadId, State->SingleMutexPtr, JqWorkerStateString(State->WorkerState), State->DebugPos);
+			printf("%16p: %p %10s %3d q:[", (void*)State->ThreadId, State->SingleMutexPtr, JqWorkerStateString(State->WorkerState), State->DebugPos);
+			for(uint32_t i = 0; i < *State->pJqNumQueues; ++i)
+				printf("%2d", State->pJqQueues[i]);
+			printf("]\n");
 
 			if(1)
 			{
@@ -2667,7 +2675,7 @@ void JqDumpState()
 					JqDebugState& S = State->DebugStack[State->DebugPos - 1 - i];
 					uint64_t	  Index, Generation;
 					JqSplitHandle(S.Handle, Index, Generation);
-					printf("%47s %10s %4x %6d, %8llx(%04llx/%08llx)\n", "", JqDebugStackStateString(S.State), S.Flags, S.SubIndex, S.Handle, Index, Generation);
+					printf("%60s %10s %4x %6d, %8llx(%04llx/%08llx)\n", "", JqDebugStackStateString(S.State), S.Flags, S.SubIndex, S.Handle, Index, Generation);
 				}
 			}
 
