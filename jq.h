@@ -6,6 +6,7 @@
 
 #ifndef JQ_JOB_BUFFER_SIZE
 #define JQ_JOB_BUFFER_SIZE (2048)
+#define JQ_JOB_BUFFER_SHIFT 11 // these are paired and must match
 #endif
 
 #ifndef JQ_DEFAULT_WAIT_TIME_US
@@ -233,7 +234,7 @@ class JqFunction
 
 // Job flags
 #define JQ_JOBFLAG_SMALL_STACK 0x1 // create with small stack
-#define JQ_JOBFLAG_DETACHED 0x2	   // dont create as child of current job
+#define JQ_JOBFLAG_DETACHED 0x2 // dont create as child of current job
 
 // Init flags
 #define JQ_INIT_USE_SEPERATE_STACK 0x1

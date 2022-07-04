@@ -9,7 +9,10 @@
 #endif
 
 static JQ_THREAD_LOCAL JqMutex* g_SingleMutexLockMutex = nullptr;
-
+JqMutex**						JqGetSingleMutexPtr()
+{
+	return &g_SingleMutexLockMutex;
+}
 struct JqLocalJobStack
 {
 	JqJobStackList* FreeList;

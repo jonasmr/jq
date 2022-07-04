@@ -125,9 +125,12 @@
 #define JOB_FINISH_PLAIN (0x000000001llu)
 #define JOB_FINISH_PLAIN_MASK (0x00000ffffllu)
 
+static_assert(JQ_JOB_BUFFER_SIZE == (1llu << JQ_JOB_BUFFER_SHIFT));
 static_assert(JQ_NUM_QUEUES <= 64, "Currently a queue mask is being put in a uint64_t");
 
 struct JqMutexLock;
+enum JqWorkerState : uint8_t;
+enum JqDebugStackState : uint8_t;
 
 void				 JqWorker(int ThreadId);
 void				 JqQueuePush(uint8_t Queue, uint64_t Handle);
@@ -155,19 +158,21 @@ JqHandle			 JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Q
 void				 JqRunInternal(JqFunction* Function, int Begin, int End, uint32_t JobFlags);
 void				 JqRunInternal(uint32_t WorkIndex, int Begin, int End);
 bool				 JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob);
+const char*			 JqWorkerStateString(JqWorkerState State);
+const char*			 JqDebugStackStateString(JqDebugStackState State);
 
 struct JqSelfStack
 {
 	uint64_t Job;
 	uint32_t JobIndex;
 };
-enum JqWorkerState
+enum JqWorkerState : uint8_t
 {
 	JWS_NOT_WORKER,
 	JWS_WORKING,
 	JWS_IDLE,
 };
-enum JqDebugStackState
+enum JqDebugStackState : uint8_t
 {
 	JDS_EXECUTE,
 	JDS_WAIT,
@@ -189,11 +194,14 @@ struct JqThreadState
 	uint32_t	SelfPos;
 	uint32_t	HasLock;
 
+	uint64_t ThreadId;
+
 	uint32_t	  Initialized;
 	JqWorkerState WorkerState;
 
 	JqDebugState DebugStack[JQ_MAX_JOB_STACK];
 	uint32_t	 DebugPos;
+	JqMutex**	 SingleMutexPtr;
 
 	JqThreadState* NextThreadState;
 };
@@ -2410,10 +2418,6 @@ void JqCloseReserved(JqHandle Handle)
 	JqDecPrecondtion(H, 1);
 }
 
-void JqDump()
-{
-}
-
 bool JqIsDone(JqHandle Handle)
 {
 	uint64_t H				= Handle.H;
@@ -2622,27 +2626,109 @@ JqThreadState& JqGetThreadState()
 		JqMutexLock L(ThreadStateLock);
 		JQ_ASSERT(!ThreadState.Initialized);
 		{
+
 			ThreadState.SelfPos			= 0;
 			ThreadState.HasLock			= 0;
 			ThreadState.WorkerState		= JWS_NOT_WORKER;
 			ThreadState.DebugPos		= 0;
 			ThreadState.Initialized		= 1;
+			ThreadState.ThreadId		= JqGetCurrentThreadId();
 			ThreadState.NextThreadState = FirstThreadState;
+			ThreadState.SingleMutexPtr	= JqGetSingleMutexPtr();
 			FirstThreadState			= &ThreadState;
 			// todo: unregister on thread exit..
 		}
 	}
 	return ThreadState;
 }
-
+// split handle for easier debugging
+void JqSplitHandle(uint64_t Handle, uint64_t& Index, uint64_t& Generation)
+{
+	Index	   = Handle % JQ_JOB_BUFFER_SIZE;
+	Generation = Handle >> JQ_JOB_BUFFER_SHIFT;
+}
+void JqDump()
+{
+}
 void JqDumpState()
 {
-	printf("\n\nJqDumpState\n\n");
+	printf("\n\nThreads:\n");
+	{
+		JqMutexLock	   L(ThreadStateLock);
+		JqThreadState* State = FirstThreadState;
+		while(State)
+		{
+			printf("%16p: %p %10s %3d\n", (void*)State->ThreadId, State->SingleMutexPtr, JqWorkerStateString(State->WorkerState), State->DebugPos);
+
+			if(1)
+			{
+				for(int i = 0; i < State->DebugPos; ++i)
+				{
+					JqDebugState& S = State->DebugStack[State->DebugPos - 1 - i];
+					uint64_t	  Index, Generation;
+					JqSplitHandle(S.Handle, Index, Generation);
+					printf("%47s %10s %4x %6d, %8llx(%04llx/%08llx)\n", "", JqDebugStackStateString(S.State), S.Flags, S.SubIndex, S.Handle, Index, Generation);
+				}
+			}
+
+			State = State->NextThreadState;
+		}
+	}
+	printf("\nQueues:\n");
+	for(uint32_t i = 0; i < JQ_NUM_QUEUES; ++i)
+	{
+		JqQueue& Queue = JqState.Queues[i];
+		uint16_t Head, Tail, JobCount;
+		JqUnpackQueueLink(Queue.Link.load(), Head, Tail, JobCount);
+		if(Head)
+		{
+			uint16_t Cur	  = Head;
+			uint16_t NextNext = Head;
+			uint64_t Handle	  = JqState.Jobs[Cur].StartedHandle.load();
+			uint64_t Index, Generation;
+			JqSplitHandle(Handle, Index, Generation);
+
+			printf("Queue %3d :: %8llx(%04llx/%08llx)\n", i, Handle, Index, Generation);
+			while(true)
+			{
+
+				Cur = JqState.Jobs[Cur].Next;
+				if(!Cur)
+					break;
+				if(Cur >= JQ_JOB_BUFFER_SIZE)
+				{
+					printf("fail fail\n");
+					printf("fail fail\n");
+					printf("fail fail\n");
+					printf("fail fail\n");
+				}
+				if(NextNext)
+				{
+					NextNext = JqState.Jobs[NextNext].Next;
+					if(NextNext)
+						NextNext = JqState.Jobs[NextNext].Next;
+				}
+				if(Cur == NextNext && Cur != 0)
+				{
+					printf("loop detected! %d %d\n", Cur, NextNext);
+					break;
+				}
+
+				Handle = JqState.Jobs[Cur].StartedHandle.load();
+				printf("             %8llx(%04llx/%08llx)\n", Handle, Index, Generation);
+			}
+		}
+		else
+		{
+			printf("Queue %3d :: EMPTY\n", i);
+		}
+	}
+	printf("\nUnfinished Jobs\n");
 
 	printf("                                                                PreconditionCount\n");
-	printf("                                          PendingFinish            Parent \n");
-	printf("Reserved                                          PendingStart              Dependent             Queue     Next     \n");
-	printf("  Base / Claimed  / Started  / Finished |               Queue|                     DepLink| Num        Waiters     Prev\n");
+	printf("                                          PendingFinish             Parent \n");
+	printf("Reserved                                          PendingStart                     Dependent              Num        Waiters     Prev\n");
+	printf("  Base / Claimed  / Started  / Finished |               Queue|                                   DepLink|       Queue     Next    \n");
 	printf("-------------------------------------------------------------------------------------------------------------------------\n");
 
 	for(uint32_t i = 0; i < JQ_JOB_BUFFER_SIZE; ++i)
@@ -2658,10 +2744,68 @@ void JqDumpState()
 #else
 			JqUnpackStartAndQueue(Job.PendingStartAndQueue.load(), PendingStart, Queue);
 #endif
-			printf("%c %04x / %08llx / %08llx / %08llx | %05d / %05d / %2x | %3lld %08llx %08llx %04x | %3d / %02x / %02x / %04x / %04x\n", Job.Reserved ? 'R' : ' ', i,
-				   Job.ClaimedHandle.load() / JQ_JOB_BUFFER_SIZE, Job.StartedHandle.load() / JQ_JOB_BUFFER_SIZE, Job.FinishedHandle.load() / JQ_JOB_BUFFER_SIZE, (uint16_t)Job.PendingFinish.load(),
-				   PendingStart, Queue, Job.PreconditionCount.load(), Job.Parent / JQ_JOB_BUFFER_SIZE, Job.DependentJob.Job / JQ_JOB_BUFFER_SIZE, Job.DependentJob.Next, Job.NumJobs, Job.Queue,
-				   Job.Waiters, Job.Next, Job.Prev);
+			uint64_t ClaimedGeneration, ClaimedIndex;
+			uint64_t StartedGeneration, StartedIndex;
+			uint64_t FinishedGeneration, FinishedIndex;
+			uint64_t ParentGeneration, ParentIndex;
+			uint64_t DependentGeneration, DependentIndex;
+			JqSplitHandle(Job.ClaimedHandle.load(), ClaimedIndex, ClaimedGeneration);
+			JqSplitHandle(Job.StartedHandle.load(), StartedIndex, StartedGeneration);
+			JqSplitHandle(Job.FinishedHandle.load(), FinishedIndex, FinishedGeneration);
+			JqSplitHandle(Job.DependentJob.Job, DependentIndex, DependentGeneration);
+			JqSplitHandle(Job.Parent, ParentIndex, ParentGeneration);
+			if(ClaimedIndex != i && ClaimedIndex != 0)
+			{
+				printf("fail Claimed %lld %d", ClaimedIndex, i);
+				JQ_BREAK();
+			}
+			if(StartedIndex != i && StartedIndex != 0)
+			{
+				printf("fail Started %lld %d", StartedIndex, i);
+				JQ_BREAK();
+			}
+			if(FinishedIndex != i && FinishedIndex != 0)
+			{
+				printf("fail Finished %lld %d", FinishedIndex, i);
+				JQ_BREAK();
+			}
+			printf("%c %04x / %08llx / %08llx / %08llx | %05d / %05d / %2x | %3lld [%04llx/%08llx] [%04llx/%08llx] %04x | %3d / %02x / %02x / %04x / %04x\n", Job.Reserved ? 'R' : ' ', i,
+				   ClaimedGeneration, StartedGeneration, FinishedGeneration, (uint16_t)Job.PendingFinish.load(), PendingStart, Queue, Job.PreconditionCount.load(), ParentIndex, ParentGeneration,
+				   // Job.Parent / JQ_JOB_BUFFER_SIZE,
+				   DependentIndex, DependentGeneration,
+				   // Job.DependentJob.Job / JQ_JOB_BUFFER_SIZE,
+				   Job.DependentJob.Next, Job.NumJobs, Job.Queue, Job.Waiters, Job.Next, Job.Prev);
 		}
 	}
+}
+
+const char* JqWorkerStateString(JqWorkerState State)
+{
+	switch(State)
+	{
+	case JWS_NOT_WORKER:
+		return "NOT_WORKER";
+	case JWS_WORKING:
+		return "WORKING";
+	case JWS_IDLE:
+		return "IDLE";
+	}
+	JQ_BREAK();
+	return "";
+}
+const char* JqDebugStackStateString(JqDebugStackState State)
+{
+	switch(State)
+	{
+	case JDS_EXECUTE:
+		return "EXECUTE";
+	case JDS_WAIT:
+		return "WAIT";
+	case JDS_WAIT_ALL:
+		return "WAIT_ALL";
+	case JDS_INVALID:
+		return "INVALID";
+	}
+	JQ_BREAK();
+	return "";
 }

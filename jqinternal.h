@@ -430,3 +430,5 @@ JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t
 void		JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack);
 void		JqFreeAllStacks(JqJobStackList& FreeList);
 uint32_t	JqGetNumCpus();
+
+JqMutex** JqGetSingleMutexPtr();
