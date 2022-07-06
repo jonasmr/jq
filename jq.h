@@ -58,7 +58,7 @@
 #endif
 
 #define JQ_MAX_SUBJOBS (0xfffe) // Max times a single job can run
-
+#define JQ_INVALID_SUBJOB (0xffff)
 #define JQ_INVALID_QUEUE 0xff
 
 #ifndef JQ_BREAK

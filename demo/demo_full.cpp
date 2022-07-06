@@ -394,20 +394,32 @@ void JqTestPrio(uint32_t NumWorkers)
 			JQ_BREAK();
 		}
 
-		// verify its run 50 times
+#define TIMES 50
+		std::atomic<int> data[TIMES];
+		for(std::atomic<int>& d : data)
+			d.store(0);
 		JqSpawn(
-			[ThreadId, pv](int index) {
+			[ThreadId, pv, &data](int index) {
+				data[index].fetch_add(1);
 				pv->fetch_add(1);
 				if(index == 0)
 					if(ThreadId != JqGetCurrentThreadId())
 						JQ_BREAK();
 			},
-			0, 50);
+			0, TIMES);
+		for(int i = 0; i < TIMES; ++i)
+		{
+			if(data[i].load() != 1)
+			{
+				JQ_BREAK();
+			}
+		}
 		if(v.load() != 51)
 		{
 			JQ_BREAK();
 		}
 	}
+#undef TIMES
 	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
 	JqWait(J3);

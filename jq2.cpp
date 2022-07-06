@@ -102,7 +102,7 @@
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 #define JQ_NUM_LOCKS 32
 
-#define JQ_LOCKLESS_QUEUE 0
+#define JQ_LOCKLESS_QUEUE 1
 
 #define JQ_LOCKLESS_POP 2
 
@@ -160,6 +160,7 @@ void				 JqRunInternal(uint32_t WorkIndex, int Begin, int End);
 bool				 JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob);
 const char*			 JqWorkerStateString(JqWorkerState State);
 const char*			 JqDebugStackStateString(JqDebugStackState State);
+void				 JqDumpState();
 
 struct JqSelfStack
 {
@@ -313,6 +314,15 @@ struct JqQueue
 
 #endif
 
+#if 0
+#define llqprintf(...) printf(__VA_ARGS__);
+#else
+#define llqprintf(...)                                                                                                                                                                                 \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
+#endif
+
 // lockless queue..
 struct JqLocklessQueue
 {
@@ -332,6 +342,7 @@ struct JqLocklessQueue
 	Entry Entries[BUFFER_SIZE];
 
 	std::atomic<uint64_t> PushPop;
+	int					  Index;
 
 	static uint64_t PackEntry(uint16_t PushSequence, uint16_t PopSequence, uint32_t Payload)
 	{
@@ -354,13 +365,17 @@ struct JqLocklessQueue
 		Pop	 = (uint32_t)(Packed & 0xffffffff);
 	}
 
-	JqLocklessQueue()
+	void Init(int Index)
 	{
+		this->Index = Index;
 		PushPop.store(0);
 		for(Entry& e : Entries)
 		{
-			e.Entry.store(0);
+
+			uint64_t Value = PackEntry(0xffff, 0xffff, 0);
+			e.Entry.store(Value);
 		}
+		llqprintf("init done %p\n", this);
 		static_assert(BUFFER_SIZE == JQ_JOB_BUFFER_SIZE, "BUFFER_SIZE must match JQ_JOB_BUFFER_SIZE");
 	}
 
@@ -376,7 +391,7 @@ struct JqLocklessQueue
 			if(Push == Pop)
 				return false;
 
-			uint32_t PopIndex	  = Pop & BUFFER_SIZE;
+			uint32_t PopIndex	  = Pop & (BUFFER_SIZE - 1);
 			uint16_t Sequence	  = Pop >> SEQUENCE_SHIFT;
 			uint16_t PrevSequence = Sequence - 1;
 
@@ -391,6 +406,11 @@ struct JqLocklessQueue
 				if(Ref)
 					*Ref = Pop;
 				PeekOut = Payload;
+				if(Payload == 0)
+				{
+					JqDumpState();
+				}
+				JQ_ASSERT(Payload != 0);
 				return true;
 			}
 			// if sequence doesn't match, someone popped inbetween, so the payload should be zero, and we have to retry
@@ -417,7 +437,7 @@ struct JqLocklessQueue
 			if(UseRef && Pop != RefValue) // something else got popped.
 				return false;
 
-			uint32_t PopIndex	  = Pop & BUFFER_SIZE;
+			uint32_t PopIndex	  = Pop & (BUFFER_SIZE - 1);
 			uint16_t Sequence	  = Pop >> SEQUENCE_SHIFT;
 			uint16_t PrevSequence = Sequence - 1;
 			Entry				  = Entries[PopIndex].Entry.load();
@@ -436,7 +456,7 @@ struct JqLocklessQueue
 					PoppedValue = Payload;
 					// we're done updating push/pop, now clear the payload.
 					Entries[PopIndex].Entry.store(PackEntry(PushSequence, Sequence, 0));
-
+					llqprintf("popped %d [%d/%d] %8d :: %8d %8d   [%lld/%lld]\n", Index, Push, Pop, Payload, PopIndex, Sequence, PushPop.load() >> 32, PushPop.load() & 0xffffffff);
 					return true;
 				}
 			}
@@ -446,10 +466,13 @@ struct JqLocklessQueue
 
 	void Push(uint32_t Value)
 	{
+		if(Value == 0)
+			JQ_BREAK();
 		// queue should never be fucking full.
 		uint32_t Push, Pop, Payload;
 		uint64_t Old, New;
 		uint16_t PushSequence, PopSequence;
+
 		do
 		{
 			Old = PushPop.load();
@@ -469,9 +492,10 @@ struct JqLocklessQueue
 		} while(true);
 
 		// now commit the value in the queue
-		uint32_t PushIndex	  = Push & BUFFER_SIZE;
+		uint32_t PushIndex	  = Push & (BUFFER_SIZE - 1);
 		uint16_t Sequence	  = Push >> SEQUENCE_SHIFT;
 		uint16_t PrevSequence = Sequence - 1;
+		llqprintf("pushin %d [%d/%d]%8d :: %8d %8d  [%lld/%lld]\n", Index, Push, Pop, Value, PushIndex, Sequence, PushPop.load() >> 32, PushPop.load() & 0xffffffff);
 
 		// atomically insert and mark the value.
 		// do backoff, if for some reason the value isn't popped
@@ -483,11 +507,11 @@ struct JqLocklessQueue
 			// handle the case where a poppin' hasnt committed its pop
 			if(PopSequence != PrevSequence)
 			{
-				JQ_BREAK(); // do exp. backoff?
+				// JQ_BREAK(); // do exp. backoff?
 			}
 			if(PushSequence != PrevSequence)
 			{
-				JQ_BREAK();
+				// JQ_BREAK();
 			}
 			JQ_ASSERT(Payload == 0);
 
@@ -496,6 +520,25 @@ struct JqLocklessQueue
 			if(Entries[PushIndex].Entry.compare_exchange_weak(Old, New))
 				break;
 		} while(true);
+	}
+	template <typename T>
+	void DebugCallbackAll(T Function)
+	{
+		uint32_t Push, Pop;
+		UnpackPushPop(PushPop.load(), Push, Pop);
+		while(Pop != Push)
+		{
+			uint32_t PopIndex = Pop & (BUFFER_SIZE - 1);
+			uint16_t Sequence = Pop >> SEQUENCE_SHIFT;
+
+			uint64_t Entry = Entries[PopIndex].Entry.load();
+			uint16_t EntryPushSequence, EntryPopSequence;
+			uint32_t Payload;
+			UnpackEntry(Entry, EntryPushSequence, EntryPopSequence, Payload);
+
+			Function(Pop, PopIndex, Sequence, EntryPushSequence, EntryPopSequence, Payload);
+			Pop++;
+		}
 	}
 };
 
@@ -608,6 +651,11 @@ void JqStart(JqAttributes* pAttr)
 		JQ_ASSERT(pAttr->WorkerOrderIndex[i] < pAttr->NumQueueOrders); /// out of bounds pipe order index in attributes
 		JQ_ASSERT(pAttr->WorkerOrderIndex[i] < JQ_NUM_QUEUES);
 		JqState.ThreadConfig[i] = pAttr->QueueOrder[pAttr->WorkerOrderIndex[i]];
+	}
+
+	for(int i = 0; i < JQ_NUM_QUEUES; ++i)
+	{
+		JqState.LocklessQueues[i].Init(i);
 	}
 
 	for(int i = 0; i < JqState.NumWorkers; ++i)
@@ -1616,7 +1664,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	JQ_ASSERT(NumJobs < 0xffff);
 
 	// fnidderlort. det her skal skrives i add for at virke..
-	Job.StartedHandle = Handle;
+	// Job.StartedHandle = Handle;
 
 	JqSingleMutexLock L(Queue.Mutex);
 	JQ_ASSERT(Job.PendingFinish.load() >= NumJobsToStart);
@@ -1716,7 +1764,8 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 bool JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob)
 {
 	JQ_ASSERT(JobIndex < JQ_JOB_BUFFER_SIZE);
-	JqJob&	 Job = JqState.Jobs[JobIndex];
+	JqJob& Job = JqState.Jobs[JobIndex];
+
 	uint64_t Old, New;
 	do
 	{
@@ -1726,7 +1775,7 @@ bool JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob)
 		New = Old - 1;
 	} while(!Job.PendingStart.compare_exchange_weak(Old, New));
 
-	*OutSubJob = (uint16_t)New;
+	*OutSubJob = Job.NumJobs - 1 - (uint16_t)New;
 	return true;
 }
 #else
@@ -1897,7 +1946,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubIndex)
 		}
 		JQ_ASSERT(Value != 0);
 		JQ_ASSERT(Value < JQ_JOB_BUFFER_SIZE);
-		uint16_t SubIndex = 0xffff;
+		uint16_t SubIndex = JQ_INVALID_SUBJOB;
 		bool	 Success  = JqTryPopJob(Value, &SubIndex);
 		if(!Success || OutSubIndex == 0) // if we fail popping, or we're the last to be popped, try to remove
 		{
@@ -2478,7 +2527,7 @@ void JqWait(JqHandle Handle, uint32_t WaitFlag, uint32_t UsWaitTime)
 	while(!JqIsDoneExt(Handle, WaitFlag))
 	{
 
-		uint16_t SubIndex = 0;
+		uint16_t SubIndex = JQ_INVALID_SUBJOB;
 		uint16_t Work	  = 0;
 		int		 mode	  = 0;
 		if((WaitFlag & JQ_WAITFLAG_EXECUTE_SUCCESSORS) == JQ_WAITFLAG_EXECUTE_SUCCESSORS)
@@ -2488,13 +2537,15 @@ void JqWait(JqHandle Handle, uint32_t WaitFlag, uint32_t UsWaitTime)
 		}
 		if(Work == 0 && JQ_WAITFLAG_EXECUTE_ANY == (WaitFlag & JQ_WAITFLAG_EXECUTE_ANY))
 		{
-			SubIndex = 0;
+			SubIndex = JQ_INVALID_SUBJOB;
 			Work	 = JqTakeJob(&SubIndex, g_nJqNumQueues, g_JqQueues);
 			mode |= 2;
 		}
 
 		if(Work)
 		{
+			JQ_ASSERT(SubIndex != JQ_INVALID_SUBJOB);
+
 			JQ_ASSERT(JqState.Jobs[Work].StartedHandle.load());
 			JQ_ASSERT(JqState.Jobs[Work].StartedHandle.load() == JqState.Jobs[Work].ClaimedHandle.load());
 			JqExecuteJob(JqState.Jobs[Work].StartedHandle, SubIndex);
@@ -2683,6 +2734,23 @@ void JqDumpState()
 		}
 	}
 	printf("\nQueues:\n");
+#if JQ_LOCKLESS_QUEUE
+	for(uint32_t i = 0; i < JQ_NUM_QUEUES; ++i)
+	{
+		JqLocklessQueue& Queue = JqState.LocklessQueues[i];
+		printf("Queue %d: \n", i);
+
+		// /Function(Pop, PopIndex, EntryPushSequence, EntryPopSequence, Payload);
+
+		Queue.DebugCallbackAll([&](int Index, int WrappedIndex, uint16_t Seq, uint16_t PushSequence, uint16_t PopSequence, uint32_t Payload) {
+			uint64_t Handle = JqState.Jobs[Payload % JQ_JOB_BUFFER_SIZE].StartedHandle.load();
+			uint64_t HandleIndex, HandleGeneration;
+			JqSplitHandle(Handle, HandleIndex, HandleGeneration);
+			printf("\tElement     %d/%5d [%4x==%4x==%4x] :: %d  Handle %8llx(%04llx/%08llx)\n", WrappedIndex, Index, Seq, PushSequence, PopSequence, Payload, Handle, HandleIndex, HandleGeneration);
+		});
+	}
+
+#else
 	for(uint32_t i = 0; i < JQ_NUM_QUEUES; ++i)
 	{
 		JqQueue& Queue = JqState.Queues[i];
@@ -2690,9 +2758,9 @@ void JqDumpState()
 		JqUnpackQueueLink(Queue.Link.load(), Head, Tail, JobCount);
 		if(Head)
 		{
-			uint16_t Cur	  = Head;
+			uint16_t Cur = Head;
 			uint16_t NextNext = Head;
-			uint64_t Handle	  = JqState.Jobs[Cur].StartedHandle.load();
+			uint64_t Handle = JqState.Jobs[Cur].StartedHandle.load();
 			uint64_t Index, Generation;
 			JqSplitHandle(Handle, Index, Generation);
 
@@ -2731,6 +2799,7 @@ void JqDumpState()
 			printf("Queue %3d :: EMPTY\n", i);
 		}
 	}
+#endif
 	printf("\nUnfinished Jobs\n");
 
 	printf("                                                                PreconditionCount\n");
