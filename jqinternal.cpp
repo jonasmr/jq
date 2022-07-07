@@ -2,14 +2,17 @@
 #include "jq.h"
 #include <stdint.h>
 
-#ifndef _WIN32
+#ifdef JQ_SEMAPHORE_FUTEX
 #include <linux/futex.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #endif
 
 static JQ_THREAD_LOCAL JqMutex* g_SingleMutexLockMutex = nullptr;
-
+JqMutex**						JqGetSingleMutexPtr()
+{
+	return &g_SingleMutexLockMutex;
+}
 struct JqLocalJobStack
 {
 	JqJobStackList* FreeList;
@@ -120,44 +123,6 @@ void JqConditionVariable::NotifyAll()
 	WakeAllConditionVariable(&Cond);
 }
 
-JqSemaphore::JqSemaphore()
-{
-	Handle = 0;
-}
-JqSemaphore::~JqSemaphore()
-{
-	if(Handle)
-	{
-		CloseHandle(Handle);
-	}
-}
-void JqSemaphore::Init(int nCount)
-{
-	if(Handle)
-	{
-		CloseHandle(Handle);
-		Handle = 0;
-	}
-	nMaxCount = nCount;
-	Handle	  = CreateSemaphoreEx(NULL, 0, nCount * 2, NULL, 0, SEMAPHORE_ALL_ACCESS);
-}
-
-void JqSemaphore::Signal(uint32_t nCount)
-{
-	if(nCount > (uint32_t)nMaxCount)
-		nCount = nMaxCount;
-	BOOL r = ReleaseSemaphore(Handle, nCount, 0);
-	(void)r;
-	JQLSC(g_JqSemaSignal.fetch_add(1));
-}
-
-void JqSemaphore::Wait()
-{
-	JQLSC(g_JqSemaWait.fetch_add(1));
-	JQ_MICROPROFILE_SCOPE("Wait", 0xc0c0c0);
-	DWORD r = WaitForSingleObject((HANDLE)Handle, INFINITE);
-	JQ_ASSERT(WAIT_OBJECT_0 == r);
-}
 #else
 
 JqMutex::JqMutex()
@@ -254,6 +219,105 @@ void JqConditionVariable::NotifyAll()
 	JQLSC(g_JqCondSignal.fetch_add(1));
 }
 
+#endif
+
+#ifdef JQ_SEMAPHORE_WIN32
+JqSemaphore::JqSemaphore()
+{
+	Handle = 0;
+}
+JqSemaphore::~JqSemaphore()
+{
+	if(Handle)
+	{
+		CloseHandle(Handle);
+	}
+}
+void JqSemaphore::Init(int nCount)
+{
+	if(Handle)
+	{
+		CloseHandle(Handle);
+		Handle = 0;
+	}
+	nMaxCount = nCount;
+	Handle	  = CreateSemaphoreEx(NULL, 0, nCount * 2, NULL, 0, SEMAPHORE_ALL_ACCESS);
+}
+
+void JqSemaphore::Signal(uint32_t nCount)
+{
+	if(nCount > (uint32_t)nMaxCount)
+		nCount = nMaxCount;
+	BOOL r = ReleaseSemaphore(Handle, nCount, 0);
+	(void)r;
+	JQLSC(g_JqSemaSignal.fetch_add(1));
+}
+
+void JqSemaphore::Wait()
+{
+	JQLSC(g_JqSemaWait.fetch_add(1));
+	JQ_MICROPROFILE_SCOPE("Wait", 0xc0c0c0);
+	DWORD r = WaitForSingleObject((HANDLE)Handle, INFINITE);
+	JQ_ASSERT(WAIT_OBJECT_0 == r);
+}
+#endif
+
+#ifdef JQ_SEMAPHORE_DEFAULT
+JqSemaphore::JqSemaphore()
+{
+	nMaxCount = 0xffffffff;
+	nReleaseCount.store(0);
+}
+JqSemaphore::~JqSemaphore()
+{
+}
+void JqSemaphore::Init(int nCount)
+{
+	nMaxCount = nCount;
+}
+void JqSemaphore::Signal(uint32_t nCount)
+{
+	JQLSC(g_JqSemaSignal.fetch_add(1));
+	if(nReleaseCount.load() == nMaxCount)
+	{
+		return;
+	}
+	{
+		JqMutexLock l(Mutex);
+		uint32_t	nCurrent = nReleaseCount.load();
+		if(nCurrent + nCount > nMaxCount)
+			nCount = nMaxCount - nCurrent;
+		nReleaseCount.fetch_add(nCount);
+		JQ_ASSERT(nReleaseCount.load() <= nMaxCount);
+		if(nReleaseCount.load() == nMaxCount)
+		{
+			Cond.NotifyAll();
+		}
+		else
+		{
+			for(uint32_t i = 0; i < nReleaseCount; ++i)
+			{
+				Cond.NotifyOne();
+			}
+		}
+	}
+}
+
+void JqSemaphore::Wait()
+{
+	JQLSC(g_JqSemaWait.fetch_add(1));
+
+	JQ_MICROPROFILE_SCOPE("Wait", 0xc0c0c0);
+	JqMutexLock l(Mutex);
+	while(!nReleaseCount)
+	{
+		Cond.Wait(Mutex);
+	}
+	nReleaseCount--;
+}
+#endif
+
+#ifdef JQ_SEMAPHORE_FUTEX
 JqSemaphore::JqSemaphore()
 {
 	MaxCount = 0xffffffff;
@@ -326,7 +390,6 @@ void JqSemaphore::Wait()
 		}
 	} while(true);
 }
-
 #endif
 
 #ifndef JQ_ALLOC_STACK_INTERNAL_IMPL

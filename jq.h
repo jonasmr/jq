@@ -6,6 +6,7 @@
 
 #ifndef JQ_JOB_BUFFER_SIZE
 #define JQ_JOB_BUFFER_SIZE (2048)
+#define JQ_JOB_BUFFER_SHIFT 11 // these are paired and must match
 #endif
 
 #ifndef JQ_DEFAULT_WAIT_TIME_US
@@ -57,7 +58,7 @@
 #endif
 
 #define JQ_MAX_SUBJOBS (0xfffe) // Max times a single job can run
-
+#define JQ_INVALID_SUBJOB (0xffff)
 #define JQ_INVALID_QUEUE 0xff
 
 #ifndef JQ_BREAK
@@ -233,7 +234,7 @@ class JqFunction
 
 // Job flags
 #define JQ_JOBFLAG_SMALL_STACK 0x1 // create with small stack
-#define JQ_JOBFLAG_DETACHED 0x2	   // dont create as child of current job
+#define JQ_JOBFLAG_DETACHED 0x2 // dont create as child of current job
 
 // Init flags
 #define JQ_INIT_USE_SEPERATE_STACK 0x1
@@ -321,6 +322,7 @@ JQ_API bool		JqExecuteChild(JqHandle Handle); // execute 1 child job.
 JQ_API JqHandle JqGroupBegin();					 // add a non-executing job to group all jobs added between begin/end
 JQ_API void		JqGroupEnd();
 JQ_API bool		JqIsDone(JqHandle Handle);
+JQ_API bool		JqIsStarted(JqHandle Handle);
 JQ_API bool		JqIsDoneExt(JqHandle Handle, uint32_t WaitFlag);
 JQ_API void		JqStart(int NumWorkers);
 JQ_API void		JqStart(JqAttributes* Attributes);

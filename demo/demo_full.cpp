@@ -105,7 +105,7 @@ void uprintf(const char* fmt, ...);
 #endif
 extern uint32_t g_TESTID;
 
-void JqTestPrio()
+void JqTestPrio(uint32_t NumWorkers)
 {
 	MICROPROFILE_SCOPEI("JQ_TEST", "JqTestPrio", MP_AUTO);
 	g_DontSleep = 0;
@@ -136,7 +136,7 @@ void JqTestPrio()
 			PostBarrier0,
 			[]() {
 				MICROPROFILE_SCOPEI("JQ_TEST", "First PostBarrier", MP_AUTO);
-				JobSpinWork(500);
+				JobSpinWork(100);
 			},
 			5);
 
@@ -145,16 +145,16 @@ void JqTestPrio()
 			Barrier,
 			[]() {
 				MICROPROFILE_SCOPEI("JQ_TEST", "Second PostBarrier", MP_AUTO);
-				JobSpinWork(500);
+				JobSpinWork(100);
 			},
-			0, 5);
+			0, 1);
 		JqHandle PostBarrier2 = JqAddSuccessor(
 			Barrier,
 			[]() {
 				MICROPROFILE_SCOPEI("JQ_TEST", "Third PostBarrier", MP_AUTO);
-				JobSpinWork(500);
+				JobSpinWork(100);
 			},
-			0, 10);
+			0, 1);
 
 		JqAddPrecondition(Final, PostBarrier0);
 		JqAddPrecondition(Final, PostBarrier1);
@@ -164,7 +164,7 @@ void JqTestPrio()
 	JqHandle J1 = JqAdd(
 		[](int index) {
 			MICROPROFILE_SCOPEI("JQ_TEST", "BASE-7-JOBS", MP_GREY);
-			JobSpinWork(5000);
+			JobSpinWork(50);
 		},
 		7, 3);
 	JqHandle J2 = JqAdd(
@@ -178,7 +178,7 @@ void JqTestPrio()
 					JobSpinWork(20);
 				},
 				1, 20);
-			JobSpinWork(2000);
+			JobSpinWork(20);
 			pTwoEnd->fetch_add(1);
 		},
 		0, 2, 1);
@@ -203,11 +203,13 @@ void JqTestPrio()
 	{
 		JqHandle ReservedHandle;
 		uint32_t Frame;
+		uint32_t NumJobs;
 	} H;
 	static uint32_t Frame = 0;
 	Frame++;
 	H.ReservedHandle = ReservedHandle;
 	H.Frame			 = Frame;
+	H.NumJobs		 = 32 * NumWorkers;
 
 	JqHandle ReservedWait = JqAdd(
 		[pBar, ReservedHandle] {
@@ -227,31 +229,31 @@ void JqTestPrio()
 			JobSpinWork(50);
 			pFoo->fetch_add(1);
 			// printf("JOB INDEX IS %d\n", JobIndex);
-			if(JobIndex == 999)
+			if(JobIndex == H.NumJobs - 1)
 			{
 				// printf("HERE HERE JOB INDEX IS %d\n", JobIndex);
 				JqAddReserved(
 					H.ReservedHandle,
 					[pBar] {
 						MICROPROFILE_SCOPEI("JQ_TEST", "RESERVED", MP_PINK);
-						JobSpinWork(5000);
+						JobSpinWork(100);
 
 						pBar->fetch_add(1);
 					},
 					2);
 			}
 		},
-		0, 1000);
+		0, H.NumJobs);
 
 	JqHandle Successor = JqAddSuccessor(
 		J3,
-		[pFoo, pSuccessorDone]() {
+		[pFoo, pSuccessorDone, &H]() {
 			MICROPROFILE_SCOPEI("JQ_TEST", "THE_SUCCESSOR", MP_RED);
-			if(1000 != *pFoo)
+			if(H.NumJobs != *pFoo)
 			{
 				JQ_BREAK();
 			}
-			JobSpinWork(5000);
+			JobSpinWork(100);
 
 			*pSuccessorDone = 1;
 		},
@@ -267,7 +269,7 @@ void JqTestPrio()
 			}
 
 			*pReservedSuccessorDone = 1;
-			JobSpinWork(5000);
+			JobSpinWork(100);
 		},
 		0);
 
@@ -279,40 +281,41 @@ void JqTestPrio()
 		Final,
 		[]() {
 			MICROPROFILE_SCOPEI("JQ_TEST", "Final", MP_AUTO);
-			JobSpinWork(500);
+			JobSpinWork(100);
 		},
 		1);
 
-	for(uint32_t i = 0; i < 10; ++i)
+	for(uint32_t i = 0; i < 3; ++i)
 	{
+		uint32_t NumJobs = NumWorkers / 2;
 		JqAddSuccessor(
 			Final,
 			[] {
 				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-1", MP_GREY);
 				// JobSpinWork(100);
 			},
-			0, 32);
+			0, NumJobs);
 		JqAddSuccessor(
 			Final,
 			[] {
 				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-2", MP_GREY);
 				// JobSpinWork(100);
 			},
-			0, 32);
+			0, NumJobs);
 		JqAddSuccessor(
 			Final,
 			[] {
 				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-3", MP_GREY);
 				// JobSpinWork(100);
 			},
-			0, 32);
+			0, NumJobs);
 		JqAddSuccessor(
 			Final,
 			[] {
 				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-4", MP_GREY);
 				// JobSpinWork(100);
 			},
-			0, 32);
+			0, NumJobs);
 	}
 	{
 		// test JQ_WAITFLAG_EXECUTE_SUCCESSORS.
@@ -320,14 +323,19 @@ void JqTestPrio()
 		uint64_t		 ThreadId = JqGetCurrentThreadId();
 		std::atomic<int> v;
 		v					 = 0;
+		std::atomic<int> x;
+		x					 = 0;
 		std::atomic<int>* pv = &v;
+		std::atomic<int>* px = &x;
 #define FANOUT 3
 		MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-Time", MP_AUTO);
 		JobSpinWork(100);
+
 		if(1)
 		{
 			JqHandle SmallTree = JqAdd(
-				[pv, ThreadId] {
+				[pv, ThreadId,px] {
+					px->fetch_add(1);
 					MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-0", MP_AUTO);
 					JqAdd(
 						[pv, ThreadId] {
@@ -348,10 +356,13 @@ void JqTestPrio()
 								0, FANOUT);
 						},
 						0, FANOUT);
+
+					px->fetch_add(0x100);
 				},
 				0, FANOUT);
 			MICROPROFILE_SCOPEI("ChildWait", "ChildWaitTime", MP_AUTO);
 			JqWait(SmallTree, JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SPIN);
+#if 0
 			if(v.load() != (FANOUT * FANOUT * FANOUT))
 			{
 				printf("only %d was executed locally", v.load());
@@ -360,10 +371,12 @@ void JqTestPrio()
 			{
 				printf("only %d was executed locally", v.load());
 			}
+#endif
 		}
 
 #undef FANOUT
 	}
+	if(1)
 	{
 		// Test JqSpawn
 		std::atomic<int> v;
@@ -387,20 +400,32 @@ void JqTestPrio()
 			JQ_BREAK();
 		}
 
-		// verify its run 50 times
+#define TIMES 50
+		std::atomic<int> data[TIMES];
+		for(std::atomic<int>& d : data)
+			d.store(0);
 		JqSpawn(
-			[ThreadId, pv](int index) {
+			[ThreadId, pv, &data](int index) {
+				data[index].fetch_add(1);
 				pv->fetch_add(1);
 				if(index == 0)
 					if(ThreadId != JqGetCurrentThreadId())
 						JQ_BREAK();
 			},
-			0, 50);
+			0, TIMES);
+		for(int i = 0; i < TIMES; ++i)
+		{
+			if(data[i].load() != 1)
+			{
+				JQ_BREAK();
+			}
+		}
 		if(v.load() != 51)
 		{
 			JQ_BREAK();
 		}
 	}
+#undef TIMES
 	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
 	JqWait(J3);
@@ -484,10 +509,6 @@ void JqTestCancel()
 	delete[] Cancel;
 }
 
-void JqTestSpawn()
-{
-}
-
 void JqTestWaitExecuteChildren()
 {
 	printf("todo: test this");
@@ -495,6 +516,7 @@ void JqTestWaitExecuteChildren()
 
 void JqTestWaitIgnoreChildren()
 {
+	MICROPROFILE_SCOPEI("JQ_TEST", "JqTestWaitIgnoreChildren", MP_AUTO);
 	std::atomic<int> parent, child;
 	parent = 0;
 	child  = 0;
@@ -522,9 +544,10 @@ void JqTestWaitIgnoreChildren()
 		JQ_BREAK();
 	if(child.load() > CHILDREN * PARENTS)
 		JQ_BREAK();
-
+#if 0
 	if(child.load() == CHILDREN * PARENTS)
 		printf("all children executed. this hints that JQ_WAITFLAG_IGNORE_CHILDREN might not ignore children");
+#endif
 
 	JqWait(Job);
 	if(child.load() != CHILDREN * PARENTS)
@@ -547,30 +570,42 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	printf("press 'z' to toggle microprofile drawing\n");
-	printf("press 'right shift' to pause microprofile update\n");
 	MicroProfileOnThreadCreate("Main");
 #ifdef _WIN32
 	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
 #endif
 	static JqAttributes Attr;
 	JqInitAttributes(&Attr, 5, 0);
+	if(Attr.NumWorkers < 4)
+	{
+		printf("Demo won't run on hardware with < 4 threads\n");
+		exit(1);
+	}
+
 	Attr.Flags		   = nJqInitFlags;
 	Attr.QueueOrder[0] = JqQueueOrder{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };
 	Attr.QueueOrder[1] = JqQueueOrder{ 3, { 3, 2, 1, 0xff, 0xff, 0xff, 0xff, 0xff } };
 	Attr.QueueOrder[2] = JqQueueOrder{ 2, { 5, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	Attr.QueueOrder[3] = JqQueueOrder{ 2, { 1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
-	Attr.QueueOrder[4] = JqQueueOrder{ 1,
-									   {
-										   7,
-										   0xff,
-										   0xff,
-										   0xff,
-										   0xff,
-										   0xff,
-										   0xff,
-										   0xff,
-									   } };
+	if(Attr.NumWorkers == 4)
+	{
+		// with only 4 workers, we need to make sure 7 is drained
+		Attr.QueueOrder[3] = JqQueueOrder{ 3, { 1, 5, 7, 0xff, 0xff, 0xff, 0xff, 0xff } };
+	}
+	else
+	{
+		Attr.QueueOrder[3] = JqQueueOrder{ 2, { 1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
+		Attr.QueueOrder[4] = JqQueueOrder{ 1,
+										   {
+											   7,
+											   0xff,
+											   0xff,
+											   0xff,
+											   0xff,
+											   0xff,
+											   0xff,
+											   0xff,
+										   } };
+	}
 
 	for(uint32_t i = 0; i < Attr.NumWorkers; ++i)
 	{
@@ -580,6 +615,7 @@ int main(int argc, char* argv[])
 	JqStart(&Attr);
 	JqQueueOrder MyQueueConfig = JqQueueOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
 	JqSetThreadQueueOrder(&MyQueueConfig);
+	uprintf("Started JQ with %d workers\n", Attr.NumWorkers);
 
 #ifdef _WIN32
 	std::atomic<int> keypressed;
@@ -634,10 +670,9 @@ int main(int argc, char* argv[])
 		}
 		MicroProfileFlip(0);
 		{
-			JqTestPrio();
+			JqTestPrio(Attr.NumWorkers);
 			JqTestCancel();
-			JqTestSpawn();
-			JqTestWaitIgnoreChildren();
+			// JqTestWaitIgnoreChildren();
 		}
 		JqLogStats();
 	}

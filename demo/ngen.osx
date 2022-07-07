@@ -19,7 +19,7 @@ cflags 				-mmacosx-version-min=10.12
 ldflags 			-framework Cocoa -framework CoreFoundation -fobjc-link-runtime
 ldflags 			-framework CoreLocation
 ldflags 			-lpthread -lvulkan -lpthread -lglfw
-ldflags 			-lcrypto -lssl
+ldflags 			-lcrypto -lssl -lcurses
 
 
 
