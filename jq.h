@@ -322,6 +322,7 @@ JQ_API bool		JqExecuteChild(JqHandle Handle); // execute 1 child job.
 JQ_API JqHandle JqGroupBegin();					 // add a non-executing job to group all jobs added between begin/end
 JQ_API void		JqGroupEnd();
 JQ_API bool		JqIsDone(JqHandle Handle);
+JQ_API bool		JqIsStarted(JqHandle Handle);
 JQ_API bool		JqIsDoneExt(JqHandle Handle, uint32_t WaitFlag);
 JQ_API void		JqStart(int NumWorkers);
 JQ_API void		JqStart(JqAttributes* Attributes);

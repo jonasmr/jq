@@ -323,7 +323,10 @@ void JqTestPrio(uint32_t NumWorkers)
 		uint64_t		 ThreadId = JqGetCurrentThreadId();
 		std::atomic<int> v;
 		v					 = 0;
+		std::atomic<int> x;
+		x					 = 0;
 		std::atomic<int>* pv = &v;
+		std::atomic<int>* px = &x;
 #define FANOUT 3
 		MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-Time", MP_AUTO);
 		JobSpinWork(100);
@@ -331,7 +334,8 @@ void JqTestPrio(uint32_t NumWorkers)
 		if(1)
 		{
 			JqHandle SmallTree = JqAdd(
-				[pv, ThreadId] {
+				[pv, ThreadId,px] {
+					px->fetch_add(1);
 					MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-0", MP_AUTO);
 					JqAdd(
 						[pv, ThreadId] {
@@ -352,6 +356,8 @@ void JqTestPrio(uint32_t NumWorkers)
 								0, FANOUT);
 						},
 						0, FANOUT);
+
+					px->fetch_add(0x100);
 				},
 				0, FANOUT);
 			MICROPROFILE_SCOPEI("ChildWait", "ChildWaitTime", MP_AUTO);
