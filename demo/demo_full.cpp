@@ -322,7 +322,7 @@ void JqTestPrio(uint32_t NumWorkers)
 		// by now there is a ton of work, so it'll be a while. make a small job tree, and wait on it here.
 		uint64_t		 ThreadId = JqGetCurrentThreadId();
 		std::atomic<int> v;
-		v					 = 0;
+		v = 0;
 		std::atomic<int> x;
 		x					 = 0;
 		std::atomic<int>* pv = &v;
@@ -334,7 +334,7 @@ void JqTestPrio(uint32_t NumWorkers)
 		if(1)
 		{
 			JqHandle SmallTree = JqAdd(
-				[pv, ThreadId,px] {
+				[pv, ThreadId, px] {
 					px->fetch_add(1);
 					MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-0", MP_AUTO);
 					JqAdd(
@@ -560,13 +560,18 @@ void JqTestWaitIgnoreChildren()
 int main(int argc, char* argv[])
 {
 
-	uint32_t nJqInitFlags = JQ_INIT_USE_SEPERATE_STACK;
+	uint32_t nJqInitFlags  = JQ_INIT_USE_SEPERATE_STACK;
+	bool	 UseMinWorkers = false;
 	for(int i = 1; i < argc; ++i)
 	{
 		if(0 == strcmp("-ns", argv[i]))
 		{
 			printf("disabling seperate stack\n");
 			nJqInitFlags &= ~JQ_INIT_USE_SEPERATE_STACK;
+		}
+		if(0 == strcmp("-minworkers", argv[i]))
+		{
+			UseMinWorkers = true;
 		}
 	}
 
@@ -581,6 +586,8 @@ int main(int argc, char* argv[])
 		printf("Demo won't run on hardware with < 4 threads\n");
 		exit(1);
 	}
+	if(UseMinWorkers)
+		Attr.NumWorkers = 4;
 
 	Attr.Flags		   = nJqInitFlags;
 	Attr.QueueOrder[0] = JqQueueOrder{ 7, { 0, 1, 2, 3, 4, 5, 6, 0xff } };
@@ -672,7 +679,7 @@ int main(int argc, char* argv[])
 		{
 			JqTestPrio(Attr.NumWorkers);
 			JqTestCancel();
-			// JqTestWaitIgnoreChildren();
+			JqTestWaitIgnoreChildren();
 		}
 		JqLogStats();
 	}

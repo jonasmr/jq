@@ -102,7 +102,7 @@
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 #define JQ_NUM_LOCKS 32
 
-#define JQ_LOCKLESS_QUEUE 0
+#define JQ_LOCKLESS_QUEUE 1
 
 #define JQ_LOCKLESS_POP 2
 
@@ -125,7 +125,7 @@
 #define JOB_FINISH_PLAIN (0x000000001llu)
 #define JOB_FINISH_PLAIN_MASK (0x00000ffffllu)
 
-static_assert(JQ_JOB_BUFFER_SIZE == (1llu << JQ_JOB_BUFFER_SHIFT));
+static_assert(JQ_JOB_BUFFER_SIZE == (1llu << JQ_JOB_BUFFER_SHIFT), "JQ_JOB_BUFFER_SIZE and JQ_JOB_BUFFER_SHIFT must match");
 static_assert(JQ_NUM_QUEUES <= 64, "Currently a queue mask is being put in a uint64_t");
 
 struct JqMutexLock;
@@ -1451,6 +1451,7 @@ uint64_t JqClaimHandle()
 	pJob->DependentJob.Job	= 0;
 	pJob->DependentJob.Next = 0;
 	pJob->NumJobs			= 0;
+	pJob->NumJobsToStart	= 0;
 	pJob->Range				= 0;
 	pJob->JobFlags			= JQ_JOBFLAG_UNINITIALIZED;
 	pJob->Waiters			= 0;
@@ -1565,13 +1566,13 @@ void JqDecPrecondtion(uint64_t Handle, int Count, uint64_t* QueueTriggerMask)
 	JQ_ASSERT(JQ_LT_WRAP(Job.StartedHandle, Handle));
 	JQ_ASSERT(JQ_LT_WRAP(Job.FinishedHandle, Handle));
 
-	JQ_ASSERT(Job.NumJobs == Job.PendingStart.load());
-
 	uint64_t Before = Job.PreconditionCount.fetch_add(-Count);
 
 	if(Before - Count == 0)
 	{
-		uint32_t NumJobs = Job.NumJobs;
+		uint32_t NumJobs = Job.NumJobsToStart;
+		JQ_ASSERT(Job.NumJobsToStart == Job.PendingStart.load());
+
 		// this is the --only--  place StartedHandle is modified, except for -GroupBegin-
 
 		Job.StartedHandle = Handle;
