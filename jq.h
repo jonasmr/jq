@@ -57,6 +57,10 @@
 #define JQ_LOCK_STATS 1
 #endif
 
+#ifndef JQ_CHILD_HANDLE_BUFFER_SIZE
+#define JQ_CHILD_HANDLE_BUFFER_SIZE 128
+#endif
+
 #define JQ_MAX_SUBJOBS (0xfffe) // Max times a single job can run
 #define JQ_INVALID_SUBJOB (0xffff)
 #define JQ_INVALID_QUEUE 0xff
@@ -221,20 +225,20 @@ class JqFunction
 /// Interface
 
 //  what to execute while wailing
-#define JQ_WAITFLAG_EXECUTE_SUCCESSORS 0x1
+#define JQ_WAITFLAG_EXECUTE_CHILDREN 0x1
 #define JQ_WAITFLAG_EXECUTE_ANY 0x2
-#define JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS 0x3
+#define JQ_WAITFLAG_EXECUTE_PREFER_CHILDREN 0x3
 //  what to do when out of jobs
 #define JQ_WAITFLAG_BLOCK 0x4
 #define JQ_WAITFLAG_SLEEP 0x8
 #define JQ_WAITFLAG_SPIN 0x10
 #define JQ_WAITFLAG_IGNORE_CHILDREN 0x20
 
-#define JQ_DEFAULT_WAIT_FLAG (JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SPIN)
+#define JQ_DEFAULT_WAIT_FLAG (JQ_WAITFLAG_EXECUTE_CHILDREN | JQ_WAITFLAG_SPIN)
 
 // Job flags
 #define JQ_JOBFLAG_SMALL_STACK 0x1 // create with small stack
-#define JQ_JOBFLAG_DETACHED 0x2 // dont create as child of current job
+#define JQ_JOBFLAG_DETACHED 0x2	   // dont create as child of current job
 
 // Init flags
 #define JQ_INIT_USE_SEPERATE_STACK 0x1

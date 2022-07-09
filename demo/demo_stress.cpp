@@ -212,7 +212,7 @@ void JqTest()
 			{
 				nHandle.H = g_Handle.load();
 			} while(nHandle.H == 0);
-			JqWait(nHandle, JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_BLOCK);
+			JqWait(nHandle, JQ_WAITFLAG_EXECUTE_CHILDREN | JQ_WAITFLAG_BLOCK);
 		},
 		0, 3);
 

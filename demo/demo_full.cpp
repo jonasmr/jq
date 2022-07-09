@@ -318,7 +318,7 @@ void JqTestPrio(uint32_t NumWorkers)
 			0, NumJobs);
 	}
 	{
-		// test JQ_WAITFLAG_EXECUTE_SUCCESSORS.
+		// test JQ_WAITFLAG_EXECUTE_CHILDREN.
 		// by now there is a ton of work, so it'll be a while. make a small job tree, and wait on it here.
 		uint64_t		 ThreadId = JqGetCurrentThreadId();
 		std::atomic<int> v;
@@ -361,7 +361,7 @@ void JqTestPrio(uint32_t NumWorkers)
 				},
 				0, FANOUT);
 			MICROPROFILE_SCOPEI("ChildWait", "ChildWaitTime", MP_AUTO);
-			JqWait(SmallTree, JQ_WAITFLAG_EXECUTE_SUCCESSORS | JQ_WAITFLAG_SPIN);
+			JqWait(SmallTree, JQ_WAITFLAG_EXECUTE_CHILDREN | JQ_WAITFLAG_SPIN);
 #if 0
 			if(v.load() != (FANOUT * FANOUT * FANOUT))
 			{
@@ -523,23 +523,28 @@ void JqTestWaitIgnoreChildren()
 
 	std::atomic<int>* pparent = &parent;
 	std::atomic<int>* pchild  = &child;
-#define PARENTS 5
-#define CHILDREN 50
+#define PARENTS 1
+#define CHILDREN 250
 
 	JqHandle Job = JqAdd(
 		[pparent, pchild] {
+			MICROPROFILE_SCOPEI("JQ_TEST", "JqTestWaitIgnoreChildren_PARENT_JOB", MP_PINK);
 			pparent->fetch_add(1);
-
+			JobSpinWork(100);
 			JqAdd(
 				[pchild] {
-					JobSpinWork(1000);
+					MICROPROFILE_SCOPEI("JQ_TEST", "JqTestWaitIgnoreChildren_CHILD_JOB", MP_BLUE);
+					JobSpinWork(10);
 					pchild->fetch_add(1);
 				},
 				0, CHILDREN);
 		},
 		0, PARENTS);
 
-	JqWait(Job, JQ_WAITFLAG_IGNORE_CHILDREN | JQ_DEFAULT_WAIT_FLAG);
+	{
+		MICROPROFILE_SCOPEI("JQ_TEST", "WaitIgnore", MP_PINK);
+		JqWait(Job, JQ_WAITFLAG_IGNORE_CHILDREN | JQ_DEFAULT_WAIT_FLAG);
+	}
 	if(parent.load() != PARENTS)
 		JQ_BREAK();
 	if(child.load() > CHILDREN * PARENTS)
@@ -549,7 +554,11 @@ void JqTestWaitIgnoreChildren()
 		printf("all children executed. this hints that JQ_WAITFLAG_IGNORE_CHILDREN might not ignore children");
 #endif
 
-	JqWait(Job);
+	{
+		MICROPROFILE_SCOPEI("JQ_TEST", "WaitFull", MP_BLUE);
+		JqWait(Job);
+	}
+
 	if(child.load() != CHILDREN * PARENTS)
 		JQ_BREAK();
 
@@ -585,6 +594,10 @@ int main(int argc, char* argv[])
 	{
 		printf("Demo won't run on hardware with < 4 threads\n");
 		exit(1);
+	}
+	else
+	{
+		Attr.NumWorkers -= 10;
 	}
 	if(UseMinWorkers)
 		Attr.NumWorkers = 4;
@@ -678,7 +691,7 @@ int main(int argc, char* argv[])
 		MicroProfileFlip(0);
 		{
 			JqTestPrio(Attr.NumWorkers);
-			JqTestCancel();
+			// JqTestCancel();
 			JqTestWaitIgnoreChildren();
 		}
 		JqLogStats();
