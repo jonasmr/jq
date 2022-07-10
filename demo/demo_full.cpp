@@ -502,11 +502,6 @@ void JqTestCancel()
 	delete[] Cancel;
 }
 
-void JqTestWaitExecuteChildren()
-{
-	printf("todo: test this");
-}
-
 void JqTestWaitIgnoreChildren()
 {
 	MICROPROFILE_SCOPEI("JQ_TEST", "JqTestWaitIgnoreChildren", MP_AUTO);
