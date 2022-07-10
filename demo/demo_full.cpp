@@ -68,8 +68,6 @@ MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 
 #define JQ_STRESS_TEST 1
 #define JQ_CANCEL_TEST 0
-// int64_t JqTick();
-// int64_t JqTicksPerSecond();
 
 uint32_t g_Reset = 0;
 
@@ -339,9 +337,11 @@ void JqTestPrio(uint32_t NumWorkers)
 					MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-0", MP_AUTO);
 					JqAdd(
 						[pv, ThreadId] {
+							//							printf("tree 0 %p\n", JqGetCurrentThreadId());
 							MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-1", MP_AUTO);
 							JqAdd(
 								[pv, ThreadId] {
+									//									printf("tree 1 %p\n", JqGetCurrentThreadId());
 									MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-2", MP_AUTO);
 									if(ThreadId == JqGetCurrentThreadId())
 									{
@@ -362,21 +362,14 @@ void JqTestPrio(uint32_t NumWorkers)
 				0, FANOUT);
 			MICROPROFILE_SCOPEI("ChildWait", "ChildWaitTime", MP_AUTO);
 			JqWait(SmallTree, JQ_WAITFLAG_EXECUTE_CHILDREN | JQ_WAITFLAG_SPIN);
-#if 0
 			if(v.load() != (FANOUT * FANOUT * FANOUT))
 			{
-				printf("only %d was executed locally", v.load());
+				printf("\nonly %d was executed locally\n", v.load());
 			}
-			else
-			{
-				printf("only %d was executed locally", v.load());
-			}
-#endif
 		}
-
 #undef FANOUT
 	}
-	if(1)
+
 	{
 		// Test JqSpawn
 		std::atomic<int> v;
@@ -595,10 +588,6 @@ int main(int argc, char* argv[])
 		printf("Demo won't run on hardware with < 4 threads\n");
 		exit(1);
 	}
-	else
-	{
-		Attr.NumWorkers -= 10;
-	}
 	if(UseMinWorkers)
 		Attr.NumWorkers = 4;
 
@@ -691,7 +680,7 @@ int main(int argc, char* argv[])
 		MicroProfileFlip(0);
 		{
 			JqTestPrio(Attr.NumWorkers);
-			// JqTestCancel();
+			JqTestCancel();
 			JqTestWaitIgnoreChildren();
 		}
 		JqLogStats();

@@ -1164,7 +1164,7 @@ bool JqTakeJobFromHandle(uint64_t Handle, uint16_t* SubIndexOut)
 	{
 		uint16_t Index = JQ_GET_INDEX(Handle);
 		JqJob&	 Job   = JqState.Jobs[Index];
-		if(Job.StartedHandle.load() != Handle || Job.PendingStart.load() != 0)
+		if(Job.StartedHandle.load() != Handle || Job.PendingStart.load() == 0)
 			return false;
 		bool IsDrained = false;
 		return JqTryPopJob(Index, SubIndexOut, IsDrained);
@@ -1303,10 +1303,11 @@ uint16_t JqTakeChildJobInternal(uint64_t Handle, uint16_t* OutSubIndex, uint64_t
 	// first try poppin directly
 	for(uint32_t i = 0; i < NumChildren; ++i)
 	{
-		if(JqTakeJobFromHandle(Handle, OutSubIndex))
+		uint64_t ChildHandle = HandleBuffer[i];
+		if(JqTakeJobFromHandle(ChildHandle, OutSubIndex))
 		{
-			JQ_ASSERT(JqState.Jobs[JQ_GET_INDEX(Handle)].StartedHandle.load() == JqState.Jobs[JQ_GET_INDEX(Handle)].ClaimedHandle.load());
-			return JQ_GET_INDEX(Handle);
+			JQ_ASSERT(JqState.Jobs[JQ_GET_INDEX(ChildHandle)].StartedHandle.load() == JqState.Jobs[JQ_GET_INDEX(ChildHandle)].ClaimedHandle.load());
+			return JQ_GET_INDEX(ChildHandle);
 		}
 	}
 	// now recurse
@@ -1327,6 +1328,7 @@ uint16_t JqTakeChildJob(uint64_t Handle, uint16_t* OutSubIndex)
 		JQ_ASSERT(JqState.Jobs[JQ_GET_INDEX(Handle)].StartedHandle.load() == JqState.Jobs[JQ_GET_INDEX(Handle)].ClaimedHandle.load());
 		return JQ_GET_INDEX(Handle);
 	}
+	JQ_MICROPROFILE_SCOPE("Inner take child job", MP_AUTO);
 	uint64_t HandleBuffer[JQ_CHILD_HANDLE_BUFFER_SIZE];
 	return JqTakeChildJobInternal(Handle, OutSubIndex, HandleBuffer, JQ_CHILD_HANDLE_BUFFER_SIZE);
 }
