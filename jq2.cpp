@@ -138,8 +138,8 @@ void				 JqSelfPush(uint64_t Job, uint32_t JobIndex);
 void				 JqSelfPop(uint64_t Job);
 void				 JqFinishSubJob(uint16_t JobIndex, uint64_t Count);
 void				 JqFinishInternal(uint16_t JobIndex);
-void				 JqDecPrecondtion(uint64_t Handle, int Count, uint64_t* QueueTriggerMask = 0);
-void				 JqIncPrecondtion(uint64_t Handle, int Count);
+void				 JqDecBlockCount(uint64_t Handle, int Count, uint64_t* QueueTriggerMask = 0);
+void				 JqIncBlockCount(uint64_t Handle, int Count);
 void				 JqUnpackQueueLink(uint64_t Value, uint16_t& Head, uint16_t& Tail, uint16_t& JobCount);
 uint64_t			 JqPackQueueLink(uint16_t Head, uint16_t Tail, uint16_t JobCount);
 void				 JqUnpackStartAndQueue(uint64_t Value, uint16_t& PendingStart, uint8_t& Queue);
@@ -249,11 +249,11 @@ struct JqJob
 	std::atomic<uint64_t> ClaimedHandle;  /// Handle which has claimed this header
 	std::atomic<uint64_t> Cancel;		  /// Largest Cancelled Handle
 
-	std::atomic<uint64_t> PendingFinish;	 /// No. of jobs & (direct) child jobs that need to finish in order for this to be finished.
-	std::atomic<uint64_t> PendingStart;		 /// No. of Jobs that needs to be Started, and the queue which is it inserted to
-	std::atomic<uint8_t>  ActiveQueue;		 // only for debugging
-	std::atomic<uint64_t> PreconditionCount; /// No. of Preconditions that need to finish, before this can be enqueued.
-	JqDependentJobLink	  DependentJob;		 /// Job that is dependent on this job finishing.
+	std::atomic<uint64_t> PendingFinish; /// No. of jobs & (direct) child jobs that need to finish in order for this to be finished.
+	std::atomic<uint64_t> PendingStart;	 /// No. of Jobs that needs to be Started, and the queue which is it inserted to
+	std::atomic<uint8_t>  ActiveQueue;	 // only for debugging
+	std::atomic<uint64_t> BlockCount;	 /// No. of Preconditions that need to finish, before this can be enqueued.
+	JqDependentJobLink	  DependentJob;	 /// Job that is dependent on this job finishing.
 
 	uint16_t NumJobs;		 /// Num Jobs to Finish
 	uint16_t NumJobsToStart; /// Num Jobs to Start
@@ -852,13 +852,13 @@ void JqFinishInternal(uint16_t JobIndex)
 	{
 		JQ_MICROPROFILE_VERBOSE_SCOPE("DecPrecondtion", MP_AUTO);
 		uint64_t QueueTriggerMask = 0;
-		JqDecPrecondtion(Dependent.Job, 1, &QueueTriggerMask);
+		JqDecBlockCount(Dependent.Job, 1, &QueueTriggerMask);
 		uint16_t Next = Dependent.Next;
 		while(Next)
 		{
 			uint64_t Job = JqState.DependentJobLinks[Next].Job;
 			Next		 = JqState.DependentJobLinks[Next].Next;
-			JqDecPrecondtion(Job, 1, &QueueTriggerMask);
+			JqDecBlockCount(Job, 1, &QueueTriggerMask);
 		}
 		// Trigger only once. the overhead for kicking all the queues can be substantial
 		JqTriggerQueues(QueueTriggerMask);
@@ -1021,7 +1021,7 @@ void JqRunInternal(JqFunction* Function, int Begin, int End, uint32_t JobFlags)
 }
 void JqRunInternal(uint32_t WorkIndex, int Begin, int End)
 {
-	JQ_ASSERT(JqState.Jobs[WorkIndex].PreconditionCount == 0);
+	JQ_ASSERT(JqState.Jobs[WorkIndex].BlockCount == 0);
 	JqRunInternal(&JqState.Jobs[WorkIndex].Function, Begin, End, JqState.Jobs[WorkIndex].JobFlags);
 }
 
@@ -1284,7 +1284,7 @@ uint64_t JqClaimHandle()
 	pJob->PendingFinish		= 0;
 	pJob->PendingStart		= 0;
 	pJob->ActiveQueue		= 0xff;
-	pJob->PreconditionCount = 1;
+	pJob->BlockCount		= 1;
 	pJob->DependentJob.Job	= 0;
 	pJob->DependentJob.Next = 0;
 	pJob->NumJobs			= 0;
@@ -1356,12 +1356,12 @@ void JqCancel(JqHandle Handle)
 	} while(!Job.Cancel.compare_exchange_weak(CancelHandle, H));
 }
 
-void JqIncPrecondtion(uint64_t Handle, int Count)
+void JqIncBlockCount(uint64_t Handle, int Count)
 {
 	uint16_t Index = Handle % JQ_JOB_BUFFER_SIZE;
 	JqJob*	 pJob  = &JqState.Jobs[Index];
 
-	uint64_t Before = pJob->PreconditionCount.fetch_add(Count);
+	uint64_t Before = pJob->BlockCount.fetch_add(Count);
 	// Adding preconditions is only allowed when the job has been reserved, in which case it'll have a count of 1 or larger
 	// If we don't do it this way, jobs may be picked up before having their preconditions added.
 	JQ_ASSERT(Before > 0);
@@ -1400,7 +1400,7 @@ void JqTriggerQueues(uint64_t QueueTriggerMask)
 	}
 }
 
-void JqDecPrecondtion(uint64_t Handle, int Count, uint64_t* QueueTriggerMask)
+void JqDecBlockCount(uint64_t Handle, int Count, uint64_t* QueueTriggerMask)
 {
 	uint16_t Index = Handle % JQ_JOB_BUFFER_SIZE;
 	JqJob&	 Job   = JqState.Jobs[Index];
@@ -1408,7 +1408,7 @@ void JqDecPrecondtion(uint64_t Handle, int Count, uint64_t* QueueTriggerMask)
 	JQ_ASSERT(JQ_LT_WRAP(Job.StartedHandle, Handle));
 	JQ_ASSERT(JQ_LT_WRAP(Job.FinishedHandle, Handle));
 
-	uint64_t Before = Job.PreconditionCount.fetch_add(-Count);
+	uint64_t Before = Job.BlockCount.fetch_add(-Count);
 
 	if(Before - Count == 0)
 	{
@@ -1490,7 +1490,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	JqJob&			 Job   = JqState.Jobs[JobIndex];
 	JqLocklessQueue& Queue = JqState.LocklessQueues[QueueIndex];
 
-	JQ_ASSERT(Job.PreconditionCount == 0);
+	JQ_ASSERT(Job.BlockCount == 0);
 	JQ_ASSERT(Job.Queue == QueueIndex);
 
 	uint64_t Started  = Job.StartedHandle;
@@ -1611,9 +1611,9 @@ void JqAddPreconditionInternal(uint64_t Handle, uint64_t Precondition)
 		uint16_t nPrecondIndex = Precondition % JQ_JOB_BUFFER_SIZE;
 		JqJob&	 Job		   = JqState.Jobs[nIndex];
 		JqJob&	 PrecondJob	   = JqState.Jobs[nPrecondIndex];
-		JQ_ASSERT(Job.PreconditionCount > 0); // as soon as the existing precond count reaches 0, it might be executed, so it no longer makes sense to add new preconditions
-											  // use mechanisms like JqReserve, to block untill precondtions have been added.
-		JqIncPrecondtion(Handle, 1);
+		JQ_ASSERT(Job.BlockCount > 0); // as soon as the existing precond count reaches 0, it might be executed, so it no longer makes sense to add new preconditions
+									   // use mechanisms like JqReserve, to block untill precondtions have been added.
+		JqIncBlockCount(Handle, 1);
 		bool	 Finished;
 		uint16_t LinkIndex = 0;
 		while(true)
@@ -1657,14 +1657,14 @@ void JqAddPreconditionInternal(uint64_t Handle, uint64_t Precondition)
 		}
 		if(Finished) // the precondition job finished after we took the lock, so decrement manually.
 		{
-			JqDecPrecondtion(Handle, 1);
+			JqDecBlockCount(Handle, 1);
 		}
 	}
 }
 
 void JqAddPrecondition(JqHandle Handle, JqHandle Precondition)
 {
-	if(JqState.Jobs[Handle.H % JQ_JOB_BUFFER_SIZE].PreconditionCount.load() == 0)
+	if(JqState.Jobs[Handle.H % JQ_JOB_BUFFER_SIZE].BlockCount.load() == 0)
 	{
 		JQ_BREAK();
 		// you can only add precondtions to jobs that have a non-zero precondtion count
@@ -1728,7 +1728,7 @@ JqHandle JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queu
 		{
 			JQ_ASSERT(Job.ClaimedHandle == ReservedHandle.H);
 			JQ_ASSERT(Job.Queue != 0xff);
-			JQ_ASSERT(Job.PreconditionCount >= 1);
+			JQ_ASSERT(Job.BlockCount >= 1);
 			if(!Job.Reserved)
 			{
 				JQ_BREAK(); // When reserving Job handles, you should call -either- JqCloseReserved or JqAddReserved, never both.
@@ -1737,7 +1737,7 @@ JqHandle JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queu
 		}
 		else
 		{
-			JQ_ASSERT(Job.PreconditionCount == 1);
+			JQ_ASSERT(Job.BlockCount == 1);
 			JQ_ASSERT(Queue < JQ_NUM_QUEUES);
 			Job.Queue = Queue;
 			JQ_ASSERT(Job.Waiters == 0);
@@ -1771,8 +1771,8 @@ JqHandle JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queu
 		}
 
 		// Decrementing preconditions automatically add to a queue when reaching 0
-		JQ_ASSERT(Job.PreconditionCount > 0);
-		JqDecPrecondtion(Handle, 1);
+		JQ_ASSERT(Job.BlockCount > 0);
+		JqDecBlockCount(Handle, 1);
 	}
 	return JqHandle{ Handle };
 }
@@ -1808,7 +1808,7 @@ JqHandle JqReserve(uint8_t Queue, uint32_t JobFlags)
 	JQ_ASSERT(JQ_LE_WRAP(Job.StartedHandle, Handle));
 	JQ_ASSERT(Job.ClaimedHandle == Handle);
 	// claim leaves precondition at 1 so we have to release it before we're ready.
-	JQ_ASSERT(Job.PreconditionCount == 1);
+	JQ_ASSERT(Job.BlockCount == 1);
 	JQ_ASSERT(Job.NumJobs == 0);
 
 	uint64_t Parent = 0 != (JobFlags & JQ_JOBFLAG_DETACHED) ? 0 : JqSelf().H;
@@ -1828,12 +1828,12 @@ JqHandle JqReserve(uint8_t Queue, uint32_t JobFlags)
 // Decrement the precondition count
 void JqRelease(JqHandle Handle)
 {
-	JqDecPrecondtion(Handle.H, 1);
+	JqDecBlockCount(Handle.H, 1);
 }
 // Increment the precondition count
 void JqBlock(JqHandle Handle)
 {
-	JqIncPrecondtion(Handle.H, 1);
+	JqIncBlockCount(Handle.H, 1);
 }
 
 bool JqIsDone(JqHandle Handle)
@@ -2122,7 +2122,7 @@ void JqDumpState()
 
 	printf("\nUnfinished Jobs\n");
 
-	printf("                                                                PreconditionCount\n");
+	printf("                                                                BlockCount\n");
 	printf("                                          PendingFinish             Parent \n");
 	printf("Reserved                                          PendingStart                     Dependent              Num        Waiters     Prev\n");
 	printf("  Base / Claimed  / Started  / Finished |               Queue|                                   DepLink|       Queue     Next    \n");
@@ -2164,7 +2164,7 @@ void JqDumpState()
 				JQ_BREAK();
 			}
 			printf("%c %04x / %08llx / %08llx / %08llx | %05d / %05d / %2x | %3lld [%04llx/%08llx] [%04llx/%08llx] %04x | %3d / %02x / %02x / %04x / %04x\n", Job.Reserved ? 'R' : ' ', i,
-				   ClaimedGeneration, StartedGeneration, FinishedGeneration, (uint16_t)Job.PendingFinish.load(), PendingStart, Queue, Job.PreconditionCount.load(), ParentIndex, ParentGeneration,
+				   ClaimedGeneration, StartedGeneration, FinishedGeneration, (uint16_t)Job.PendingFinish.load(), PendingStart, Queue, Job.BlockCount.load(), ParentIndex, ParentGeneration,
 				   DependentIndex, DependentGeneration, Job.DependentJob.Next, Job.NumJobs, Job.Queue, Job.Waiters, Job.NextSibling, Job.PrevSibling);
 		}
 	}

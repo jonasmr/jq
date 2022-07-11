@@ -308,28 +308,28 @@ JQ_API JqHandle JqSelf();
 JQ_API JqHandle JqAdd(JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
 // Add a job which has previously been reserved with a call to JqReserve
-// This decrements the precondition counter by 1
+// This decrements the block counter by 1 once its added
 JQ_API JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
 // add successor
 JQ_API JqHandle JqAddSuccessor(JqHandle Precondition, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
-// Reserve a job handle. The job handle is created with a precondition counter value of 1, letting you add other precondtions.
+// Reserve a job handle. The job handle is created with a block counter value of 1, letting you add other blocking conditions.
 // Once done, it can be released with
 //  - JqRelease(): No job  will be executed, but it can be used as a barrier by making other jobs depend on this job
 //  - JqAddReserved(): The job will be added to the queue once the precondtion counter reaches zero
 JQ_API JqHandle JqReserve(uint8_t Queue, uint32_t JobFlags = 0);
 
-// Set Precondition to be required to be finished before Handle is started
-// Increments the precondtion counter of Handle, and decrements it once its finished
-//  * Note that you cannot Increment the precondition counter once it has reached zero, as it will then be eligible for exection
+// Set Precondition to be required to be finished before Handle is started.
+// Increments the block counter of Handle, and decrements it once its finished
+//  * Note that you cannot Increment the block counter once it has reached zero, as it will then be eligible for exection
 JQ_API void JqAddPrecondition(JqHandle Handle, JqHandle Precondition);
 
-// Manually increment the precondtion counter by one. Blocks execution of this Handle, until a matching JqRelease is called
-//  * Note that you cannot Increment the precondition counter once it has reached zero, as it will then be eligible for exection
+// Manually increment the block counter by one. Blocks execution of this Handle, until a matching JqRelease is called
+//  * Note that you cannot Increment the block counter once it has reached zero, as it will then be eligible for exection
 JQ_API void JqBlock(JqHandle Handle);
 
-// Decrement the precondition counter manually.
+// Decrement the block counter manually.
 // Use this with matching calls to JqPrecondIncrement, or for JqReserve calls for barrier type jobs. Note that if you call JqAddReserved, it decrements the precondition counter
 JQ_API void JqRelease(JqHandle Handle);
 
