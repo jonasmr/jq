@@ -273,7 +273,7 @@ void JqTestPrio(uint32_t NumWorkers)
 
 	JqAddPrecondition(Final, Successor);
 
-	JqCloseReserved(Barrier);
+	JqRelease(Barrier);
 
 	JqAddReserved(
 		Final,

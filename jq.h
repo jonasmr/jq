@@ -307,15 +307,35 @@ struct JqAttributes
 JQ_API JqHandle JqSelf();
 JQ_API JqHandle JqAdd(JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
-// add reserved
+// Add a job which has previously been reserved with a call to JqReserve
+// This decrements the precondition counter by 1
 JQ_API JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
 // add successor
 JQ_API JqHandle JqAddSuccessor(JqHandle Precondition, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
-JQ_API JqHandle JqReserve(uint8_t Queue, uint32_t JobFlags = 0); // Reserve a Job slot. this allows you to wait on work added later, or close, in case its only for a barrier
-JQ_API void		JqAddPrecondition(JqHandle Handle, JqHandle Precondition);
-JQ_API void		JqCloseReserved(JqHandle Handle); // Mark reservation as finished, without actually executing any jobs.
+// Reserve a job handle. The job handle is created with a precondition counter value of 1, letting you add other precondtions.
+// Once done, it can be released with
+//  - JqRelease(): No job  will be executed, but it can be used as a barrier by making other jobs depend on this job
+//  - JqAddReserved(): The job will be added to the queue once the precondtion counter reaches zero
+JQ_API JqHandle JqReserve(uint8_t Queue, uint32_t JobFlags = 0);
+
+// Set Precondition to be required to be finished before Handle is started
+// Increments the precondtion counter of Handle, and decrements it once its finished
+//  * Note that you cannot Increment the precondition counter once it has reached zero, as it will then be eligible for exection
+JQ_API void JqAddPrecondition(JqHandle Handle, JqHandle Precondition);
+
+// Manually increment the precondtion counter by one. Blocks execution of this Handle, until a matching JqRelease is called
+//  * Note that you cannot Increment the precondition counter once it has reached zero, as it will then be eligible for exection
+JQ_API void JqBlock(JqHandle Handle);
+
+// Decrement the precondition counter manually.
+// Use this with matching calls to JqPrecondIncrement, or for JqReserve calls for barrier type jobs. Note that if you call JqAddReserved, it decrements the precondition counter
+JQ_API void JqRelease(JqHandle Handle);
+
+// Similarly to add, add a job, but JqSpawn differs
+// - Immediately wait for it, not return before all subjobs are done
+// - Will always execute at least job instance 0 on the calling thread.
 JQ_API void		JqSpawn(JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG);
 JQ_API void		JqWait(JqHandle Handle, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API void		JqWaitAll();
