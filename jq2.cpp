@@ -103,6 +103,8 @@
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 #define JQ_NUM_LOCKS 2048
 
+#define JQ_GRAPH_ENABLED 1
+
 #define JQ_QUEUE_FULL_EXECUTE_JOBS 1 // set to 1 to execute jobs when we're close to running out of handles
 #define JQ_JOB_FILL_PRC_LIMIT 95	 // percentages of fullness to accept
 
@@ -128,6 +130,7 @@ static_assert(JQ_NUM_QUEUES <= 64, "Currently a queue mask is being put in a uin
 struct JqMutexLock;
 enum JqWorkerState : uint8_t;
 enum JqDebugStackState : uint8_t;
+struct JqThreadState;
 
 void				 JqWorker(int ThreadId);
 void				 JqQueuePush(uint8_t Queue, uint64_t Handle);
@@ -158,6 +161,10 @@ bool				 JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob, bool& OutIsDrained)
 const char*			 JqWorkerStateString(JqWorkerState State);
 const char*			 JqDebugStackStateString(JqDebugStackState State);
 void				 JqDumpState();
+static void			 JqGraphAdd(uint64_t Handle, const char* Name, uint16_t Count);
+static void			 JqGraphWait(uint64_t WaitTarget);
+static void			 JqGraphPrecondtion(uint64_t Handle, uint64_t Precondition);
+JqThreadState&		 JqGetThreadState();
 
 struct JqSelfStack
 {
@@ -205,11 +212,6 @@ struct JqThreadState
 	JqThreadState* NextThreadState;
 };
 
-JQ_THREAD_LOCAL JqThreadState ThreadState;
-JqMutex						  ThreadStateLock;
-JqThreadState*				  FirstThreadState = nullptr;
-JqThreadState&				  JqGetThreadState();
-
 struct JqDebugStackScope
 {
 	JqDebugStackScope(JqDebugStackState StackState, uint64_t Handle, uint32_t Flags, uint16_t SubIndex = 0)
@@ -231,6 +233,55 @@ struct JqDebugStackScope
 };
 
 #define JQ_DEBUG_SCOPE(State, Handle, Flags, SubIndex) JqDebugStackScope JQ_TOKEN_PASTE(jq_debug, __LINE__) = JqDebugStackScope(State, Handle, Flags, SubIndex)
+
+enum JqGraphDataType : uint8_t
+{
+	JGDT_ADD,
+	JGDT_WAIT,
+	JGDT_PRECONDITION,
+
+};
+
+struct JqGraphData
+{
+	JqGraphDataType Type;
+	union
+	{
+		struct
+		{
+			uint64_t	AddHandle;
+			uint64_t	AddSelf;
+			const char* AddName;
+			uint16_t	AddCount;
+		};
+		struct
+		{
+			uint64_t WaitTarget;
+			uint64_t WaitSelf;
+		};
+		struct
+		{
+			uint64_t PreconditionCondition;
+			uint64_t PreconditionTarget;
+		};
+	};
+};
+
+#ifdef JQ_GRAPH_ENABLED
+#define JQ_GRAPH(...)                                                                                                                                                                                  \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+		if(JqState.GraphPut.load())                                                                                                                                                                    \
+		{                                                                                                                                                                                              \
+			__VA_ARGS__;                                                                                                                                                                               \
+		}                                                                                                                                                                                              \
+	} while(0)
+#else
+#define JQ_GRAPH(...)                                                                                                                                                                                  \
+	do                                                                                                                                                                                                 \
+	{                                                                                                                                                                                                  \
+	} while(0)
+#endif
 
 // linked list structure, for when jobs have multiple jobs that depend on them
 struct JqDependentJobLink
@@ -551,6 +602,13 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	uint16_t			  DependentJobLinkHead;
 	std::atomic<uint32_t> DependentJobLinkCounter;
 
+	JqMutex					  GraphLock;
+	const char*				  GraphFilename;
+	uint32_t				  GraphBufferSize;
+	JqGraphData*			  GraphData;
+	std::atomic<JqGraphData*> GraphPut;
+	std::atomic<JqGraphData*> GraphEnd;
+
 	JqState_t()
 		: NumWorkers(0)
 	{
@@ -566,7 +624,11 @@ struct JQ_ALIGN_CACHELINE JqState_t
 JQ_THREAD_LOCAL int		 JqSpinloop				   = 0; // prevent optimizer from removing spin loop
 JQ_THREAD_LOCAL uint32_t g_nJqNumQueues			   = 0;
 JQ_THREAD_LOCAL uint8_t	 g_JqQueues[JQ_NUM_QUEUES] = { 0 };
-JQ_THREAD_LOCAL JqJobStack* g_pJqJobStacks		   = 0;
+JQ_THREAD_LOCAL JqJobStack*	  g_pJqJobStacks	   = 0;
+JQ_THREAD_LOCAL JqThreadState ThreadState;
+
+JqMutex		   ThreadStateLock;
+JqThreadState* FirstThreadState = nullptr;
 
 void JqStart(JqAttributes* pAttr)
 {
@@ -1422,6 +1484,7 @@ void JqDecBlockCount(uint64_t Handle, int Count, uint64_t* QueueTriggerMask)
 		Job.StartedHandle = Handle;
 		if(NumJobs == 0) // Barrier type Jobs never have to enter an actual queue.
 		{
+			JQ_GRAPH(JqGraphAdd(Handle, Job.Name, NumJobs));
 			JqFinishInternal(Index);
 		}
 		else
@@ -1666,6 +1729,7 @@ void JqAddPreconditionInternal(uint64_t Handle, uint64_t Precondition)
 
 void JqAddPrecondition(JqHandle Handle, JqHandle Precondition)
 {
+	JQ_GRAPH(JqGraphPrecondtion(Handle.H, Precondition.H));
 	if(JqState.Jobs[Handle.H % JQ_JOB_BUFFER_SIZE].BlockCount.load() == 0)
 	{
 		JQ_BREAK();
@@ -1725,6 +1789,7 @@ JqHandle JqAddInternal(const char* Name, JqHandle ReservedHandle, JqFunction Job
 
 		uint16_t Index = Handle % JQ_JOB_BUFFER_SIZE;
 		JqJob&	 Job   = JqState.Jobs[Index];
+		JQ_GRAPH(JqGraphAdd(Handle, Job.Name, NumJobs));
 
 		if(ReservedHandle.H)
 		{
@@ -1769,6 +1834,7 @@ JqHandle JqAddInternal(const char* Name, JqHandle ReservedHandle, JqFunction Job
 		JqState.Stats.nNumAddedSub += NumJobs;
 		if(PreconditionHandle.H)
 		{
+			JQ_GRAPH(JqGraphPrecondtion(Handle, PreconditionHandle.H));
 			JqAddPreconditionInternal(Handle, PreconditionHandle.H);
 		}
 
@@ -1889,6 +1955,8 @@ void JqWait(JqHandle Handle, uint32_t WaitFlagArg, uint32_t UsWaitTime)
 	const uint32_t WaitFlag = WaitFlagArg & JQ_JOBFLAG_EXTERNAL_MASK;
 	uint64_t	   H		= Handle.H;
 
+	JQ_GRAPH(JqGraphWait(Handle.H));
+
 	if(JqIsDone(Handle))
 	{
 		return;
@@ -1994,7 +2062,9 @@ uint64_t JqWaitAny(uint64_t* Jobs, uint32_t NumJobs, uint32_t nWaitFlag, uint32_
 
 JqHandle JqGroupBegin(const char* Name)
 {
-	uint64_t H	   = JqClaimHandle(Name);
+	uint64_t H = JqClaimHandle(Name);
+	JQ_GRAPH(JqGraphAdd(H, Name, 0xfffe));
+
 	uint16_t Index = H % JQ_JOB_BUFFER_SIZE;
 	JqJob&	 Job   = JqState.Jobs[Index];
 
@@ -2200,4 +2270,121 @@ const char* JqDebugStackStateString(JqDebugStackState State)
 	}
 	JQ_BREAK();
 	return "";
+}
+
+void JqGraphDumpStart(const char* Filename, uint32_t BufferSize)
+{
+	JqMutexLock L(JqState.GraphLock);
+	JQ_ASSERT(JqState.GraphFilename == nullptr);
+	JQ_ASSERT(JqState.GraphData == nullptr);
+	JqState.GraphFilename	= Filename;
+	BufferSize				= (BufferSize / sizeof(JqGraphData)) * sizeof(JqGraphData);
+	JqState.GraphBufferSize = BufferSize;
+
+	JqGraphData* Data = JqState.GraphData = (JqGraphData*)malloc(BufferSize);
+	JqState.GraphEnd.exchange(Data + BufferSize);
+	JqState.GraphPut.exchange(Data);
+}
+void JqGraphDumpEnd()
+{
+	JqMutexLock L(JqState.GraphLock);
+	JQ_ASSERT(JqState.GraphFilename != nullptr);
+	JQ_ASSERT(JqState.GraphData);
+	JqGraphData* Data	 = JqState.GraphData;
+	JqGraphData* RealEnd = Data + JqState.GraphBufferSize;
+	JqState.GraphEnd.exchange(nullptr);
+	JqGraphData* Put = JqState.GraphPut.exchange(nullptr);
+
+	bool		 Overflow = Put >= RealEnd;
+	JqGraphData* End	  = Put > RealEnd ? RealEnd : Put;
+
+	{
+		FILE* F = fopen(JqState.GraphFilename, "w");
+		if(F)
+		{
+			fprintf(F, "digraph G{\n");
+
+			while(Data != End)
+			{
+				switch(Data->Type)
+				{
+				case JGDT_ADD:
+				{
+					if(Data->AddCount == 0)
+					{
+						fprintf(F, "n%lld [shape=diamond,label=\"%s\"];\n", Data->AddHandle, Data->AddName);
+					}
+					else if(Data->AddCount == 0xfffe)
+					{
+						fprintf(F, "n%lld [shape=ellipse, label=\"%s\"];\n", Data->AddHandle, Data->AddName);
+					}
+
+					else
+					{
+						fprintf(F, "n%lld [shape=record,label=\"%s|%d\"];\n", Data->AddHandle, Data->AddName, Data->AddCount);
+					}
+
+					if(Data->AddSelf)
+					{
+						fprintf(F, "n%lld -> n%lld [color=green]; \n", Data->AddSelf, Data->AddHandle);
+					}
+				}
+				break;
+				case JGDT_WAIT:
+				{
+					fprintf(F, "n%lld -> n%lld [style=dotted, color=red, shape=box]; \n", Data->WaitSelf, Data->WaitTarget);
+				}
+				break;
+				case JGDT_PRECONDITION:
+				{
+					fprintf(F, "n%lld -> n%lld ; \n", Data->PreconditionCondition, Data->PreconditionTarget);
+				}
+				break;
+				}
+
+				Data++;
+			}
+
+			fprintf(F, "}\n");
+
+			fclose(F);
+		}
+	}
+
+	free(JqState.GraphData);
+	JqState.GraphData	  = nullptr;
+	JqState.GraphFilename = nullptr;
+}
+
+void JqGraphAdd(uint64_t Handle, const char* Name, uint16_t Count)
+{
+	JqGraphData* Data = JqState.GraphPut.fetch_add(1);
+	if(Data < JqState.GraphEnd.load())
+	{
+		Data->Type		= JGDT_ADD;
+		Data->AddHandle = Handle;
+		Data->AddName	= Name;
+		Data->AddCount	= Count;
+		Data->AddSelf	= JqSelf().H;
+	}
+}
+void JqGraphWait(uint64_t WaitTarget)
+{
+	JqGraphData* Data = JqState.GraphPut.fetch_add(1);
+	if(Data < JqState.GraphEnd.load())
+	{
+		Data->Type		 = JGDT_WAIT;
+		Data->WaitTarget = WaitTarget;
+		Data->WaitSelf	 = JqSelf().H;
+	}
+}
+void JqGraphPrecondtion(uint64_t Handle, uint64_t Precondition)
+{
+	JqGraphData* Data = JqState.GraphPut.fetch_add(1);
+	if(Data < JqState.GraphEnd.load())
+	{
+		Data->Type					= JGDT_PRECONDITION;
+		Data->PreconditionCondition = Precondition;
+		Data->PreconditionTarget	= Handle;
+	}
 }

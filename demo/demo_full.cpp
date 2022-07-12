@@ -44,6 +44,7 @@ uint32_t g_MouseY	   = 0;
 uint32_t g_MouseDown0  = 0;
 uint32_t g_MouseDown1  = 0;
 int		 g_MouseDelta  = 0;
+int		 g_LimitedMode = 0;
 
 MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 #ifdef _WIN32
@@ -179,7 +180,7 @@ void JqTestPrio(uint32_t NumWorkers)
 						"P5", [] { MICROPROFILE_SCOPEI("JQ_TEST", "P5", 0xffff00); }, 5, 500);
 					JobSpinWork(20);
 				},
-				1, 20);
+				1, g_LimitedMode ? 2 : 20);
 			JobSpinWork(20);
 			pTwoEnd->fetch_add(1);
 		},
@@ -432,8 +433,6 @@ void JqTestPrio(uint32_t NumWorkers)
 	}
 #undef TIMES
 
-	void JqDumpState();
-	JqDumpState();
 	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
 	JqWait(J3);
@@ -467,8 +466,10 @@ void JqTestCancel()
 	const int		 FAN_OUT	 = 10;
 	int				 nNumWorkers = JqGetNumWorkers();
 	int				 nNumJobs	 = nNumWorkers * 2;
-	SCancelJobState* Cancel		 = new SCancelJobState[nNumJobs];
-	CancelFinished				 = 0;
+	if(g_LimitedMode)
+		nNumJobs = 2;
+	SCancelJobState* Cancel = new SCancelJobState[nNumJobs];
+	CancelFinished			= 0;
 	// start a bunch of jobs, cancel half of them
 	JqHandle nGroup = JqGroupBegin("TestCancelGroup");
 	for(int i = 0; i < nNumJobs; ++i)
@@ -588,6 +589,10 @@ int main(int argc, char* argv[])
 		{
 			UseMinWorkers = true;
 		}
+		if(0 == strcmp("-limited", argv[i]))
+		{
+			g_LimitedMode = 1;
+		}
 	}
 
 	MicroProfileOnThreadCreate("Main");
@@ -691,6 +696,17 @@ int main(int argc, char* argv[])
 			}
 		}
 		MicroProfileFlip(0);
+		static int Frames = 0;
+		if(++Frames == 10)
+		{
+			// to convert the graph run: dot -Tps graphdump.gv -o graphdump.ps
+			JqGraphDumpStart("graphdump.gv", 1024 * 1024);
+		}
+		if(Frames == 11)
+		{
+			JqGraphDumpEnd();
+		}
+
 		{
 			JqTestPrio(Attr.NumWorkers);
 			JqTestCancel();

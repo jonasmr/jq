@@ -372,3 +372,7 @@ JQ_API uint64_t JqGetCurrentThreadId(); // for debugging.
 JQ_API void		JqUSleep(uint64_t us);
 JQ_API void		JqLogStats();
 JQ_API uint64_t JqGetCurrentThreadId();
+
+// Start/Stop generating a graphwiz file from the jobs & dependencies added
+JQ_API void JqGraphDumpStart(const char* Filename, uint32_t GraphBufferSize);
+JQ_API void JqGraphDumpEnd();
