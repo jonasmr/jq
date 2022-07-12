@@ -151,7 +151,7 @@ uint16_t			 JqDependentJobLinkAlloc(uint64_t Handle);
 void				 JqDependentJobLinkFreeList(uint16_t Index);
 uint16_t			 JqQueuePopInternal(uint16_t JobIndex, uint8_t QueueIndex, uint16_t* OutSubJob, uint16_t* OutNextJob, bool PopAll);
 void				 JqTriggerQueues(uint64_t QueueTriggerMask);
-JqHandle			 JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags, JqHandle PreconditionHandle);
+JqHandle			 JqAddInternal(const char* Name, JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags, JqHandle PreconditionHandle);
 void				 JqRunInternal(JqFunction* Function, int Begin, int End, uint32_t JobFlags);
 void				 JqRunInternal(uint32_t WorkIndex, int Begin, int End);
 bool				 JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob, bool& OutIsDrained);
@@ -253,7 +253,8 @@ struct JqJob
 	std::atomic<uint64_t> PendingStart;	 /// No. of Jobs that needs to be Started, and the queue which is it inserted to
 	std::atomic<uint8_t>  ActiveQueue;	 // only for debugging
 	std::atomic<uint64_t> BlockCount;	 /// No. of Preconditions that need to finish, before this can be enqueued.
-	JqDependentJobLink	  DependentJob;	 /// Job that is dependent on this job finishing.
+	const char*			  Name;
+	JqDependentJobLink	  DependentJob; /// Job that is dependent on this job finishing.
 
 	uint16_t NumJobs;		 /// Num Jobs to Finish
 	uint16_t NumJobsToStart; /// Num Jobs to Start
@@ -1246,7 +1247,7 @@ void JqHandleJobQueueFull()
 }
 
 // Claim a handle. reset header, and initialize its pending count to 1
-uint64_t JqClaimHandle()
+uint64_t JqClaimHandle(const char* Name)
 {
 	uint64_t h;
 	// claim a handle atomically.
@@ -1292,6 +1293,7 @@ uint64_t JqClaimHandle()
 	pJob->Range				= 0;
 	pJob->JobFlags			= JQ_JOBFLAG_UNINITIALIZED;
 	pJob->Waiters			= 0;
+	pJob->Name				= Name;
 	pJob->Reserved			= false;
 
 	pJob->Parent	  = 0;
@@ -1304,7 +1306,7 @@ uint64_t JqClaimHandle()
 	return h;
 }
 
-JQ_API void JqSpawn(JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t WaitFlag)
+JQ_API void JqSpawn(const char* Name, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t WaitFlag)
 {
 	JqHandle Handle = JqHandle{ 0 };
 	if(0 == NumJobs)
@@ -1314,13 +1316,13 @@ JQ_API void JqSpawn(JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, u
 	else if(1 == NumJobs)
 	{
 		// capture any jobs added as children
-		Handle = JqGroupBegin();
+		Handle = JqGroupBegin(Name);
 		JqRunInternal(&JobFunc, 0, Range, (WaitFlag & JQ_JOBFLAG_EXTERNAL_MASK));
 		JqGroupEnd();
 	}
 	else
 	{
-		Handle = JqAddInternal(JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_INTERNAL_SPAWN | (WaitFlag & JQ_JOBFLAG_EXTERNAL_MASK), JqHandle{ 0 });
+		Handle = JqAddInternal(Name, JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_INTERNAL_SPAWN | (WaitFlag & JQ_JOBFLAG_EXTERNAL_MASK), JqHandle{ 0 });
 		// Spawn tells the add that you want it to skip index 0, because its called immediately.
 		// this is an atomic supported operation, so we always -force- spawn to claim the first entry
 		JqExecuteJob(Handle.H, 0);
@@ -1676,7 +1678,7 @@ void JqAddPrecondition(JqHandle Handle, JqHandle Precondition)
 	JqAddPreconditionInternal(Handle.H, Precondition.H);
 }
 
-JqHandle JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags, JqHandle PreconditionHandle)
+JqHandle JqAddInternal(const char* Name, JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags, JqHandle PreconditionHandle)
 {
 	if(JobFlags & JQ_JOBFLAG_INTERNAL_SPAWN)
 	{
@@ -1718,7 +1720,7 @@ JqHandle JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queu
 		}
 		else
 		{
-			Handle = JqClaimHandle();
+			Handle = JqClaimHandle(Name);
 		}
 
 		uint16_t Index = Handle % JQ_JOB_BUFFER_SIZE;
@@ -1777,29 +1779,29 @@ JqHandle JqAddInternal(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queu
 	return JqHandle{ Handle };
 }
 
-JqHandle JqAdd(JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags)
+JqHandle JqAdd(const char* Name, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags)
 {
-	return JqAddInternal(JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, JqHandle{ 0 });
+	return JqAddInternal(Name, JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, JqHandle{ 0 });
 }
 
 // add reserved
 JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, int NumJobs, int Range, uint32_t JobFlags)
 {
-	return JqAddInternal(ReservedHandle, JobFunc, 0xff, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, JqHandle{ 0 });
+	return JqAddInternal(nullptr, ReservedHandle, JobFunc, 0xff, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, JqHandle{ 0 });
 }
 
 // add successor
-JqHandle JqAddSuccessor(JqHandle PreconditionHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags)
+JqHandle JqAddSuccessor(const char* Name, JqHandle PreconditionHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags)
 {
-	return JqAddInternal(JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, PreconditionHandle);
+	return JqAddInternal(Name, JqHandle{ 0 }, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, PreconditionHandle);
 }
 
 // Reserve a Job slot. this allows you to wait on work added later
-JqHandle JqReserve(uint8_t Queue, uint32_t JobFlags)
+JqHandle JqReserve(const char* Name, uint8_t Queue, uint32_t JobFlags)
 {
 	JQ_ASSERT(Queue < JQ_NUM_QUEUES);
 
-	uint64_t Handle = JqClaimHandle();
+	uint64_t Handle = JqClaimHandle(Name);
 	uint16_t Index	= Handle % JQ_JOB_BUFFER_SIZE;
 
 	JqJob& Job = JqState.Jobs[Index];
@@ -1887,13 +1889,6 @@ void JqWait(JqHandle Handle, uint32_t WaitFlagArg, uint32_t UsWaitTime)
 	const uint32_t WaitFlag = WaitFlagArg & JQ_JOBFLAG_EXTERNAL_MASK;
 	uint64_t	   H		= Handle.H;
 
-	// // uint64_t Start = 0;
-	// if(WaitFlag & JQ_WAITFLAG_IGNORE_CHILDREN)
-	// {
-	// 	// Start = JqTick();
-	// 	// printf("starting wait for children\n");
-	// }
-
 	if(JqIsDone(Handle))
 	{
 		return;
@@ -1963,13 +1958,6 @@ void JqWait(JqHandle Handle, uint32_t WaitFlagArg, uint32_t UsWaitTime)
 			}
 		}
 	}
-	// if(WaitFlag & JQ_WAITFLAG_IGNORE_CHILDREN)
-	// {
-	// 	// uint64_t End			= JqTick();
-	// 	// uint64_t TicksPerSecond = JqTicksPerSecond();
-	// 	// double	 MS				= 1000.0 * (End - Start) / TicksPerSecond;
-	// 	// printf("Done Waiting for children  :: %fms\n", MS);
-	// }
 }
 
 bool JqExecuteChild(JqHandle Handle)
@@ -2004,9 +1992,9 @@ uint64_t JqWaitAny(uint64_t* Jobs, uint32_t NumJobs, uint32_t nWaitFlag, uint32_
 	return 0;
 }
 
-JqHandle JqGroupBegin()
+JqHandle JqGroupBegin(const char* Name)
 {
-	uint64_t H	   = JqClaimHandle();
+	uint64_t H	   = JqClaimHandle(Name);
 	uint16_t Index = H % JQ_JOB_BUFFER_SIZE;
 	JqJob&	 Job   = JqState.Jobs[Index];
 
@@ -2091,15 +2079,20 @@ void JqDumpState()
 			for(uint32_t i = 0; i < *State->pJqNumQueues; ++i)
 				printf("%2d", State->pJqQueues[i]);
 			printf("]\n");
-
-			if(1)
 			{
 				for(int i = 0; i < State->DebugPos; ++i)
 				{
 					JqDebugState& S = State->DebugStack[State->DebugPos - 1 - i];
 					uint64_t	  Index, Generation;
 					JqSplitHandle(S.Handle, Index, Generation);
-					printf("%60s %10s %4x %6d, %8llx(%04llx/%08llx)\n", "", JqDebugStackStateString(S.State), S.Flags, S.SubIndex, S.Handle, Index, Generation);
+					JqJob&		Job	 = JqState.Jobs[Index % JQ_JOB_BUFFER_SIZE];
+					const char* Name = Job.Name != nullptr ? Job.Name : "<null>";
+					if(JQ_GT_WRAP(Job.ClaimedHandle, S.Handle))
+					{
+						Name = "<unknown>"; // someone else claimed the slot, so the name is useless
+					}
+
+					printf("%70s %10s %4x %6d, %8llx(%04llx/%08llx) | %s\n", "", JqDebugStackStateString(S.State), S.Flags, S.SubIndex, S.Handle, Index, Generation, Name);
 				}
 			}
 
@@ -2113,10 +2106,17 @@ void JqDumpState()
 		printf("Queue %d: \n", i);
 
 		Queue.DebugCallbackAll([&](int Index, int WrappedIndex, uint16_t Seq, uint16_t PushSequence, uint16_t PopSequence, uint32_t Payload) {
-			uint64_t Handle = JqState.Jobs[Payload % JQ_JOB_BUFFER_SIZE].StartedHandle.load();
-			uint64_t HandleIndex, HandleGeneration;
+			JqJob&		Job	   = JqState.Jobs[Payload % JQ_JOB_BUFFER_SIZE];
+			uint64_t	Handle = Job.StartedHandle.load();
+			uint64_t	HandleIndex, HandleGeneration;
+			const char* Name = Job.Name != nullptr ? Job.Name : "<null>";
+			if(JQ_GT_WRAP(Job.ClaimedHandle, Handle))
+			{
+				Name = "<unknown>"; // someone else claimed the slot, so the name is useless
+			}
 			JqSplitHandle(Handle, HandleIndex, HandleGeneration);
-			printf("\tElement     %d/%5d [%4x==%4x==%4x] :: %d  Handle %8llx(%04llx/%08llx)\n", WrappedIndex, Index, Seq, PushSequence, PopSequence, Payload, Handle, HandleIndex, HandleGeneration);
+			printf("\tElement     %6d/%6d [%4x==%4x==%4x] :: %9d  Handle %8llx(%04llx/%08llx) | %s\n", WrappedIndex, Index, Seq, PushSequence, PopSequence, Payload, Handle, HandleIndex,
+				   HandleGeneration, Name);
 		});
 	}
 
@@ -2124,9 +2124,9 @@ void JqDumpState()
 
 	printf("                                                                BlockCount\n");
 	printf("                                          PendingFinish             Parent \n");
-	printf("Reserved                                          PendingStart                     Dependent              Num        Waiters     Prev\n");
-	printf("  Base / Claimed  / Started  / Finished |               Queue|                                   DepLink|       Queue     Next    \n");
-	printf("-------------------------------------------------------------------------------------------------------------------------\n");
+	printf("Reserved                                          PendingStart                     Dependent              Num          Waiters     Prev  \n");
+	printf("  Base / Claimed  / Started  / Finished |               Queue|                                   DepLink|         Queue     Next          \n");
+	printf("----------------------------------------------------------------------------------------------------------------------------------------|\n");
 
 	for(uint32_t i = 0; i < JQ_JOB_BUFFER_SIZE; ++i)
 	{
@@ -2163,9 +2163,10 @@ void JqDumpState()
 				printf("fail Finished %lld %d", FinishedIndex, i);
 				JQ_BREAK();
 			}
-			printf("%c %04x / %08llx / %08llx / %08llx | %05d / %05d / %2x | %3lld [%04llx/%08llx] [%04llx/%08llx] %04x | %3d / %02x / %02x / %04x / %04x\n", Job.Reserved ? 'R' : ' ', i,
+			const char* Name = Job.Name != nullptr ? Job.Name : "<null>";
+			printf("%c %04x / %08llx / %08llx / %08llx | %05d / %05d / %2x | %3lld [%04llx/%08llx] [%04llx/%08llx] %04x | %5d / %02x / %02x / %04x / %04x | %s\n", Job.Reserved ? 'R' : ' ', i,
 				   ClaimedGeneration, StartedGeneration, FinishedGeneration, (uint16_t)Job.PendingFinish.load(), PendingStart, Queue, Job.BlockCount.load(), ParentIndex, ParentGeneration,
-				   DependentIndex, DependentGeneration, Job.DependentJob.Next, Job.NumJobs, Job.Queue, Job.Waiters, Job.NextSibling, Job.PrevSibling);
+				   DependentIndex, DependentGeneration, Job.DependentJob.Next, Job.NumJobs, Job.Queue, Job.Waiters, Job.NextSibling, Job.PrevSibling, Name);
 		}
 	}
 }

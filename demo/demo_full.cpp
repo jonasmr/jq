@@ -113,8 +113,8 @@ void JqTestPrio(uint32_t NumWorkers)
 	// If its a Barrier we just close it with JqCloseReserved
 	// Note, that all Preconditions must be in place first.
 	// The argument for Reserve is the queue it ends up in
-	JqHandle Barrier = JqReserve(0);
-	JqHandle Final	 = JqReserve(0);
+	JqHandle Barrier = JqReserve("Barrier", 0);
+	JqHandle Final	 = JqReserve("Final", 0);
 
 	std::atomic<int> TwoStart;
 	std::atomic<int> TwoEnd;
@@ -126,7 +126,7 @@ void JqTestPrio(uint32_t NumWorkers)
 	// printf("Two two %d %d\n", pTwoStart->load(), pTwoEnd->load());
 	{
 		// different ways of adding dependent jobs
-		JqHandle PostBarrier0 = JqReserve(0);
+		JqHandle PostBarrier0 = JqReserve("PostBarrier0", 0);
 		// PostBarrier0 now requires Barrier to be reached
 		JqAddPrecondition(PostBarrier0, Barrier);
 
@@ -140,14 +140,14 @@ void JqTestPrio(uint32_t NumWorkers)
 
 		// alternative way of adding, when there is only one precondtion
 		JqHandle PostBarrier1 = JqAddSuccessor(
-			Barrier,
+			"PostBarrier1", Barrier,
 			[]() {
 				MICROPROFILE_SCOPEI("JQ_TEST", "Second PostBarrier", MP_AUTO);
 				JobSpinWork(100);
 			},
 			0, 1);
 		JqHandle PostBarrier2 = JqAddSuccessor(
-			Barrier,
+			"PostBarrier2", Barrier,
 			[]() {
 				MICROPROFILE_SCOPEI("JQ_TEST", "Third PostBarrier", MP_AUTO);
 				JobSpinWork(100);
@@ -160,19 +160,23 @@ void JqTestPrio(uint32_t NumWorkers)
 	}
 
 	JqHandle J1 = JqAdd(
+		"J1",
 		[](int index) {
 			MICROPROFILE_SCOPEI("JQ_TEST", "BASE-7-JOBS", MP_GREY);
 			JobSpinWork(50);
 		},
 		7, 3);
 	JqHandle J2 = JqAdd(
+		"J2",
 		[pTwoStart, pTwoEnd] {
 			pTwoStart->fetch_add(1);
 			MICROPROFILE_SCOPEI("JQ_TEST", "BASE-1", MP_GREY);
 			JqAdd(
+				"Base-1",
 				[] {
 					MICROPROFILE_SCOPEI("JQ_TEST", "BASE-1-CHILD", MP_DARKSLATEGREY);
-					JqAdd([] { MICROPROFILE_SCOPEI("JQ_TEST", "P5", 0xffff00); }, 5, 500);
+					JqAdd(
+						"P5", [] { MICROPROFILE_SCOPEI("JQ_TEST", "P5", 0xffff00); }, 5, 500);
 					JobSpinWork(20);
 				},
 				1, 20);
@@ -193,7 +197,7 @@ void JqTestPrio(uint32_t NumWorkers)
 	std::atomic<int>* pSuccessorDone		 = &SuccessorDone;
 	std::atomic<int>* pReservedSuccessorDone = &ReservedSuccessorDone;
 
-	JqHandle ReservedHandle = JqReserve(0);
+	JqHandle ReservedHandle = JqReserve("ReservedHandle", 0);
 	Foo						= 0;
 	Bar						= 0;
 	SuccessorDone			= 0;
@@ -210,6 +214,7 @@ void JqTestPrio(uint32_t NumWorkers)
 	H.NumJobs		 = 32 * NumWorkers;
 
 	JqHandle ReservedWait = JqAdd(
+		"ReservedWait",
 		[pBar, ReservedHandle] {
 			MICROPROFILE_SCOPEI("JQ_TEST", "Reserved_WAIT", MP_PINK);
 			JqWait(ReservedHandle);
@@ -222,6 +227,7 @@ void JqTestPrio(uint32_t NumWorkers)
 		1, 1);
 
 	JqHandle J3 = JqAdd(
+		"J3",
 		[pFoo, pBar, &H](int JobIndex) {
 			MICROPROFILE_SCOPEI("JQ_TEST", "Lots of increments", (H.Frame & 1) == 1 ? MP_YELLOW : MP_CYAN);
 			JobSpinWork(50);
@@ -244,7 +250,7 @@ void JqTestPrio(uint32_t NumWorkers)
 		0, H.NumJobs);
 
 	JqHandle Successor = JqAddSuccessor(
-		J3,
+		"Successor", J3,
 		[pFoo, pSuccessorDone, &H]() {
 			MICROPROFILE_SCOPEI("JQ_TEST", "THE_SUCCESSOR", MP_RED);
 			if(H.NumJobs != *pFoo)
@@ -258,7 +264,7 @@ void JqTestPrio(uint32_t NumWorkers)
 		0);
 
 	JqHandle ReservedSuccessor = JqAddSuccessor(
-		ReservedHandle,
+		"ReservedSucessor", ReservedHandle,
 		[pReservedSuccessorDone, pBar]() {
 			MICROPROFILE_SCOPEI("JQ_TEST", "THE_RESERVEDSUCCESSOR", MP_RED);
 			if(2 != *pBar)
@@ -287,28 +293,28 @@ void JqTestPrio(uint32_t NumWorkers)
 	{
 		uint32_t NumJobs = NumWorkers / 2;
 		JqAddSuccessor(
-			Final,
+			"JOB_32-1", Final,
 			[] {
 				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-1", MP_GREY);
 				// JobSpinWork(100);
 			},
 			0, NumJobs);
 		JqAddSuccessor(
-			Final,
+			"JOB_32-2", Final,
 			[] {
 				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-2", MP_GREY);
 				// JobSpinWork(100);
 			},
 			0, NumJobs);
 		JqAddSuccessor(
-			Final,
+			"JOB_32-3", Final,
 			[] {
 				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-3", MP_GREY);
 				// JobSpinWork(100);
 			},
 			0, NumJobs);
 		JqAddSuccessor(
-			Final,
+			"JOB_32-4", Final,
 			[] {
 				MICROPROFILE_SCOPEI("JQ_TEST", "JOB_32-4", MP_GREY);
 				// JobSpinWork(100);
@@ -332,14 +338,17 @@ void JqTestPrio(uint32_t NumWorkers)
 		if(1)
 		{
 			JqHandle SmallTree = JqAdd(
+				"Child-Small-Tree-0",
 				[pv, ThreadId, px] {
 					px->fetch_add(1);
 					MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-0", MP_AUTO);
 					JqAdd(
+						"Child-Small-Tree-1",
 						[pv, ThreadId] {
 							//							printf("tree 0 %p\n", JqGetCurrentThreadId());
 							MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-1", MP_AUTO);
 							JqAdd(
+								"Child-Small-Tree-2",
 								[pv, ThreadId] {
 									//									printf("tree 1 %p\n", JqGetCurrentThreadId());
 									MICROPROFILE_SCOPEI("ChildWait", "Child-Small-Tree-2", MP_AUTO);
@@ -378,10 +387,12 @@ void JqTestPrio(uint32_t NumWorkers)
 		uint64_t		  ThreadId = JqGetCurrentThreadId();
 
 		// verify its never run
-		JqSpawn([] { JQ_BREAK(); }, 0, 0);
+		JqSpawn(
+			"Spawn0", [] { JQ_BREAK(); }, 0, 0);
 
 		// verify its always run on current thread
 		JqSpawn(
+			"Spawn1",
 			[ThreadId, pv] {
 				pv->fetch_add(1);
 				if(ThreadId != JqGetCurrentThreadId())
@@ -398,6 +409,7 @@ void JqTestPrio(uint32_t NumWorkers)
 		for(std::atomic<int>& d : data)
 			d.store(0);
 		JqSpawn(
+			"Spawn50",
 			[ThreadId, pv, &data](int index) {
 				data[index].fetch_add(1);
 				pv->fetch_add(1);
@@ -419,6 +431,9 @@ void JqTestPrio(uint32_t NumWorkers)
 		}
 	}
 #undef TIMES
+
+	void JqDumpState();
+	JqDumpState();
 	JqWait(J1, JQ_WAITFLAG_EXECUTE_ANY | JQ_WAITFLAG_SLEEP);
 	JqWait(J2);
 	JqWait(J3);
@@ -455,7 +470,7 @@ void JqTestCancel()
 	SCancelJobState* Cancel		 = new SCancelJobState[nNumJobs];
 	CancelFinished				 = 0;
 	// start a bunch of jobs, cancel half of them
-	JqHandle nGroup = JqGroupBegin();
+	JqHandle nGroup = JqGroupBegin("TestCancelGroup");
 	for(int i = 0; i < nNumJobs; ++i)
 	{
 		SCancelJobState* pState	  = &Cancel[i];
@@ -464,6 +479,7 @@ void JqTestCancel()
 		Cancel[i].Cancelled		  = 0;
 		Cancel[i].CancelRequested = 0;
 		Cancel[i].Handle		  = JqAdd(
+			 "Cancel",
 			 [pState, &CancelFinished] {
 				 MICROPROFILE_SCOPEI("CANCEL", "WORK", MP_CYAN);
 				 pState->Started.fetch_add(1);
@@ -515,11 +531,13 @@ void JqTestWaitIgnoreChildren()
 #define CHILDREN 250
 
 	JqHandle Job = JqAdd(
+		"JqTestWaitIgnoreChildren_PARENT_JOB",
 		[pparent, pchild] {
 			MICROPROFILE_SCOPEI("JQ_TEST", "JqTestWaitIgnoreChildren_PARENT_JOB", MP_PINK);
 			pparent->fetch_add(1);
 			JobSpinWork(100);
 			JqAdd(
+				"JqTestWaitIgnoreChildren_CHILD_JOB",
 				[pchild] {
 					MICROPROFILE_SCOPEI("JQ_TEST", "JqTestWaitIgnoreChildren_CHILD_JOB", MP_BLUE);
 					JobSpinWork(10);

@@ -305,20 +305,20 @@ struct JqAttributes
 };
 
 JQ_API JqHandle JqSelf();
-JQ_API JqHandle JqAdd(JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
+JQ_API JqHandle JqAdd(const char* Name, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
 // Add a job which has previously been reserved with a call to JqReserve
 // This decrements the block counter by 1 once its added
 JQ_API JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
 // add successor
-JQ_API JqHandle JqAddSuccessor(JqHandle Precondition, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
+JQ_API JqHandle JqAddSuccessor(const char* Name, JqHandle Precondition, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
 // Reserve a job handle. The job handle is created with a block counter value of 1, letting you add other blocking conditions.
 // Once done, it can be released with
 //  - JqRelease(): No job  will be executed, but it can be used as a barrier by making other jobs depend on this job
-//  - JqAddReserved(): The job will be added to the queue once the precondtion counter reaches zero
-JQ_API JqHandle JqReserve(uint8_t Queue, uint32_t JobFlags = 0);
+//  - JqAddReserved(): The job will be added to the queue once the block counter reaches zero
+JQ_API JqHandle JqReserve(const char* Name, uint8_t Queue, uint32_t JobFlags = 0);
 
 // Set Precondition to be required to be finished before Handle is started.
 // Increments the block counter of Handle, and decrements it once its finished
@@ -330,20 +330,21 @@ JQ_API void JqAddPrecondition(JqHandle Handle, JqHandle Precondition);
 JQ_API void JqBlock(JqHandle Handle);
 
 // Decrement the block counter manually.
-// Use this with matching calls to JqPrecondIncrement, or for JqReserve calls for barrier type jobs. Note that if you call JqAddReserved, it decrements the precondition counter
+// Use this with matching calls to JqBlock, or for JqReserve calls for barrier type jobs. Note that if you call JqAddReserved, it decrements the block counter
 JQ_API void JqRelease(JqHandle Handle);
 
 // Similarly to add, add a job, but JqSpawn differs
 // - Immediately wait for it, not return before all subjobs are done
 // - Will always execute at least job instance 0 on the calling thread.
-JQ_API void		JqSpawn(JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG);
+JQ_API void JqSpawn(const char* Name, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG);
+
 JQ_API void		JqWait(JqHandle Handle, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API void		JqWaitAll();
 JQ_API void		JqWaitAll(JqHandle* Jobs, uint32_t NumJobs, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t UsWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API JqHandle JqWaitAny(JqHandle* Jobs, uint32_t NumJobs, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t UsWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 JQ_API void		JqCancel(JqHandle Handle);
 JQ_API bool		JqExecuteChild(JqHandle Handle); // execute 1 child job.
-JQ_API JqHandle JqGroupBegin();					 // add a non-executing job to group all jobs added between begin/end
+JQ_API JqHandle JqGroupBegin(const char* Name);	 // add a non-executing job to group all jobs added between begin/end
 JQ_API void		JqGroupEnd();
 JQ_API bool		JqIsDone(JqHandle Handle);
 JQ_API bool		JqIsStarted(JqHandle Handle);
