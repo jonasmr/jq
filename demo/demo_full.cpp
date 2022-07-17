@@ -376,10 +376,10 @@ void JqTestPrio(uint32_t NumWorkers)
 				0, FANOUT);
 			MICROPROFILE_SCOPEI("ChildWait", "ChildWaitTime", MP_AUTO);
 			JqWait(SmallTree, JQ_WAITFLAG_EXECUTE_CHILDREN | JQ_WAITFLAG_SPIN);
-			if(v.load() != (FANOUT * FANOUT * FANOUT))
-			{
-				printf("\nonly %d was executed locally\n", v.load());
-			}
+			// if(v.load() != (FANOUT * FANOUT * FANOUT))
+			// {
+			// 	printf("\nonly %d was executed locally\n", v.load());
+			// }
 		}
 #undef FANOUT
 	}

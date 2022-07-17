@@ -28,6 +28,7 @@
 #include <string>
 
 // A list of small simple demos showing how the library works.
+//
 
 uint32_t JobSpinWork(uint32_t nUs)
 {

@@ -8,6 +8,12 @@
 #include <unistd.h>
 #endif
 
+#ifdef _WIN32
+
+#else
+#include <sched.h>
+#endif
+
 static JQ_THREAD_LOCAL JqMutex* g_SingleMutexLockMutex = nullptr;
 JqMutex**						JqGetSingleMutexPtr()
 {
@@ -426,23 +432,6 @@ void JqFreeStackInternal(void* p, uint32_t nStackSize)
 JqJobStack* JqAllocStack2(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)
 {
 
-	// JqJobStack*&
-	// static JQ_THREAD_LOCAL JqJobStack* g_ThreadLocalSmallStack = nullptr;
-	// static JQ_THREAD_LOCAL JqJobStack* g_ThreadLocalLargeStack = nullptr;
-
-	// struct JqLocalJobStack
-	// {
-	// 	uint32_t StackSize;
-	// 	JqJobStack* Stacks;
-	// };
-
-	// struct JqLocalJobStacks
-	// {
-	// 	JqLocalJobStack Stacks[2];
-	// };
-
-	// static JQ_THREAD_LOCAL JqLocalJobStacs g_ThreadLocalStacks = nullptr;
-
 	do
 	{
 		JqJobStackLink Value = FreeList.load();
@@ -693,4 +682,24 @@ void JqLogStats()
 uint32_t JqGetNumCpus()
 {
 	return std::thread::hardware_concurrency();
+}
+
+void JqSetThreadAffinity(uint64_t Affinity)
+{
+#ifdef _WIN32
+	// untested..
+	SetAffinityMask(GetCurrentThreadHandle(), Affinity);
+#else
+	cpu_set_t set;
+	CPU_ZERO(&set);
+	for(uint32_t i = 0; i < 64; ++i)
+	{
+		if(Affinity & 1)
+		{
+			CPU_SET(i, &set);
+		}
+		Affinity >>= 1;
+	}
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &set);
+#endif
 }

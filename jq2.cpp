@@ -166,7 +166,8 @@ static void			 JqGraphAdd(uint64_t Handle, const char* Name, uint16_t Count);
 static void			 JqGraphWait(uint64_t WaitTarget);
 static void			 JqGraphPrecondtion(uint64_t Handle, uint64_t Precondition);
 JqThreadState&		 JqGetThreadState();
-
+void				 JqClearThreadState(JqThreadState& State);
+void				 JqClearAllThreadStates();
 struct JqSelfStack
 {
 	uint64_t Job;
@@ -583,6 +584,7 @@ struct JQ_ALIGN_CACHELINE JqState_t
 
 	JqJobStackList StackSmall;
 	JqJobStackList StackLarge;
+	bool		   IsRunning;
 	int			   NumWorkers;
 	int			   Stop;
 	int			   TotalWaiting;
@@ -612,7 +614,8 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	std::atomic<JqGraphData*> GraphEnd;
 
 	JqState_t()
-		: NumWorkers(0)
+		: IsRunning(false)
+		, NumWorkers(0)
 	{
 	}
 
@@ -741,9 +744,32 @@ void JqStart(JqAttributes* pAttr)
 	JqState.Stop		 = 0;
 	for(int i = 0; i < JQ_JOB_BUFFER_SIZE; ++i)
 	{
-		JqState.Jobs[i].StartedHandle  = 0;
-		JqState.Jobs[i].FinishedHandle = 0;
+		JqState.Jobs[i].StartedHandle	   = 0;
+		JqState.Jobs[i].FinishedHandle	   = 0;
+		JqState.Jobs[i].ClaimedHandle	   = 0;
+		JqState.Jobs[i].Cancel			   = 0;
+		JqState.Jobs[i].PendingFinish	   = 0;
+		JqState.Jobs[i].PendingStart	   = 0;
+		JqState.Jobs[i].ActiveQueue		   = 0;
+		JqState.Jobs[i].BlockCount		   = 0;
+		JqState.Jobs[i].Name			   = nullptr;
+		JqState.Jobs[i].DependentJob.Job   = 0;
+		JqState.Jobs[i].DependentJob.Next  = 0;
+		JqState.Jobs[i].DependentJob.Owner = 0;
+		JqState.Jobs[i].NumJobs			   = 0;
+		JqState.Jobs[i].NumJobsToStart	   = 0;
+		JqState.Jobs[i].Range			   = 1;
+		JqState.Jobs[i].JobFlags		   = 0;
+		JqState.Jobs[i].Queue			   = 0xff;
+		JqState.Jobs[i].Waiters			   = 0;
+		JqState.Jobs[i].WaitersWas		   = 0;
+		JqState.Jobs[i].NextSibling		   = 0;
+		JqState.Jobs[i].PrevSibling		   = 0;
+		JqState.Jobs[i].FirstChild		   = 0;
+		JqState.Jobs[i].LastChild		   = 0;
+		JqState.Jobs[i].Reserved		   = false;
 	}
+
 	JqState.ActiveJobs			   = 0;
 	JqState.NextHandle			   = 1;
 	JqState.Stats.nNumFinished	   = 0;
@@ -766,6 +792,7 @@ void JqStart(JqAttributes* pAttr)
 		JqState.DependentJobLinks[i].Job = 0;
 	}
 	JqState.DependentJobLinkHead = 1;
+	JqState.IsRunning			 = true;
 
 	for(int i = 0; i < JqState.NumWorkers; ++i)
 	{
@@ -781,7 +808,9 @@ int JqNumWorkers()
 void JqStop()
 {
 	JqWaitAll();
+
 	JqState.Stop = 1;
+
 	for(int i = 0; i < JqState.ActiveSemaphores; ++i)
 	{
 		JqState.Semaphore[i].Signal(JqState.NumWorkers);
@@ -793,13 +822,20 @@ void JqStop()
 	}
 	JqFreeAllStacks(JqState.StackSmall);
 	JqFreeAllStacks(JqState.StackLarge);
+	uint64_t DependentLinkCounter = JqState.DependentJobLinkCounter.load();
+	if(DependentLinkCounter)
+	{
+		printf("Dependent links(%d) left over after finishing\n", DependentLinkCounter);
+	}
+	JQ_ASSERT(0 == DependentLinkCounter);
 
 	JqState.NumWorkers = 0;
+	JqState.IsRunning  = false;
+	JqClearAllThreadStates();
 }
 
 void JqSetThreadQueueOrder(JqQueueOrder* pConfig)
 {
-	JQ_ASSERT(g_nJqNumQueues == 0); // its not supported to change this value, nor is it supported to set it on worker threads. set on init instead.
 	uint32_t nNumActiveQueues = 0;
 	JQ_ASSERT(pConfig->nNumPipes <= JQ_MAX_QUEUES);
 	for(uint32_t j = 0; j < pConfig->nNumPipes; ++j)
@@ -921,6 +957,7 @@ void JqFinishInternal(uint16_t JobIndex)
 
 	// this releases the header.
 	Job.FinishedHandle = FinishValue;
+	JqState.ActiveJobs.fetch_sub(1);
 
 	if(Dependent.Job)
 	{
@@ -1270,6 +1307,7 @@ bool JqExecuteOne(uint8_t* nQueues, uint8_t nNumQueues)
 
 void JqWorker(int nThreadId)
 {
+	JqSetThreadAffinity(JqState.Attributes.WorkerThreadAffinity[nThreadId]);
 	JqGetThreadState().WorkerState = JWS_WORKING;
 	uint8_t* pQueues			   = JqState.QueueList[nThreadId];
 	uint32_t nNumQueues			   = JqState.NumQueues[nThreadId];
@@ -1299,6 +1337,7 @@ void JqWorker(int nThreadId)
 		JqGetThreadState().WorkerState = JWS_WORKING;
 	}
 	JqGetThreadState().WorkerState = JWS_NOT_WORKER;
+	JqOnThreadExit();
 #ifdef JQ_MICROPROFILE
 	MicroProfileOnThreadExit();
 #endif
@@ -1352,7 +1391,11 @@ uint64_t JqClaimHandle(const char* Name)
 		}
 
 		if(pJob->ClaimedHandle.compare_exchange_strong(claimed, h))
+		{
+			JqState.ActiveJobs.fetch_add(1);
+
 			break;
+		}
 	}
 	// reset header
 	pJob->PendingFinish		= 0;
@@ -1878,6 +1921,7 @@ JqHandle JqAddSuccessor(const char* Name, JqHandle PreconditionHandle, JqFunctio
 // Reserve a Job slot. this allows you to wait on work added later
 JqHandle JqReserve(const char* Name)
 {
+	JQ_ASSERT(JqState.Stop == 0);
 	uint64_t Handle = JqClaimHandle(Name);
 	uint16_t Index	= Handle % JQ_JOB_BUFFER_SIZE;
 
@@ -2107,11 +2151,26 @@ JqHandle JqSelf()
 	return JqHandle{ State.SelfPos ? State.SelfStack[State.SelfPos - 1].Job : 0 };
 }
 
+void JqClearThreadState(JqThreadState& ThreadState)
+{
+	ThreadState.SelfPos			= 0;
+	ThreadState.HasLock			= 0;
+	ThreadState.WorkerState		= JWS_NOT_WORKER;
+	ThreadState.DebugPos		= 0;
+	ThreadState.Initialized		= 0;
+	ThreadState.ThreadId		= 0;
+	ThreadState.NextThreadState = nullptr;
+	ThreadState.SingleMutexPtr	= nullptr;
+	ThreadState.pJqNumQueues	= nullptr;
+	ThreadState.pJqQueues		= nullptr;
+}
+
 JqThreadState& JqGetThreadState()
 {
 	if(!ThreadState.Initialized)
 	{
 		JqMutexLock L(ThreadStateLock);
+		JQ_ASSERT(JqState.IsRunning); // if we hit this, Jq has not been initialized before we're starting running job. this is bad.
 		JQ_ASSERT(!ThreadState.Initialized);
 		{
 
@@ -2127,12 +2186,50 @@ JqThreadState& JqGetThreadState()
 			ThreadState.pJqQueues		= &g_JqQueues[0];
 
 			FirstThreadState = &ThreadState;
-
-			// todo: unregister on thread exit..
 		}
 	}
 	return ThreadState;
 }
+
+void JqOnThreadExit()
+{
+	if(ThreadState.Initialized)
+	{
+		JqThreadState* State = &ThreadState;
+
+		JqMutexLock L(ThreadStateLock);
+		JQ_ASSERT(JqState.IsRunning); // if we hit this, Jq has not been initialized before we're starting running job. this is bad.
+
+		JqThreadState** ppNext = &FirstThreadState;
+		while(*ppNext && *ppNext != State)
+		{
+			ppNext = &(*ppNext)->NextThreadState;
+		}
+		if(*ppNext != nullptr)
+		{
+			JQ_ASSERT(*ppNext == State);
+			*ppNext = State->NextThreadState;
+		}
+		JqClearThreadState(*State);
+	}
+}
+
+void JqClearAllThreadStates()
+{
+	JqMutexLock L(ThreadStateLock);
+	JQ_ASSERT(!JqState.IsRunning); // should only be called on shutdown
+	JqThreadState* State = FirstThreadState;
+	FirstThreadState	 = nullptr;
+	while(State)
+	{
+		JqThreadState* Next = State->NextThreadState;
+		JQ_ASSERT(State->SelfPos == 0);
+		JqClearThreadState(*State);
+
+		State = Next;
+	}
+}
+
 // split handle for easier debugging
 void JqSplitHandle(uint64_t Handle, uint64_t& Index, uint64_t& Generation)
 {

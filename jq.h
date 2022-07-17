@@ -300,8 +300,9 @@ struct JqAttributes
 	uint32_t StackSizeLarge;
 	uint32_t NumQueueOrders;
 
-	JqQueueOrder QueueOrder[JQ_MAX_THREADS];	   // defines a set of different ways of pulling out work
-	uint8_t		 WorkerOrderIndex[JQ_MAX_THREADS]; // for each worker thread, pick on of the pipe orders from abovce.
+	JqQueueOrder QueueOrder[JQ_MAX_THREADS];		   // defines a set of different ways of pulling out work
+	uint8_t		 WorkerOrderIndex[JQ_MAX_THREADS];	   // for each worker thread, pick on of the pipe orders from abovce.
+	uint64_t	 WorkerThreadAffinity[JQ_MAX_THREADS]; // for each worker, what should the affinity be set to. 0 leaves it as default
 };
 
 JQ_API JqHandle JqSelf();
@@ -367,11 +368,14 @@ JQ_API void		JqInitAttributes(JqAttributes* Attributes, uint32_t NumQueueOrders 
 JQ_API int64_t	JqGetTicksPerSecond();
 JQ_API int64_t	JqGetTick();
 
+JQ_API void JqOnThreadExit(); // this must be called from each thread calling Jq functions. called automatically from the worker threads
+
 // Helper / debug functions
 JQ_API uint64_t JqGetCurrentThreadId(); // for debugging.
 JQ_API void		JqUSleep(uint64_t us);
 JQ_API void		JqLogStats();
 JQ_API uint64_t JqGetCurrentThreadId();
+JQ_API uint32_t JqGetNumCpus();
 
 #define JQ_GRAPH_FLAG_SHOW_WAITS 0x1
 #define JQ_GRAPH_FLAG_SHOW_PRECONDITIONS 0x2
