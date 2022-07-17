@@ -24,6 +24,12 @@
 
 //
 //  TODO:
+//		new doc
+//		test win32
+//		test osx
+// 		run sanitizers
+//		comment / code pass
+//		upgrade microprofile
 // 		* colors
 //		* fix manymutex lock (lockless take-job)
 //		* multidep
@@ -32,9 +38,6 @@
 //		* pop any job
 //		* cancel job
 //		* wait all
-// 		run sanitizers
-//		review wait child.
-//		comment / code pass
 // 		* fix spawn to always take one
 //		* make handles
 //		* futex for semaphore
@@ -43,18 +46,13 @@
 //		* one more stab at lockless queue?
 // 		* reserve/close reserved without
 //
-// 		cleanup demos
-//		upgrade microprofile
+// 		* cleanup demos
 //		* switch to ng
-//		new doc
-//		test win32
-//		test osx
 //		* fix so there is only one queue impl.
 //		* test spawn
 //		* test wait for only children
 // 		* fix unlocking on the wrong mutex when doing full wait in JqWait
 //		* assert in ConditionVariable wait that the mutex passed in is actually locked
-// 		make cancel do its tha
 //
 //
 // Flow

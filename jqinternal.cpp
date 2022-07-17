@@ -69,7 +69,7 @@ void JqMutex::Lock()
 
 void JqMutex::Unlock()
 {
-#ifdef JQ_ASSERT_LOCKS
+#if JQ_ASSERTS_ENABLED
 	nLockCount--;
 	if(0 == nLockCount)
 	{
@@ -81,7 +81,7 @@ void JqMutex::Unlock()
 	JQLSC(g_JqLockOps.fetch_add(1));
 }
 
-#ifdef JQ_ASSERT_LOCKS
+#if JQ_ASSERTS_ENABLED
 bool JqMutex::IsLocked()
 {
 	return (nThreadId == JqCurrentThreadId());
@@ -100,7 +100,7 @@ JqConditionVariable::~JqConditionVariable()
 void JqConditionVariable::Wait(JqMutex& Mutex)
 {
 
-#ifdef JQ_ASSERT_LOCKS
+#if JQ_ASSERTS_ENABLED
 	if(JqCurrentThreadId() != Mutex.nThreadId)
 	{
 		JQ_BREAK();
@@ -133,7 +133,7 @@ void JqConditionVariable::NotifyAll()
 
 JqMutex::JqMutex()
 {
-#ifdef JQ_ASSERT_LOCKS
+#if JQ_ASSERTS_ENABLED
 	nLockCount = 0;
 	nThreadId  = 0;
 #endif
@@ -159,7 +159,7 @@ void JqMutex::Lock()
 
 void JqMutex::Unlock()
 {
-#ifdef JQ_ASSERT_LOCKS
+#if JQ_ASSERTS_ENABLED
 	nLockCount--;
 	if(0 == nLockCount)
 	{
@@ -172,7 +172,7 @@ void JqMutex::Unlock()
 	JQLSC(g_JqLockOps.fetch_add(1));
 }
 
-#ifdef JQ_ASSERT_LOCKS
+#if JQ_ASSERTS_ENABLED
 bool JqMutex::IsLocked()
 {
 	return nThreadId == JqCurrentThreadId();
@@ -192,7 +192,7 @@ JqConditionVariable::~JqConditionVariable()
 void JqConditionVariable::Wait(JqMutex& Mutex)
 {
 
-#ifdef JQ_ASSERT_LOCKS
+#if JQ_ASSERTS_ENABLED
 	if(JqCurrentThreadId() != Mutex.nThreadId)
 	{
 		JQ_BREAK();
@@ -483,7 +483,6 @@ void JqFreeAllStacks(JqJobStackList& FreeList)
 
 void JqFreeStack2(JqJobStackList& FreeList, JqJobStack* pStack)
 {
-	MICROPROFILE_SCOPEI("JQ", "JqFreeStack", MP_AUTO);
 	JQ_ASSERT(pStack->Link == nullptr);
 	do
 	{
@@ -501,7 +500,6 @@ void JqFreeStack2(JqJobStackList& FreeList, JqJobStack* pStack)
 
 JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)
 {
-	MICROPROFILE_SCOPEI("JQ", "JqAllocStack", MP_AUTO);
 
 	JqLocalJobStack& LocalStack = g_ThreadLocalStacks.Stack[0].FreeList == &FreeList ? g_ThreadLocalStacks.Stack[0] : g_ThreadLocalStacks.Stack[1];
 	if(LocalStack.FreeList == &FreeList)
@@ -519,7 +517,6 @@ JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t
 
 void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)
 {
-	MICROPROFILE_SCOPEI("JQ", "JqFreeStack", MP_AUTO);
 	JqLocalJobStack& LocalStack = g_ThreadLocalStacks.Stack[0].FreeList == &FreeList ? g_ThreadLocalStacks.Stack[0] : g_ThreadLocalStacks.Stack[1];
 	if(LocalStack.FreeList == &FreeList)
 	{
@@ -668,7 +665,7 @@ void JqLogStats()
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption ? nHandleConsumption : 1) * (1.0 / (365 * 60.0 * 60.0 * 60.0 * 24.0));
 		(void)WrapTime;
-		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %14d/%14d|%8lld|%12.2fy|%6.2fs|%2d     ", bUseWrapping ? '\r' : ' ', Stats.nNumAdded / (float)fTime,
+		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %14d/%14d|%8ld|%12.2fy|%6.2fs|%2d     ", bUseWrapping ? '\r' : ' ', Stats.nNumAdded / (float)fTime,
 			   Stats.nNumFinished / (float)fTime, Stats.nNumCancelled / (float)fTime, Stats.nNumAddedSub / (float)fTime, Stats.nNumFinishedSub / (float)fTime, Stats.nNumLocks / (float)fTime,
 			   Stats.nNumWaitCond / (float)fTime, Stats.nNumWaitKicks / (float)fTime, g_LogStats.nNumAdded, g_LogStats.nNumFinished, g_LogStats.nNumAddedSub, g_LogStats.nNumFinishedSub,
 			   nHandleConsumption, HandlesPerYear, fTime / 1000.f, JqGetNumWorkers());
@@ -686,6 +683,8 @@ uint32_t JqGetNumCpus()
 
 void JqSetThreadAffinity(uint64_t Affinity)
 {
+	if(0 == Affinity)
+		return;
 #ifdef _WIN32
 	// untested..
 	SetAffinityMask(GetCurrentThreadHandle(), Affinity);

@@ -1,6 +1,6 @@
 #pragma once
 // internal code, shared by both lockless and locked version
-
+#include "jq.h"
 #include "jqfcontext.h"
 #ifdef JQ_MICROPROFILE
 #include "microprofile.h"
@@ -149,7 +149,7 @@ inline void JqUSleepImpl(uint64_t usec)
 // #define JQ_ASSERT(a) do{if(!(a)){JqDump(); JQ_BREAK();} }while(0)
 // #endif
 
-#ifdef JQ_ASSERT_LOCKS
+#if JQ_ASSERTS_ENABLED
 #define JQ_AL(exp)                                                                                                                                                                                     \
 	do                                                                                                                                                                                                 \
 	{                                                                                                                                                                                                  \
@@ -256,7 +256,7 @@ struct JqMutex
 	pthread_mutex_t Mutex;
 #endif
 
-#ifdef JQ_ASSERT_LOCKS
+#if JQ_ASSERTS_ENABLED
 	uint32_t	 nLockCount;
 	ThreadIdType nThreadId;
 	bool		 IsLocked();

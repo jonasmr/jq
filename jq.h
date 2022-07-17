@@ -75,11 +75,13 @@
 
 #ifndef JQ_ASSERT
 #ifdef JQ_NO_ASSERT
+#define JQ_ASSERTS_ENABLED 0
 #define JQ_ASSERT(a)                                                                                                                                                                                   \
 	do                                                                                                                                                                                                 \
 	{                                                                                                                                                                                                  \
 	} while(0)
 #else
+#define JQ_ASSERTS_ENABLED 1
 #define JQ_ASSERT(a)                                                                                                                                                                                   \
 	do                                                                                                                                                                                                 \
 	{                                                                                                                                                                                                  \
