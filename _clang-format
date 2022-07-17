@@ -45,4 +45,5 @@ SpacesInCStyleCastParentheses: false
 SpaceAfterControlStatementKeyword: false
 BinPackArguments: true
 BinPackParameters: true
+AllowShortLambdasOnASingleLine : None
 ...

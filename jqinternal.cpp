@@ -571,11 +571,11 @@ void JqInitAttributes(JqAttributes* Attributes, uint32_t NumQueueOrders, uint32_
 	{
 		JqQueueOrder& C = Attributes->QueueOrder[i];
 		memset(&C.Queues[0], 0xff, sizeof(C.Queues));
-		for(uint32_t j = 0; j < JQ_NUM_QUEUES; ++j)
+		for(uint32_t j = 0; j < JQ_MAX_QUEUES; ++j)
 		{
 			C.Queues[j] = (uint8_t)j;
 		}
-		C.nNumPipes = JQ_NUM_QUEUES;
+		C.nNumPipes = JQ_MAX_QUEUES;
 	}
 	for(uint32_t i = 0; i < NumWorkers; ++i)
 	{

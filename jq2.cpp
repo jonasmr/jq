@@ -54,6 +54,7 @@
 //		* test wait for only children
 // 		* fix unlocking on the wrong mutex when doing full wait in JqWait
 //		* assert in ConditionVariable wait that the mutex passed in is actually locked
+// 		make cancel do its tha
 //
 //
 // Flow
@@ -125,7 +126,7 @@
 #define JQ_TOKEN_PASTE(a, b) JQ_TOKEN_PASTE0(a, b)
 
 static_assert(JQ_JOB_BUFFER_SIZE == (1llu << JQ_JOB_BUFFER_SHIFT), "JQ_JOB_BUFFER_SIZE and JQ_JOB_BUFFER_SHIFT must match");
-static_assert(JQ_NUM_QUEUES <= 64, "Currently a queue mask is being put in a uint64_t");
+static_assert(JQ_MAX_QUEUES <= 64, "Currently a queue mask is being put in a uint64_t");
 
 struct JqMutexLock;
 enum JqWorkerState : uint8_t;
@@ -569,14 +570,14 @@ struct JQ_ALIGN_CACHELINE JqState_t
 {
 	JqSemaphore	 Semaphore[JQ_MAX_SEMAPHORES];
 	uint64_t	 SemaphoreMask[JQ_MAX_SEMAPHORES];
-	uint8_t		 QueueNumSemaphores[JQ_NUM_QUEUES];
-	uint8_t		 QueueToSemaphore[JQ_NUM_QUEUES][JQ_MAX_SEMAPHORES];
+	uint8_t		 QueueNumSemaphores[JQ_MAX_QUEUES];
+	uint8_t		 QueueToSemaphore[JQ_MAX_QUEUES][JQ_MAX_SEMAPHORES];
 	uint8_t		 SemaphoreClients[JQ_MAX_SEMAPHORES][JQ_MAX_THREADS];
 	uint8_t		 SemaphoreClientCount[JQ_MAX_SEMAPHORES];
 	int			 ActiveSemaphores;
 	JqAttributes Attributes;
 	uint8_t		 NumQueues[JQ_MAX_THREADS];
-	uint8_t		 QueueList[JQ_MAX_THREADS][JQ_NUM_QUEUES];
+	uint8_t		 QueueList[JQ_MAX_THREADS][JQ_MAX_QUEUES];
 	uint8_t		 SemaphoreIndex[JQ_MAX_THREADS];
 	JQ_THREAD	 WorkerThreads[JQ_MAX_THREADS];
 
@@ -592,7 +593,7 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	JqQueueOrder ThreadConfig[JQ_MAX_THREADS];
 	JqJob		 Jobs[JQ_JOB_BUFFER_SIZE];
 
-	JqLocklessQueue LocklessQueues[JQ_NUM_QUEUES];
+	JqLocklessQueue LocklessQueues[JQ_MAX_QUEUES];
 
 	JqMutex				MutexJob[JQ_NUM_LOCKS];
 	JqConditionVariable ConditionVariableJob[JQ_NUM_LOCKS];
@@ -606,6 +607,7 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	const char*				  GraphFilename;
 	uint32_t				  GraphBufferSize;
 	JqGraphData*			  GraphData;
+	uint32_t				  GraphFlags;
 	std::atomic<JqGraphData*> GraphPut;
 	std::atomic<JqGraphData*> GraphEnd;
 
@@ -623,7 +625,7 @@ struct JQ_ALIGN_CACHELINE JqState_t
 
 JQ_THREAD_LOCAL int		 JqSpinloop				   = 0; // prevent optimizer from removing spin loop
 JQ_THREAD_LOCAL uint32_t g_nJqNumQueues			   = 0;
-JQ_THREAD_LOCAL uint8_t	 g_JqQueues[JQ_NUM_QUEUES] = { 0 };
+JQ_THREAD_LOCAL uint8_t	 g_JqQueues[JQ_MAX_QUEUES] = { 0 };
 JQ_THREAD_LOCAL JqJobStack*	  g_pJqJobStacks	   = 0;
 JQ_THREAD_LOCAL JqThreadState ThreadState;
 
@@ -676,11 +678,11 @@ void JqStart(JqAttributes* pAttr)
 	for(uint32_t i = 0; i < pAttr->NumWorkers; ++i)
 	{
 		JQ_ASSERT(pAttr->WorkerOrderIndex[i] < pAttr->NumQueueOrders); /// out of bounds pipe order index in attributes
-		JQ_ASSERT(pAttr->WorkerOrderIndex[i] < JQ_NUM_QUEUES);
+		JQ_ASSERT(pAttr->WorkerOrderIndex[i] < JQ_MAX_QUEUES);
 		JqState.ThreadConfig[i] = pAttr->QueueOrder[pAttr->WorkerOrderIndex[i]];
 	}
 
-	for(int i = 0; i < JQ_NUM_QUEUES; ++i)
+	for(int i = 0; i < JQ_MAX_QUEUES; ++i)
 	{
 		JqState.LocklessQueues[i].Init(i);
 	}
@@ -690,13 +692,13 @@ void JqStart(JqAttributes* pAttr)
 		JqQueueOrder& C				  = JqState.ThreadConfig[i];
 		uint8_t		  nNumActivePipes = 0;
 		uint64_t	  PipeMask		  = 0;
-		static_assert(JQ_NUM_QUEUES < 64, "wont fit in 64bit mask");
+		static_assert(JQ_MAX_QUEUES < 64, "wont fit in 64bit mask");
 		for(uint32_t j = 0; j < C.nNumPipes; ++j)
 		{
 			if(C.Queues[j] != 0xff)
 			{
 				JqState.QueueList[i][nNumActivePipes++] = C.Queues[j];
-				JQ_ASSERT(C.Queues[j] < JQ_NUM_QUEUES);
+				JQ_ASSERT(C.Queues[j] < JQ_MAX_QUEUES);
 				PipeMask |= 1llu << C.Queues[j];
 			}
 		}
@@ -716,7 +718,7 @@ void JqStart(JqAttributes* pAttr)
 			JQ_ASSERT(JqState.ActiveSemaphores < JQ_MAX_SEMAPHORES);
 			nSelectedSemaphore						  = JqState.ActiveSemaphores++;
 			JqState.SemaphoreMask[nSelectedSemaphore] = PipeMask;
-			for(uint32_t j = 0; j < JQ_NUM_QUEUES; ++j)
+			for(uint32_t j = 0; j < JQ_MAX_QUEUES; ++j)
 			{
 				if(PipeMask & (1llu << j))
 				{
@@ -799,13 +801,13 @@ void JqSetThreadQueueOrder(JqQueueOrder* pConfig)
 {
 	JQ_ASSERT(g_nJqNumQueues == 0); // its not supported to change this value, nor is it supported to set it on worker threads. set on init instead.
 	uint32_t nNumActiveQueues = 0;
-	JQ_ASSERT(pConfig->nNumPipes <= JQ_NUM_QUEUES);
+	JQ_ASSERT(pConfig->nNumPipes <= JQ_MAX_QUEUES);
 	for(uint32_t j = 0; j < pConfig->nNumPipes; ++j)
 	{
 		if(pConfig->Queues[j] != 0xff)
 		{
 			g_JqQueues[nNumActiveQueues++] = pConfig->Queues[j];
-			JQ_ASSERT(pConfig->Queues[j] < JQ_NUM_QUEUES);
+			JQ_ASSERT(pConfig->Queues[j] < JQ_MAX_QUEUES);
 		}
 	}
 	g_nJqNumQueues = nNumActiveQueues;
@@ -825,6 +827,25 @@ void JqConsumeStats(JqStats* pStats)
 	JqState.Stats.nNumLocklessPops = 0;
 	JqState.Stats.nNumWaitCond	   = 0;
 	JqState.Stats.nNextHandle.H	   = JqState.NextHandle;
+}
+
+void JqKickWaiters(uint16_t JobIndex)
+{
+	JobIndex   = JobIndex % JQ_JOB_BUFFER_SIZE;
+	JqJob& Job = JqState.Jobs[JobIndex];
+	// kick waiting threads.
+	int8_t Waiters = Job.Waiters;
+	if(Waiters != 0)
+	{
+		JqState.Stats.nNumWaitKicks++;
+		JqGetJobConditionVariable(JobIndex).NotifyAll();
+		Job.Waiters	   = 0;
+		Job.WaitersWas = Waiters;
+	}
+	else
+	{
+		Job.WaitersWas = 0xff;
+	}
 }
 
 void JqFinishInternal(uint16_t JobIndex)
@@ -861,19 +882,9 @@ void JqFinishInternal(uint16_t JobIndex)
 		Job.DependentJob.Next = 0;
 
 		JqState.Stats.nNumFinished++;
-		// kick waiting threads.
-		int8_t Waiters = Job.Waiters;
-		if(Waiters != 0)
-		{
-			JqState.Stats.nNumWaitKicks++;
-			JqGetJobConditionVariable(JobIndex).NotifyAll();
-			Job.Waiters	   = 0;
-			Job.WaitersWas = Waiters;
-		}
-		else
-		{
-			Job.WaitersWas = 0xff;
-		}
+
+		JqKickWaiters(JobIndex);
+
 		JQ_ASSERT(Job.FinishedHandle.load() != Job.StartedHandle.load());
 		JQ_ASSERT(Job.ClaimedHandle.load() == Job.StartedHandle.load());
 
@@ -1125,7 +1136,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumQueues, uint8_t* pQueues)
 {
 	JQ_MICROPROFILE_VERBOSE_SCOPE("JqTakeJob", MP_AUTO); // if this starts happening the job queue size should be increased..
-	const uint32_t nCount = nNumQueues ? nNumQueues : JQ_NUM_QUEUES;
+	const uint32_t nCount = nNumQueues ? nNumQueues : JQ_MAX_QUEUES;
 	for(uint32_t i = 0; i < nCount; i++)
 	{
 		uint8_t	 nQueue = nNumQueues ? pQueues[i] : i;
@@ -1418,6 +1429,8 @@ void JqCancel(JqHandle Handle)
 		}
 
 	} while(!Job.Cancel.compare_exchange_weak(CancelHandle, H));
+
+	JqKickWaiters(JobIndex);
 }
 
 void JqIncBlockCount(uint64_t Handle, int Count)
@@ -1442,7 +1455,7 @@ void JqTriggerQueues(uint64_t QueueTriggerMask)
 	{
 		if(QueueTriggerMask & 1)
 		{
-			JQ_ASSERT(Queue < JQ_NUM_QUEUES);
+			JQ_ASSERT(Queue < JQ_MAX_QUEUES);
 			uint32_t nNumSema = JqState.QueueNumSemaphores[Queue];
 			for(uint32_t i = 0; i < nNumSema; ++i)
 			{
@@ -1551,7 +1564,7 @@ void JqQueuePush(uint8_t QueueIndex, uint64_t Handle)
 	JQ_MICROPROFILE_SCOPE("JqQueuePush", MP_AUTO);
 	uint16_t JobIndex = Handle % JQ_JOB_BUFFER_SIZE;
 
-	JQ_ASSERT(QueueIndex < JQ_NUM_QUEUES);
+	JQ_ASSERT(QueueIndex < JQ_MAX_QUEUES);
 	JqJob&			 Job   = JqState.Jobs[JobIndex];
 	JqLocklessQueue& Queue = JqState.LocklessQueues[QueueIndex];
 
@@ -1590,7 +1603,7 @@ bool JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob, bool& OutIsDrained)
 }
 uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t* OutSubIndex)
 {
-	JQ_ASSERT(QueueIndex < JQ_NUM_QUEUES);
+	JQ_ASSERT(QueueIndex < JQ_MAX_QUEUES);
 	JqLocklessQueue& Queue = JqState.LocklessQueues[QueueIndex];
 	JQ_MICROPROFILE_VERBOSE_SCOPE("Pop", MP_AUTO);
 
@@ -1779,7 +1792,6 @@ JqHandle JqAddInternal(const char* Name, JqHandle ReservedHandle, JqFunction Job
 	{
 		if(ReservedHandle.H)
 		{
-			JQ_ASSERT(Queue == 0xff);
 			Handle = ReservedHandle.H;
 		}
 		else
@@ -1794,21 +1806,22 @@ JqHandle JqAddInternal(const char* Name, JqHandle ReservedHandle, JqFunction Job
 		if(ReservedHandle.H)
 		{
 			JQ_ASSERT(Job.ClaimedHandle == ReservedHandle.H);
-			JQ_ASSERT(Job.Queue != 0xff);
+			JQ_ASSERT(Job.Queue == 0xff);
 			JQ_ASSERT(Job.BlockCount >= 1);
 			if(!Job.Reserved)
 			{
-				JQ_BREAK(); // When reserving Job handles, you should call -either- JqCloseReserved or JqAddReserved, never both.
+				// When reserving Job handles, you should call -either- JqRelease or JqAddReserved, never both, and only -once-
+				JQ_BREAK();
 			}
 			Job.Reserved = false;
 		}
 		else
 		{
 			JQ_ASSERT(Job.BlockCount == 1);
-			JQ_ASSERT(Queue < JQ_NUM_QUEUES);
-			Job.Queue = Queue;
+			JQ_ASSERT(Queue < JQ_MAX_QUEUES);
 			JQ_ASSERT(Job.Waiters == 0);
 		}
+		Job.Queue = Queue;
 
 		JQ_ASSERT(Job.ClaimedHandle.load() == Handle);
 		JQ_ASSERT(JQ_LT_WRAP(Job.FinishedHandle, Handle));
@@ -1851,9 +1864,9 @@ JqHandle JqAdd(const char* Name, JqFunction JobFunc, uint8_t Queue, int NumJobs,
 }
 
 // add reserved
-JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, int NumJobs, int Range, uint32_t JobFlags)
+JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags)
 {
-	return JqAddInternal(nullptr, ReservedHandle, JobFunc, 0xff, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, JqHandle{ 0 });
+	return JqAddInternal(nullptr, ReservedHandle, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, JqHandle{ 0 });
 }
 
 // add successor
@@ -1863,10 +1876,8 @@ JqHandle JqAddSuccessor(const char* Name, JqHandle PreconditionHandle, JqFunctio
 }
 
 // Reserve a Job slot. this allows you to wait on work added later
-JqHandle JqReserve(const char* Name, uint8_t Queue, uint32_t JobFlags)
+JqHandle JqReserve(const char* Name)
 {
-	JQ_ASSERT(Queue < JQ_NUM_QUEUES);
-
 	uint64_t Handle = JqClaimHandle(Name);
 	uint16_t Index	= Handle % JQ_JOB_BUFFER_SIZE;
 
@@ -1879,16 +1890,10 @@ JqHandle JqReserve(const char* Name, uint8_t Queue, uint32_t JobFlags)
 	JQ_ASSERT(Job.BlockCount == 1);
 	JQ_ASSERT(Job.NumJobs == 0);
 
-	uint64_t Parent = 0 != (JobFlags & JQ_JOBFLAG_DETACHED) ? 0 : JqSelf().H;
-	Job.Reserved	= true;
-
-	if(Parent)
-	{
-		JqAttachChild(Parent, Handle);
-	}
+	Job.Reserved = true;
 
 	JQ_CLEAR_FUNCTION(Job.Function);
-	Job.Queue	= Queue;
+	Job.Queue	= 0xff;
 	Job.Waiters = 0;
 
 	return JqHandle{ Handle };
@@ -2170,7 +2175,7 @@ void JqDumpState()
 		}
 	}
 	printf("\nQueues:\n");
-	for(uint32_t i = 0; i < JQ_NUM_QUEUES; ++i)
+	for(uint32_t i = 0; i < JQ_MAX_QUEUES; ++i)
 	{
 		JqLocklessQueue& Queue = JqState.LocklessQueues[i];
 		printf("Queue %d: \n", i);
@@ -2272,7 +2277,7 @@ const char* JqDebugStackStateString(JqDebugStackState State)
 	return "";
 }
 
-void JqGraphDumpStart(const char* Filename, uint32_t BufferSize)
+void JqGraphDumpStart(const char* Filename, uint32_t BufferSize, uint32_t GraphFlags)
 {
 	JqMutexLock L(JqState.GraphLock);
 	JQ_ASSERT(JqState.GraphFilename == nullptr);
@@ -2280,6 +2285,7 @@ void JqGraphDumpStart(const char* Filename, uint32_t BufferSize)
 	JqState.GraphFilename	= Filename;
 	BufferSize				= (BufferSize / sizeof(JqGraphData)) * sizeof(JqGraphData);
 	JqState.GraphBufferSize = BufferSize;
+	JqState.GraphFlags		= GraphFlags;
 
 	JqGraphData* Data = JqState.GraphData = (JqGraphData*)malloc(BufferSize);
 	JqState.GraphEnd.exchange(Data + BufferSize);
@@ -2290,8 +2296,9 @@ void JqGraphDumpEnd()
 	JqMutexLock L(JqState.GraphLock);
 	JQ_ASSERT(JqState.GraphFilename != nullptr);
 	JQ_ASSERT(JqState.GraphData);
-	JqGraphData* Data	 = JqState.GraphData;
-	JqGraphData* RealEnd = Data + JqState.GraphBufferSize;
+	uint32_t	 GraphFlags = JqState.GraphFlags;
+	JqGraphData* Data		= JqState.GraphData;
+	JqGraphData* RealEnd	= Data + JqState.GraphBufferSize;
 	JqState.GraphEnd.exchange(nullptr);
 	JqGraphData* Put = JqState.GraphPut.exchange(nullptr);
 
@@ -2332,12 +2339,14 @@ void JqGraphDumpEnd()
 				break;
 				case JGDT_WAIT:
 				{
-					fprintf(F, "n%lld -> n%lld [style=dotted, color=red, shape=box]; \n", Data->WaitSelf, Data->WaitTarget);
+					if(GraphFlags & JQ_GRAPH_FLAG_SHOW_WAITS)
+						fprintf(F, "n%lld -> n%lld [style=dotted, color=red, shape=box]; \n", Data->WaitSelf, Data->WaitTarget);
 				}
 				break;
 				case JGDT_PRECONDITION:
 				{
-					fprintf(F, "n%lld -> n%lld ; \n", Data->PreconditionCondition, Data->PreconditionTarget);
+					if(GraphFlags & JQ_GRAPH_FLAG_SHOW_PRECONDITIONS)
+						fprintf(F, "n%lld -> n%lld ; \n", Data->PreconditionCondition, Data->PreconditionTarget);
 				}
 				break;
 				}

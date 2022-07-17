@@ -114,8 +114,8 @@ void JqTestPrio(uint32_t NumWorkers)
 	// If its a Barrier we just close it with JqCloseReserved
 	// Note, that all Preconditions must be in place first.
 	// The argument for Reserve is the queue it ends up in
-	JqHandle Barrier = JqReserve("Barrier", 0);
-	JqHandle Final	 = JqReserve("Final", 0);
+	JqHandle Barrier = JqReserve("Barrier");
+	JqHandle Final	 = JqReserve("Final");
 
 	std::atomic<int> TwoStart;
 	std::atomic<int> TwoEnd;
@@ -127,7 +127,7 @@ void JqTestPrio(uint32_t NumWorkers)
 	// printf("Two two %d %d\n", pTwoStart->load(), pTwoEnd->load());
 	{
 		// different ways of adding dependent jobs
-		JqHandle PostBarrier0 = JqReserve("PostBarrier0", 0);
+		JqHandle PostBarrier0 = JqReserve("PostBarrier0");
 		// PostBarrier0 now requires Barrier to be reached
 		JqAddPrecondition(PostBarrier0, Barrier);
 
@@ -137,7 +137,7 @@ void JqTestPrio(uint32_t NumWorkers)
 				MICROPROFILE_SCOPEI("JQ_TEST", "First PostBarrier", MP_AUTO);
 				JobSpinWork(100);
 			},
-			5);
+			0, 5);
 
 		// alternative way of adding, when there is only one precondtion
 		JqHandle PostBarrier1 = JqAddSuccessor(
@@ -177,7 +177,11 @@ void JqTestPrio(uint32_t NumWorkers)
 				[] {
 					MICROPROFILE_SCOPEI("JQ_TEST", "BASE-1-CHILD", MP_DARKSLATEGREY);
 					JqAdd(
-						"P5", [] { MICROPROFILE_SCOPEI("JQ_TEST", "P5", 0xffff00); }, 5, 500);
+						"P5",
+						[] {
+							MICROPROFILE_SCOPEI("JQ_TEST", "P5", 0xffff00);
+						},
+						5, 500);
 					JobSpinWork(20);
 				},
 				1, g_LimitedMode ? 2 : 20);
@@ -198,7 +202,7 @@ void JqTestPrio(uint32_t NumWorkers)
 	std::atomic<int>* pSuccessorDone		 = &SuccessorDone;
 	std::atomic<int>* pReservedSuccessorDone = &ReservedSuccessorDone;
 
-	JqHandle ReservedHandle = JqReserve("ReservedHandle", 0);
+	JqHandle ReservedHandle = JqReserve("ReservedHandle");
 	Foo						= 0;
 	Bar						= 0;
 	SuccessorDone			= 0;
@@ -245,7 +249,7 @@ void JqTestPrio(uint32_t NumWorkers)
 
 						pBar->fetch_add(1);
 					},
-					2);
+					0, 2);
 			}
 		},
 		0, H.NumJobs);
@@ -288,7 +292,7 @@ void JqTestPrio(uint32_t NumWorkers)
 			MICROPROFILE_SCOPEI("JQ_TEST", "Final", MP_AUTO);
 			JobSpinWork(100);
 		},
-		1);
+		0);
 
 	for(uint32_t i = 0; i < 3; ++i)
 	{
@@ -389,7 +393,11 @@ void JqTestPrio(uint32_t NumWorkers)
 
 		// verify its never run
 		JqSpawn(
-			"Spawn0", [] { JQ_BREAK(); }, 0, 0);
+			"Spawn0",
+			[] {
+				JQ_BREAK();
+			},
+			0, 0);
 
 		// verify its always run on current thread
 		JqSpawn(

@@ -37,8 +37,8 @@
 #define JQ_MAX_JOB_STACK 64
 #endif
 
-#ifndef JQ_NUM_QUEUES
-#define JQ_NUM_QUEUES 8
+#ifndef JQ_MAX_QUEUES
+#define JQ_MAX_QUEUES 8
 #endif
 
 #ifndef JQ_API
@@ -289,7 +289,7 @@ struct JqStats
 struct JqQueueOrder
 {
 	uint8_t nNumPipes;
-	uint8_t Queues[JQ_NUM_QUEUES];
+	uint8_t Queues[JQ_MAX_QUEUES];
 };
 
 struct JqAttributes
@@ -309,7 +309,7 @@ JQ_API JqHandle JqAdd(const char* Name, JqFunction JobFunc, uint8_t Queue, int N
 
 // Add a job which has previously been reserved with a call to JqReserve
 // This decrements the block counter by 1 once its added
-JQ_API JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
+JQ_API JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
 // add successor
 JQ_API JqHandle JqAddSuccessor(const char* Name, JqHandle Precondition, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
@@ -318,7 +318,7 @@ JQ_API JqHandle JqAddSuccessor(const char* Name, JqHandle Precondition, JqFuncti
 // Once done, it can be released with
 //  - JqRelease(): No job  will be executed, but it can be used as a barrier by making other jobs depend on this job
 //  - JqAddReserved(): The job will be added to the queue once the block counter reaches zero
-JQ_API JqHandle JqReserve(const char* Name, uint8_t Queue, uint32_t JobFlags = 0);
+JQ_API JqHandle JqReserve(const char* Name);
 
 // Set Precondition to be required to be finished before Handle is started.
 // Increments the block counter of Handle, and decrements it once its finished
@@ -363,7 +363,7 @@ JQ_API bool		JqExecuteOne(uint8_t* Queues, uint8_t NumQueues);
 JQ_API void		JqStartSentinel(int nTimeout);
 JQ_API void		JqCrashAndDump();
 JQ_API void		JqDump();
-JQ_API void		JqInitAttributes(JqAttributes* Attributes, uint32_t NumQueueOrders, uint32_t NumWorkers);
+JQ_API void		JqInitAttributes(JqAttributes* Attributes, uint32_t NumQueueOrders = 0, uint32_t NumWorkers = 0);
 JQ_API int64_t	JqGetTicksPerSecond();
 JQ_API int64_t	JqGetTick();
 
@@ -373,6 +373,8 @@ JQ_API void		JqUSleep(uint64_t us);
 JQ_API void		JqLogStats();
 JQ_API uint64_t JqGetCurrentThreadId();
 
+#define JQ_GRAPH_FLAG_SHOW_WAITS 0x1
+#define JQ_GRAPH_FLAG_SHOW_PRECONDITIONS 0x2
 // Start/Stop generating a graphwiz file from the jobs & dependencies added
-JQ_API void JqGraphDumpStart(const char* Filename, uint32_t GraphBufferSize);
+JQ_API void JqGraphDumpStart(const char* Filename, uint32_t GraphBufferSize, uint32_t GraphFlags = (JQ_GRAPH_FLAG_SHOW_PRECONDITIONS | JQ_GRAPH_FLAG_SHOW_WAITS));
 JQ_API void JqGraphDumpEnd();
