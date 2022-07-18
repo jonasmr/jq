@@ -195,7 +195,7 @@ inline void JqUSleepImpl(uint64_t usec)
 	} while(0)
 #endif
 
-#ifdef JQ_MICROPROFILE_VERBOSE
+#if defined(JQ_MICROPROFILE) && defined(JQ_MICROPROFILE_VERBOSE)
 #define JQ_MICROPROFILE_VERBOSE_SCOPE(a, c) MICROPROFILE_SCOPEI("JQ", a, c)
 #else
 #define JQ_MICROPROFILE_VERBOSE_SCOPE(a, c)                                                                                                                                                            \

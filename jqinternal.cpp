@@ -148,8 +148,10 @@ JqMutex::~JqMutex()
 
 void JqMutex::Lock()
 {
-	JQ_ASSERT(nThreadId != JqCurrentThreadId());
+
 	pthread_mutex_lock(&Mutex);
+	JQ_ASSERT(nThreadId != JqCurrentThreadId());
+
 	JQLSC(g_JqLockOps.fetch_add(1));
 	// printf("JqMutex::LOCK   %p  tid: %llx\n", this, JqCurrentThreadId());
 
