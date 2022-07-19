@@ -417,11 +417,19 @@ struct JqJobStack
 
 struct JqJobStackLink
 {
-	JqJobStack* pHead;
-	uint32_t	nCounter;
+	JqJobStack* pHead	 = nullptr;
+	uint32_t	nCounter = 0;
 };
-
+#define JQ_USE_LOCKLESS_STACKLIST 0
+#if !JQ_USE_LOCKLESS_STACKLIST
+struct JqJobStackList
+{
+	JqMutex		Mutex;
+	JqJobStack* pHead;
+};
+#else
 typedef std::atomic<JqJobStackLink> JqJobStackList;
+#endif
 
 void* JqAllocStackInternal(uint32_t nStackSize);
 void  JqFreeStackInternal(void* pStack, uint32_t nStackSize);

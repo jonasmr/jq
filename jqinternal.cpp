@@ -21,8 +21,8 @@ JqMutex**						JqGetSingleMutexPtr()
 }
 struct JqLocalJobStack
 {
-	JqJobStackList* FreeList;
-	JqJobStack*		Stack;
+	JqJobStackList* FreeList = 0;
+	JqJobStack*		Stack	 = 0;
 };
 
 struct JqLocalJobStacks
@@ -421,6 +421,7 @@ void* JqAllocStackInternal(uint32_t nStackSize)
 	int	  nPageSize = sysconf(_SC_PAGE_SIZE);
 	int	  nSize		= (nStackSize + nPageSize - 1) & ~(nPageSize - 1);
 	void* pAlloc	= mmap(nullptr, nSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	memset(pAlloc, 0, nSize);
 	return pAlloc;
 }
 
@@ -433,7 +434,20 @@ void JqFreeStackInternal(void* p, uint32_t nStackSize)
 
 JqJobStack* JqAllocStack2(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)
 {
+#if !JQ_USE_LOCKLESS_STACKLIST
+	{
+		JqSingleMutexLock L(FreeList.Mutex);
+		JqJobStack*		  pHead = FreeList.pHead;
+		if(pHead)
+		{
 
+			FreeList.pHead = pHead->Link;
+			pHead->Link	   = nullptr;
+			return pHead;
+		}
+	}
+
+#else
 	do
 	{
 		JqJobStackLink Value = FreeList.load();
@@ -451,6 +465,7 @@ JqJobStack* JqAllocStack2(JqJobStackList& FreeList, uint32_t nStackSize, uint32_
 			return pHead;
 		}
 	} while(1);
+#endif
 
 #ifdef JQ_MICROPROFILE
 	MICROPROFILE_COUNTER_ADD("jq/stack/count", 1);
@@ -462,6 +477,21 @@ JqJobStack* JqAllocStack2(JqJobStackList& FreeList, uint32_t nStackSize, uint32_
 }
 void JqFreeAllStacks(JqJobStackList& FreeList)
 {
+#if !JQ_USE_LOCKLESS_STACKLIST
+	JqSingleMutexLock L(FreeList.Mutex);
+	JqJobStack*		  pHead = FreeList.pHead;
+	FreeList.pHead			= nullptr;
+	while(pHead)
+	{
+		JqJobStack* pNext = pHead->Link;
+#ifdef JQ_MICROPROFILE
+		MICROPROFILE_COUNTER_SUB("jq/stack/count", 1);
+		MICROPROFILE_COUNTER_SUB("jq/stack/bytes", pHead->Size);
+#endif
+		JqFreeStackInternal(pHead->StackBottom(), pHead->Size);
+		pHead = pNext;
+	}
+#else
 	do
 	{
 		JqJobStackLink Value = FreeList.load();
@@ -481,11 +511,17 @@ void JqFreeAllStacks(JqJobStackList& FreeList)
 		}
 
 	} while(1);
+#endif
 }
 
 void JqFreeStack2(JqJobStackList& FreeList, JqJobStack* pStack)
 {
 	JQ_ASSERT(pStack->Link == nullptr);
+#if !JQ_USE_LOCKLESS_STACKLIST
+	JqSingleMutexLock L(FreeList.Mutex);
+	pStack->Link   = FreeList.pHead;
+	FreeList.pHead = pStack;
+#else
 	do
 	{
 		JqJobStackLink Value	= FreeList.load();
@@ -498,6 +534,7 @@ void JqFreeStack2(JqJobStackList& FreeList, JqJobStack* pStack)
 		}
 
 	} while(1);
+#endif
 }
 
 JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t nFlags)

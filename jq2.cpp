@@ -29,7 +29,6 @@
 //		test osx
 // 		run sanitizers
 //		comment / code pass
-//		upgrade microprofile
 // 		* colors
 //		* fix manymutex lock (lockless take-job)
 //		* multidep
@@ -675,6 +674,16 @@ void JqStart(JqAttributes* pAttr)
 	JqState.ActiveSemaphores = 0;
 	JqState.Attributes		 = *pAttr;
 	JqState.NumWorkers		 = pAttr->NumWorkers;
+
+	// JqJobStackLink ClearLink;
+	// ClearLink.pHead	   = nullptr;
+	// ClearLink.nCounter = 0;
+	// JqState.StackSmall = ClearLink;
+	// JqState.StackLarge = ClearLink;
+	// JqState.StackTest  = ClearLink;
+	// JqJobStackLink l   = JqState.StackTest.load();
+	// if(l.pHead)
+	// 	printf("hello\n");
 
 	for(uint32_t i = 0; i < pAttr->NumWorkers; ++i)
 	{
