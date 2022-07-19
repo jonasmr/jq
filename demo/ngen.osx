@@ -2,9 +2,6 @@
 
 mmflags 			-std=c++11 -x objective-c++ -mmacosx-version-min=10.12
 
-#cflags 				-fsanitize=address -fno-omit-frame-pointer
-#ldflags 			-fsanitize=address
-
 
 cflags 				-DTARGET_X86_64
 cflags 				-DMICROPROFILE_GPU_TIMERS=0

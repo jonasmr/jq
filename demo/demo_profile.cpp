@@ -241,7 +241,7 @@ int main(int argc, char* argv[])
 		uint64_t	   Affinity = 0;
 		for(uint64_t i = 0; i < NumWorkers; ++i)
 		{
-			Affinity |= (1 << i);
+			Affinity |= (1llu << i);
 		}
 		JqInitAttributes(&Attr, 1, NumWorkers);
 		Attr.Flags		   = nJqInitFlags;

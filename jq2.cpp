@@ -905,34 +905,9 @@ void JqFinishInternal(uint16_t JobIndex)
 
 	// no need to lock queue, since we are removed a long time ago
 
-	uint64_t		   FinishValue = 0;
-	uint16_t		   Parent	   = 0;
-	JqDependentJobLink Dependent;
-	{
-		JqSingleMutexLock L(JqGetJobMutex(JobIndex));
-
-		Parent	   = Job.Parent;
-		Job.Parent = 0;
-		JQ_ASSERT(Job.FirstChild == 0);
-		JQ_ASSERT(Job.LastChild == 0);
-
-		// Siblings can only be cleared while parent lock is taken
-
-		JQ_CLEAR_FUNCTION(Job.Function);
-
-		Dependent			  = Job.DependentJob;
-		Job.DependentJob.Job  = 0;
-		Job.DependentJob.Next = 0;
-
-		JqState.Stats.nNumFinished++;
-
-		JqKickWaiters(JobIndex);
-
-		JQ_ASSERT(Job.FinishedHandle.load() != Job.StartedHandle.load());
-		JQ_ASSERT(Job.ClaimedHandle.load() == Job.StartedHandle.load());
-
-		FinishValue = Job.StartedHandle.load();
-	}
+	uint64_t FinishValue = 0;
+	uint16_t Parent		 = Job.Parent; // we can read this safely, as noone will try and finish this job
+	// Detach from parent first.
 	if(Parent)
 	{
 		{
@@ -962,9 +937,35 @@ void JqFinishInternal(uint16_t JobIndex)
 		JqFinishSubJob(Parent, JOB_FINISH_CHILD);
 	}
 
-	// this releases the header.
-	Job.FinishedHandle = FinishValue;
-	JqState.ActiveJobs.fetch_sub(1);
+	JqDependentJobLink Dependent;
+	{
+		JqSingleMutexLock L(JqGetJobMutex(JobIndex));
+
+		Parent	   = Job.Parent;
+		Job.Parent = 0;
+		JQ_ASSERT(Job.FirstChild == 0);
+		JQ_ASSERT(Job.LastChild == 0);
+
+		// Siblings can only be cleared while parent lock is taken
+
+		JQ_CLEAR_FUNCTION(Job.Function);
+
+		Dependent			  = Job.DependentJob;
+		Job.DependentJob.Job  = 0;
+		Job.DependentJob.Next = 0;
+
+		JqState.Stats.nNumFinished++;
+
+		JQ_ASSERT(Job.FinishedHandle.load() != Job.StartedHandle.load());
+		JQ_ASSERT(Job.ClaimedHandle.load() == Job.StartedHandle.load());
+
+		FinishValue = Job.StartedHandle.load();
+		// this releases the header.
+		Job.FinishedHandle = FinishValue;
+		JqState.ActiveJobs.fetch_sub(1);
+
+		JqKickWaiters(JobIndex);
+	}
 
 	if(Dependent.Job)
 	{
@@ -1480,7 +1481,11 @@ void JqCancel(JqHandle Handle)
 
 	} while(!Job.Cancel.compare_exchange_weak(CancelHandle, H));
 
-	JqKickWaiters(JobIndex);
+	{
+		JqSingleMutexLock L(JqGetJobMutex(JobIndex));
+
+		JqKickWaiters(JobIndex);
+	}
 }
 
 void JqIncBlockCount(uint64_t Handle, int Count)
