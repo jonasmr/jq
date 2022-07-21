@@ -548,10 +548,11 @@ JqJobStack* JqAllocStack(JqJobStackList& FreeList, uint32_t nStackSize, uint32_t
 		JqJobStack* JobStack = LocalStack.Stack;
 		LocalStack.FreeList	 = 0;
 		LocalStack.Stack	 = nullptr;
-
 		return JobStack;
 	}
-	return JqAllocStack2(FreeList, nStackSize, nFlags);
+
+	JqJobStack* JobStack = JqAllocStack2(FreeList, nStackSize, nFlags);
+	return JobStack;
 }
 
 void JqFreeStack(JqJobStackList& FreeList, JqJobStack* pStack)

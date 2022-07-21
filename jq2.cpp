@@ -27,8 +27,8 @@
 //		new doc
 //		test win32
 //		test osx
-// 		run sanitizers
-//		comment / code pass
+//		* comment / code pass
+// 		* run sanitizers
 // 		* colors
 //		* fix manymutex lock (lockless take-job)
 //		* multidep
@@ -52,45 +52,6 @@
 //		* test wait for only children
 // 		* fix unlocking on the wrong mutex when doing full wait in JqWait
 //		* assert in ConditionVariable wait that the mutex passed in is actually locked
-//
-//
-// Flow
-//
-// Add:
-//	* Allocate header (inc counter)
-//	* Update header as reserved
-//	* Fill in header
-//  * if there is a parent, increment its pending count by no. of jobs
-//	* lock pipe mtx
-//  	* add to pipe
-// 	* unlock
-//
-// Take job
-// 	* lock pipe mtx
-//		* decrement front jobs pending_start count
-//		* if 0 flip remove from pending
-//  * unlock mutex
-//
-//
-// Finish:
-//	* Decrement pending count
-//	* if 0, tag as finished
-//	* decrement parents pending count
-//	* lock pipe mtx
-//
-// Reserve
-//	* Allocate a header, set its preq count to 1
-//
-// Release Reserved  (can be used to do barriers)
-// 	* decrement preq count by 1
-//
-//
-// Add Dependency
-// 	* increment preq count on a reserved header
-//	* Cannot be done on a started job(IE must use reserve)
-//
-// Execute Children
-//
 //
 
 #define JQ_IMPL
@@ -132,7 +93,7 @@
 #define JQ_TOKEN_PASTE0(a, b) a##b
 #define JQ_TOKEN_PASTE(a, b) JQ_TOKEN_PASTE0(a, b)
 
-static_assert(JQ_JOB_BUFFER_SIZE == (1llu << JQ_JOB_BUFFER_SHIFT), "JQ_JOB_BUFFER_SIZE and JQ_JOB_BUFFER_SHIFT must match");
+static_assert(JQ_JOB_BUFFER_SIZE == (1llu << JQ_JOB_BUFFER_SIZE_BITS), "JQ_JOB_BUFFER_SIZE and JQ_JOB_BUFFER_SHIFT must match");
 static_assert(JQ_MAX_QUEUES <= 64, "Currently a queue mask is being put in a uint64_t");
 
 struct JqMutexLock;
@@ -385,8 +346,8 @@ struct JqLocklessQueue
 		std::atomic<uint64_t> Entry;
 		uint64_t			  pad[JQ_CACHE_LINE_SIZE / sizeof(uint64_t) - sizeof(uint64_t)];
 	};
-	static constexpr const uint32_t SEQUENCE_SHIFT = 11;
-	static constexpr const uint32_t BUFFER_SIZE	   = 1 << SEQUENCE_SHIFT;
+	static constexpr const uint32_t SEQUENCE_SHIFT = JQ_JOB_BUFFER_SIZE_BITS;
+	static constexpr const uint32_t BUFFER_SIZE	   = JQ_JOB_BUFFER_SIZE;
 
 	Entry Entries[BUFFER_SIZE];
 
@@ -557,11 +518,11 @@ struct JqLocklessQueue
 			// handle the case where a poppin' hasnt committed its pop
 			if(PopSequence != PrevSequence)
 			{
-				// JQ_BREAK(); // do exp. backoff?
+				// do exp. backoff?
 			}
 			if(PushSequence != PrevSequence)
 			{
-				// JQ_BREAK();
+				// do exp. backoff?
 			}
 			JQ_ASSERT(Payload == 0);
 
@@ -2262,7 +2223,7 @@ void JqClearAllThreadStates()
 void JqSplitHandle(uint64_t Handle, uint64_t& Index, uint64_t& Generation)
 {
 	Index	   = Handle % JQ_JOB_BUFFER_SIZE;
-	Generation = Handle >> JQ_JOB_BUFFER_SHIFT;
+	Generation = Handle >> JQ_JOB_BUFFER_SIZE_BITS;
 }
 void JqDump()
 {

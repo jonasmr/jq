@@ -4,9 +4,16 @@
 #include "jq.config.h"
 #endif
 
-#ifndef JQ_JOB_BUFFER_SIZE
-#define JQ_JOB_BUFFER_SIZE (2048)
-#define JQ_JOB_BUFFER_SHIFT 11 // these are paired and must match
+// Specify JOB_BUFFER_SIZE by setting JQ_JOB_BUFFER_SIZE_BITS
+// Default is 11, which equals 1 << 11 -> 2048
+#ifndef JQ_JOB_BUFFER_SIZE_BITS
+#define JQ_JOB_BUFFER_SIZE_BITS 11
+#endif
+
+#ifdef JQ_JOB_BUFFER_SIZE
+#error "Specify JQ_JOB_BUFFER_SIZE_BITS instead of JQ_JOB_BUFFER_SIZE"
+#else
+#define JQ_JOB_BUFFER_SIZE (1 << JQ_JOB_BUFFER_SIZE_BITS)
 #endif
 
 #ifndef JQ_DEFAULT_WAIT_TIME_US
@@ -22,15 +29,11 @@
 #endif
 
 #ifndef JQ_FUNCTION_SIZE
-#define JQ_FUNCTION_SIZE 32
+#define JQ_FUNCTION_SIZE 64
 #endif
 
 #ifndef JQ_MAX_THREADS
 #define JQ_MAX_THREADS 128
-#endif
-
-#ifndef JQ_ASSERT_SANITY
-#define JQ_ASSERT_SANITY 0
 #endif
 
 #ifndef JQ_MAX_JOB_STACK
@@ -331,39 +334,77 @@ JQ_API void JqRelease(JqHandle Handle);
 // - Will always execute at least job instance 0 on the calling thread.
 JQ_API void JqSpawn(const char* Name, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG);
 
-JQ_API void		JqWait(JqHandle Handle, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API void		JqWaitAll();
-JQ_API void		JqWaitAll(JqHandle* Jobs, uint32_t NumJobs, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t UsWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API JqHandle JqWaitAny(JqHandle* Jobs, uint32_t NumJobs, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t UsWaitTime = JQ_DEFAULT_WAIT_TIME_US);
-JQ_API void		JqCancel(JqHandle Handle);
-JQ_API bool		JqExecuteChild(JqHandle Handle); // execute 1 child job.
-JQ_API JqHandle JqGroupBegin(const char* Name);	 // add a non-executing job to group all jobs added between begin/end
-JQ_API void		JqGroupEnd();
-JQ_API bool		JqIsDone(JqHandle Handle);
-JQ_API bool		JqIsStarted(JqHandle Handle);
-JQ_API bool		JqIsDoneExt(JqHandle Handle, uint32_t WaitFlag);
-JQ_API void		JqStart(int NumWorkers);
-JQ_API void		JqStart(JqAttributes* Attributes);
-JQ_API void		JqSetThreadQueueOrder(JqQueueOrder* Config);
-JQ_API int		JqNumWorkers();
-JQ_API void		JqStop();
-JQ_API uint32_t JqSelfJobIndex();
-JQ_API int		JqGetNumWorkers();
-JQ_API void		JqConsumeStats(JqStats* StatsOut);
-JQ_API bool		JqExecuteOne();
-JQ_API bool		JqExecuteOne(uint8_t Queues);
-JQ_API bool		JqExecuteOne(uint8_t* Queues, uint8_t NumQueues);
-JQ_API void		JqStartSentinel(int nTimeout);
-JQ_API void		JqCrashAndDump();
-JQ_API void		JqDump();
-JQ_API void		JqInitAttributes(JqAttributes* Attributes, uint32_t NumQueueOrders = 0, uint32_t NumWorkers = 0);
-JQ_API int64_t	JqGetTicksPerSecond();
-JQ_API int64_t	JqGetTick();
+// Wait for a job, optionally executing child jobs, or any jobs available.
+JQ_API void JqWait(JqHandle Handle, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t usWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 
-JQ_API void JqOnThreadExit(); // this must be called from each thread calling Jq functions. called automatically from the worker threads
+// Wait for all jobs. Mostly meant to be called on shutdown
+JQ_API void JqWaitAll();
+JQ_API void JqWaitAll(JqHandle* Jobs, uint32_t NumJobs, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t UsWaitTime = JQ_DEFAULT_WAIT_TIME_US);
+
+// Cancel a job. Will not do anything to jobs already started
+JQ_API void JqCancel(JqHandle Handle);
+
+// Call to execute a child job of Handle. May also execute instances of Handle, if any needs to be run
+JQ_API bool JqExecuteChild(JqHandle Handle); // execute 1 child job.
+
+// Create a Job Group. Any jobs added in between the Begin/End call are now child jobs of this job group, and they can be waited on together
+JQ_API JqHandle JqGroupBegin(const char* Name); // add a non-executing job to group all jobs added between begin/end
+JQ_API void		JqGroupEnd();
+
+// Check if Handle is done. This also waits for its children
+JQ_API bool JqIsDone(JqHandle Handle);
+
+// Check if Handle is Started, IE the job has been fully unblocked
+JQ_API bool JqIsStarted(JqHandle Handle);
+
+// Check if Handle is done, can optionally ignore child jobs
+JQ_API bool JqIsDoneExt(JqHandle Handle, uint32_t WaitFlag);
+
+// Start up Jq with NumWorkers threads
+JQ_API void JqStart(int NumWorkers);
+
+// Start up Jq with detailed configuration specified by Attributes
+JQ_API void JqStart(JqAttributes* Attributes);
+
+// Set The queue order for a non-worker thread. Use this to specify the order you want jobs to be popped by non-worker threads, when calling JqWait/JqExecuteOne
+JQ_API void JqSetThreadQueueOrder(JqQueueOrder* Config);
+
+// Returns the number of worker threads
+JQ_API int JqNumWorkers();
+
+// Stop Jq
+JQ_API void JqStop();
+
+// Returns no. of worker threads
+JQ_API int JqGetNumWorkers();
+
+// Consume the stats Jq gathers. Will clear the stats accumulation
+JQ_API void JqConsumeStats(JqStats* StatsOut);
+
+// Execute a sigle job.
+JQ_API bool JqExecuteOne();
+
+// Execute a job from a specified Queue
+JQ_API bool JqExecuteOne(uint8_t Queue);
+
+// Execute a single job, using the Queue order passed in
+JQ_API bool JqExecuteOne(uint8_t* Queues, uint8_t NumQueues);
+
+// Dump Jq state to stdout.
+JQ_API void JqDump();
+
+// initialize a JqAttributes object to its default values
+JQ_API void JqInitAttributes(JqAttributes* Attributes, uint32_t NumQueueOrders = 0, uint32_t NumWorkers = 0);
+
+// Tick count helper functions
+JQ_API int64_t JqGetTicksPerSecond();
+JQ_API int64_t JqGetTick();
+
+// this must be called from each thread calling Jq functions. called automatically from the worker threads
+JQ_API void JqOnThreadExit();
 
 // Helper / debug functions
-JQ_API uint64_t JqGetCurrentThreadId(); // for debugging.
+JQ_API uint64_t JqGetCurrentThreadId();
 JQ_API void		JqUSleep(uint64_t us);
 JQ_API void		JqLogStats();
 JQ_API uint64_t JqGetCurrentThreadId();
