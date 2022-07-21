@@ -295,9 +295,9 @@ struct JqGraphData
 // linked list structure, for when jobs have multiple jobs that depend on them
 struct JqDependentJobLink
 {
-	uint64_t Job;
-	uint16_t Next;
-	uint64_t Owner;
+	std::atomic<uint64_t> Job;
+	uint16_t			  Next;
+	uint64_t			  Owner;
 };
 
 struct JqJob
@@ -963,9 +963,13 @@ void JqFinishInternal(uint16_t JobIndex)
 
 		JQ_CLEAR_FUNCTION(Job.Function);
 
-		Dependent			  = Job.DependentJob;
-		Job.DependentJob.Job  = 0;
-		Job.DependentJob.Next = 0;
+		Dependent.Job	= Job.DependentJob.Job.exchange(0);
+		Dependent.Next	= Job.DependentJob.Next;
+		Dependent.Owner = Job.DependentJob.Owner;
+
+		Job.DependentJob.Job   = 0;
+		Job.DependentJob.Next  = 0;
+		Job.DependentJob.Owner = 0;
 
 		JqState.Stats.nNumFinished++;
 
@@ -1766,7 +1770,7 @@ void JqAddPreconditionInternal(uint64_t Handle, uint64_t Precondition)
 			Finished = false;
 			JQ_ASSERT(!LinkIndex); // only
 
-			if(PrecondJob.DependentJob.Job)
+			if(PrecondJob.DependentJob.Job.load())
 			{
 				LinkIndex = JqDependentJobLinkAlloc(Precondition);
 			}
