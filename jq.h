@@ -257,17 +257,12 @@ struct JqStats
 	uint32_t nNumAddedSub;
 	uint32_t nNumFinishedSub;
 	uint32_t nNumCancelled;
-	uint32_t nNumCancelledSub;
 	uint32_t nNumLocks;
 	uint32_t nNumSema;
-	uint32_t nNumLocklessPops;
 	uint32_t nNumWaitCond;
 	uint32_t nNumWaitKicks;
 	uint32_t nMemoryUsed;
 	JqHandle nNextHandle;
-	uint32_t nSkips;
-	uint32_t nAttempts;
-	uint32_t nNextHandleCalled;
 	void	 Add(JqStats& Other)
 	{
 		nNumAdded += Other.nNumAdded;
@@ -275,15 +270,10 @@ struct JqStats
 		nNumAddedSub += Other.nNumAddedSub;
 		nNumFinishedSub += Other.nNumFinishedSub;
 		nNumCancelled += Other.nNumCancelled;
-		nNumCancelledSub += Other.nNumCancelledSub;
 		nNumLocks += Other.nNumLocks;
 		nNumSema += Other.nNumSema;
-		nNumLocklessPops += Other.nNumLocklessPops;
 		nMemoryUsed += Other.nMemoryUsed;
 		nNextHandle = Other.nNextHandle.H > nNextHandle.H ? Other.nNextHandle : nNextHandle;
-		nSkips += Other.nSkips;
-		nAttempts += Other.nAttempts;
-		nNextHandleCalled += Other.nNextHandleCalled;
 	}
 };
 

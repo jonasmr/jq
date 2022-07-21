@@ -97,6 +97,16 @@
 #include "jq.h"
 #include "jqinternal.h"
 
+#ifndef _WIN32
+#include <pthread.h>
+#endif
+#include <atomic>
+
+#ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable : 4324)
+#endif
+
 #define JQ_JOBFLAG_UNINITIALIZED 0x80
 #define JQ_MAX_SEMAPHORES JQ_MAX_THREADS
 #define JQ_NUM_LOCKS 2048
@@ -200,8 +210,8 @@ struct JqThreadState
 
 	uint64_t ThreadId;
 
-	uint32_t	  Initialized;
-	JqWorkerState WorkerState;
+	std::atomic<uint32_t> Initialized;
+	JqWorkerState		  WorkerState;
 
 	JqDebugState   DebugStack[JQ_MAX_JOB_STACK];
 	uint32_t	   DebugPos;
@@ -325,15 +335,33 @@ struct JqJob
 	bool Reserved;
 };
 
-#ifndef _WIN32
-#include <pthread.h>
-#endif
-#include <atomic>
+struct JqStatsInternal
+{
+	std::atomic<uint32_t> nNumAdded;
+	std::atomic<uint32_t> nNumFinished;
+	std::atomic<uint32_t> nNumAddedSub;
+	std::atomic<uint32_t> nNumFinishedSub;
+	std::atomic<uint32_t> nNumCancelled;
+	std::atomic<uint32_t> nNumLocks;
+	std::atomic<uint32_t> nNumSema;
+	std::atomic<uint32_t> nNumWaitCond;
+	std::atomic<uint32_t> nNumWaitKicks;
+	std::atomic<uint32_t> nMemoryUsed;
 
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable : 4324)
-#endif
+	void Clear()
+	{
+		nNumAdded		= 0;
+		nNumFinished	= 0;
+		nNumAddedSub	= 0;
+		nNumFinishedSub = 0;
+		nNumCancelled	= 0;
+		nNumLocks		= 0;
+		nNumSema		= 0;
+		nNumWaitCond	= 0;
+		nNumWaitKicks	= 0;
+		nMemoryUsed		= 0;
+	}
+};
 
 #if 0
 #define llqprintf(...) printf(__VA_ARGS__);
@@ -579,12 +607,12 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	uint8_t		 SemaphoreIndex[JQ_MAX_THREADS];
 	JQ_THREAD	 WorkerThreads[JQ_MAX_THREADS];
 
-	JqJobStackList StackSmall;
-	JqJobStackList StackLarge;
-	bool		   IsRunning;
-	int			   NumWorkers;
-	int			   Stop;
-	int			   TotalWaiting;
+	JqJobStackList	 StackSmall;
+	JqJobStackList	 StackLarge;
+	bool			 IsRunning;
+	int				 NumWorkers;
+	std::atomic<int> Stop;
+	int				 TotalWaiting;
 
 	std::atomic<uint32_t> ActiveJobs;
 	std::atomic<uint64_t> NextHandle;
@@ -616,7 +644,7 @@ struct JQ_ALIGN_CACHELINE JqState_t
 	{
 	}
 
-	JqStats Stats;
+	JqStatsInternal Stats;
 } JqState;
 
 #ifdef _WIN32
@@ -671,19 +699,10 @@ void JqStart(JqAttributes* pAttr)
 	memset(JqState.QueueToSemaphore, 0, sizeof(JqState.QueueToSemaphore));
 	memset(JqState.SemaphoreClients, 0, sizeof(JqState.SemaphoreClients));
 	memset(JqState.SemaphoreClientCount, 0, sizeof(JqState.SemaphoreClientCount));
-	JqState.ActiveSemaphores = 0;
-	JqState.Attributes		 = *pAttr;
-	JqState.NumWorkers		 = pAttr->NumWorkers;
-
-	// JqJobStackLink ClearLink;
-	// ClearLink.pHead	   = nullptr;
-	// ClearLink.nCounter = 0;
-	// JqState.StackSmall = ClearLink;
-	// JqState.StackLarge = ClearLink;
-	// JqState.StackTest  = ClearLink;
-	// JqJobStackLink l   = JqState.StackTest.load();
-	// if(l.pHead)
-	// 	printf("hello\n");
+	JqState.ActiveSemaphores  = 0;
+	JqState.Attributes		  = *pAttr;
+	JqState.NumWorkers		  = pAttr->NumWorkers;
+	JqState.Stats.nMemoryUsed = sizeof(JqState);
 
 	for(uint32_t i = 0; i < pAttr->NumWorkers; ++i)
 	{
@@ -777,13 +796,9 @@ void JqStart(JqAttributes* pAttr)
 		JqState.Jobs[i].Reserved		   = false;
 	}
 
-	JqState.ActiveJobs			   = 0;
-	JqState.NextHandle			   = 1;
-	JqState.Stats.nNumFinished	   = 0;
-	JqState.Stats.nNumLocks		   = 0;
-	JqState.Stats.nNumSema		   = 0;
-	JqState.Stats.nNumLocklessPops = 0;
-	JqState.Stats.nNumWaitCond	   = 0;
+	JqState.ActiveJobs = 0;
+	JqState.NextHandle = 1;
+	JqState.Stats.Clear();
 
 	for(uint16_t i = 0; i < JQ_JOB_BUFFER_SIZE; ++i)
 	{
@@ -858,18 +873,16 @@ void JqSetThreadQueueOrder(JqQueueOrder* pConfig)
 
 void JqConsumeStats(JqStats* pStats)
 {
-	*pStats						   = JqState.Stats;
-	JqState.Stats.nNumAdded		   = 0;
-	JqState.Stats.nNumFinished	   = 0;
-	JqState.Stats.nNumAddedSub	   = 0;
-	JqState.Stats.nNumFinishedSub  = 0;
-	JqState.Stats.nNumCancelled	   = 0;
-	JqState.Stats.nNumCancelledSub = 0;
-	JqState.Stats.nNumLocks		   = 0;
-	JqState.Stats.nNumSema		   = 0;
-	JqState.Stats.nNumLocklessPops = 0;
-	JqState.Stats.nNumWaitCond	   = 0;
-	JqState.Stats.nNextHandle.H	   = JqState.NextHandle;
+	pStats->nNumAdded		= JqState.Stats.nNumAdded.exchange(0);
+	pStats->nNumFinished	= JqState.Stats.nNumFinished.exchange(0);
+	pStats->nNumAddedSub	= JqState.Stats.nNumAddedSub.exchange(0);
+	pStats->nNumFinishedSub = JqState.Stats.nNumFinishedSub.exchange(0);
+	pStats->nNumCancelled	= JqState.Stats.nNumCancelled.exchange(0);
+	pStats->nNumLocks		= JqState.Stats.nNumLocks.exchange(0);
+	pStats->nNumSema		= JqState.Stats.nNumSema.exchange(0);
+	pStats->nNumWaitCond	= JqState.Stats.nNumWaitCond.exchange(0);
+	pStats->nNumWaitKicks	= JqState.Stats.nNumWaitKicks.exchange(0);
+	pStats->nMemoryUsed		= JqState.Stats.nMemoryUsed.load();
 }
 
 void JqKickWaiters(uint16_t JobIndex)
@@ -1235,8 +1248,6 @@ uint16_t JqTakeChildJobInternal(uint64_t Handle, uint16_t* OutSubIndex, uint64_t
 	uint16_t Index		 = JQ_GET_INDEX(Handle);
 	JqJob&	 Job		 = JqState.Jobs[Index];
 	uint32_t NumChildren = 0;
-	if(Job.FirstChild == 0)
-		return 0;
 
 	{
 		JqSingleMutexLock L(JqGetJobMutex(Index));
@@ -1481,6 +1492,7 @@ void JqCancel(JqHandle Handle)
 
 	} while(!Job.Cancel.compare_exchange_weak(CancelHandle, H));
 
+	JqState.Stats.nNumCancelled++;
 	{
 		JqSingleMutexLock L(JqGetJobMutex(JobIndex));
 
@@ -2205,11 +2217,11 @@ JqThreadState& JqGetThreadState()
 
 void JqOnThreadExit()
 {
+	JqMutexLock L(ThreadStateLock);
 	if(ThreadState.Initialized)
 	{
 		JqThreadState* State = &ThreadState;
 
-		JqMutexLock L(ThreadStateLock);
 		JQ_ASSERT(JqState.IsRunning); // if we hit this, Jq has not been initialized before we're starting running job. this is bad.
 
 		JqThreadState** ppNext = &FirstThreadState;
@@ -2397,6 +2409,7 @@ void JqGraphDumpStart(const char* Filename, uint32_t BufferSize, uint32_t GraphF
 	JqState.GraphFlags		= GraphFlags;
 
 	JqGraphData* Data = JqState.GraphData = (JqGraphData*)malloc(BufferSize);
+	JqState.Stats.nMemoryUsed += BufferSize;
 	JqState.GraphEnd.exchange(Data + BufferSize);
 	JqState.GraphPut.exchange(Data);
 }
@@ -2405,9 +2418,10 @@ void JqGraphDumpEnd()
 	JqMutexLock L(JqState.GraphLock);
 	JQ_ASSERT(JqState.GraphFilename != nullptr);
 	JQ_ASSERT(JqState.GraphData);
-	uint32_t	 GraphFlags = JqState.GraphFlags;
-	JqGraphData* Data		= JqState.GraphData;
-	JqGraphData* RealEnd	= Data + JqState.GraphBufferSize;
+	uint32_t	 GraphFlags		 = JqState.GraphFlags;
+	JqGraphData* Data			 = JqState.GraphData;
+	JqGraphData* RealEnd		 = Data + JqState.GraphBufferSize;
+	uint32_t	 GraphBufferSize = JqState.GraphBufferSize;
 	JqState.GraphEnd.exchange(nullptr);
 	JqGraphData* Put = JqState.GraphPut.exchange(nullptr);
 
@@ -2470,8 +2484,11 @@ void JqGraphDumpEnd()
 	}
 
 	free(JqState.GraphData);
-	JqState.GraphData	  = nullptr;
-	JqState.GraphFilename = nullptr;
+	JqState.Stats.nMemoryUsed -= GraphBufferSize;
+
+	JqState.GraphBufferSize = 0;
+	JqState.GraphData		= nullptr;
+	JqState.GraphFilename	= nullptr;
 }
 
 void JqGraphAdd(uint64_t Handle, const char* Name, uint16_t Count)
