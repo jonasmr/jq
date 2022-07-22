@@ -1,0 +1,15 @@
+demo/_out
+demo/_temp
+build.ninja
+.ninja_deps
+.ninja_log
+*.o
+*.obj
+*.log
+*.pdb
+*.tlog
+*.suo
+*.user
+*.exe
+*.iobj
+*.ipdb
