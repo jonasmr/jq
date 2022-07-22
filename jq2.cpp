@@ -215,8 +215,7 @@ enum JqGraphDataType : uint8_t
 struct JqGraphData
 {
 	JqGraphDataType Type;
-	union
-	{
+	union {
 		struct
 		{
 			uint64_t	AddHandle;
@@ -279,7 +278,7 @@ struct JqJob
 
 	uint16_t NumJobs;		 /// Num Jobs to Finish
 	uint16_t NumJobsToStart; /// Num Jobs to Start
-	uint64_t Range;			 /// Range to pass to jobs
+	int		 Range;			 /// Range to pass to jobs
 	uint32_t JobFlags;		 /// Job Flags
 	uint8_t	 Queue;			 /// Priority of the job
 	uint8_t	 Waiters;		 /// Set when waiting
@@ -344,7 +343,7 @@ struct JqLocklessQueue
 		// [0-31] payload
 
 		std::atomic<uint64_t> Entry;
-		uint64_t			  pad[JQ_CACHE_LINE_SIZE / sizeof(uint64_t) - sizeof(uint64_t)];
+		char				  pad[JQ_CACHE_LINE_SIZE - sizeof(uint64_t)];
 	};
 	static constexpr const uint32_t SEQUENCE_SHIFT = JQ_JOB_BUFFER_SIZE_BITS;
 	static constexpr const uint32_t BUFFER_SIZE	   = JQ_JOB_BUFFER_SIZE;
@@ -392,7 +391,7 @@ struct JqLocklessQueue
 	bool Peek(uint32_t& PeekOut, uint32_t* Ref)
 	{
 		uint32_t Push, Pop, Payload;
-		uint64_t Old, New, Entry;
+		uint64_t Old, Entry;
 		uint16_t PushSequence, PopSequence;
 		do
 		{
@@ -433,7 +432,7 @@ struct JqLocklessQueue
 	bool Pop(uint32_t& PoppedValue, uint32_t* Ref)
 	{
 		uint32_t Push, Pop, Payload;
-		uint64_t Old, New, Entry, NewEntry;
+		uint64_t Old, New, Entry;
 		uint16_t PushSequence, PopSequence;
 		bool	 UseRef	  = Ref != 0;
 		uint32_t RefValue = Ref ? *Ref : 0;
@@ -808,7 +807,7 @@ void JqStop()
 	uint64_t DependentLinkCounter = JqState.DependentJobLinkCounter.load();
 	if(DependentLinkCounter)
 	{
-		printf("Dependent links(%d) left over after finishing\n", DependentLinkCounter);
+		printf("Dependent links(%I64d) left over after finishing\n", DependentLinkCounter);
 	}
 	JQ_ASSERT(0 == DependentLinkCounter);
 
@@ -869,10 +868,8 @@ void JqFinishInternal(uint16_t JobIndex)
 {
 	JQ_MICROPROFILE_VERBOSE_SCOPE("JqFinishInternal", 0xffff);
 
-	JobIndex	 = JobIndex % JQ_JOB_BUFFER_SIZE;
-	JqJob&	 Job = JqState.Jobs[JobIndex];
-	uint16_t PendingStart;
-	uint8_t	 Queue;
+	JobIndex   = JobIndex % JQ_JOB_BUFFER_SIZE;
+	JqJob& Job = JqState.Jobs[JobIndex];
 
 	JQ_ASSERT(Job.PendingStart.load() == 0);
 	JQ_ASSERT(Job.PendingFinish.load() == 0);
@@ -1153,7 +1150,7 @@ void JqExecuteJob(uint64_t nJob, uint16_t nSubIndex)
 		JqSelfPop(nJob);
 	}
 
-	JqFinishSubJob(nJob, 1);
+	JqFinishSubJob((uint16_t)nJob, 1);
 }
 
 uint16_t JqTakeJob(uint16_t* pSubIndex, uint32_t nNumQueues, uint8_t* pQueues)
@@ -1201,7 +1198,7 @@ uint16_t JqPendingStarts(uint64_t Handle)
 	uint64_t StartedHandle = Job.StartedHandle;
 	if(StartedHandle == Handle && Handle != Job.FinishedHandle.load())
 	{
-		return Job.PendingStart.load();
+		return (uint16_t)Job.PendingStart.load();
 	}
 	return 0;
 }
@@ -2130,7 +2127,7 @@ void JqGroupEnd()
 	uint64_t Job = JqSelf().H;
 	JqSelfPop(Job);
 
-	JqFinishSubJob(Job, 1);
+	JqFinishSubJob((uint16_t)Job, 1);
 }
 
 JqHandle JqSelf()
@@ -2241,7 +2238,7 @@ void JqDumpState()
 				printf("%2d", State->pJqQueues[i]);
 			printf("]\n");
 			{
-				for(int i = 0; i < State->DebugPos; ++i)
+				for(uint32_t i = 0; i < State->DebugPos; ++i)
 				{
 					JqDebugState& S = State->DebugStack[State->DebugPos - 1 - i];
 					uint64_t	  Index, Generation;
@@ -2296,7 +2293,7 @@ void JqDumpState()
 		{
 			uint8_t	 Queue;
 			uint16_t PendingStart;
-			PendingStart = Job.PendingStart.load();
+			PendingStart = (uint16_t)Job.PendingStart.load();
 			Queue		 = Job.ActiveQueue.load();
 			uint64_t ClaimedGeneration, ClaimedIndex;
 			uint64_t StartedGeneration, StartedIndex;
@@ -2394,8 +2391,13 @@ void JqGraphDumpEnd()
 	JqGraphData* End	  = Put > RealEnd ? RealEnd : Put;
 
 	{
+#ifdef _WIN32
+		FILE* F;
+		if(fopen_s(&F, JqState.GraphFilename, "w"))
+#else
 		FILE* F = fopen(JqState.GraphFilename, "w");
 		if(F)
+#endif
 		{
 			fprintf(F, "digraph G{\n");
 

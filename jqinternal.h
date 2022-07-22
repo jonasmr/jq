@@ -49,6 +49,7 @@ inline void JqUSleepImpl(uint64_t usec)
 #define JQ_THREAD_LOCAL __declspec(thread)
 #define JQ_STRCASECMP _stricmp
 typedef uint32_t ThreadIdType;
+#define JQ_USLEEP(us) JqUSleepImpl(us);
 #define JqCurrentThreadId() GetCurrentThreadId()
 #include <windows.h>
 inline int64_t	 JqTicksPerSecond()

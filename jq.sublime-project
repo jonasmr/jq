@@ -18,6 +18,11 @@
 						"shell_cmd": "ninja all",
 						"file_regex": "(...*?):([0-9]*):([0-9]*):",
 						"working_dir": "${project_path}/demo/"
+					},
+				"windows" : {
+						"shell_cmd": "ninja",
+						"file_regex": "(...*?)\\(([0-9]*)\\):",
+						"working_dir": "${project_path}/demo/"
 					}
 		},
 

@@ -7,11 +7,6 @@ cflags 				/D TARGET_X86_64
 
 cflags 				/D MICROPROFILE_GPU_TIMERS=0
 
-includepath	 		glm
-includepath	 		"%VK_SDK_PATH%\include"
-includepath	 		..\glfw-3.3.bin.WIN64\include
-includepath	 		include
-
 cflags.debug 		/D "_DEBUG"
 cflags.debug 		/Od /RTC1 /MDd /Zi
 
@@ -24,20 +19,18 @@ cflags 				/GS /EHsc /Zi /W3 /fp:precise
 cflags 				/permissive- /Zc:wchar_t /Zc:forScope /Zc:inline
 cflags 				/D "_UNICODE" /D "UNICODE" /errorReport:prompt /WX- /Zc:forScope /Gd /std:c++17 /nologo
 
-cflags.debug 		/Fd:sph.debug.pdb
-cflags.release		/Fd:sph.release.pdb
+cflags.debug 		/Fd:jq.debug.pdb
+cflags.release		/Fd:jq.release.pdb
 
 
 ldflags 			/manifest:embed /MANIFEST /SUBSYSTEM:CONSOLE /MACHINE:X64 /NXCOMPAT
-ldflags 			%VK_SDK_PATH%\lib\vulkan-1.lib
-ldflags 			/LIBPATH:..\glfw-3.3.bin.WIN64\lib-vc2017
-ldflags 			wsock32.lib glfw3.lib
+ldflags 			wsock32.lib 
 ldflags 			kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib
-ldflags 			ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib
+ldflags 			ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib Winmm.lib
 
 
 ldflags 			/DEBUG
 
-ldflags.debug 		/PDB:sph.debug.pdb /INCREMENTAL /DYNAMICBASE:NO
-ldflags.release 	/PDB:sph.release.pdb /INCREMENTAL:NO /DYNAMICBASE
+ldflags.debug 		/PDB:jq.debug.pdb /INCREMENTAL /DYNAMICBASE:NO
+ldflags.release 	/PDB:jq.release.pdb /INCREMENTAL:NO /DYNAMICBASE
 ldflags.release 	/OPT:REF /OPT:ICF /LTCG:incremental

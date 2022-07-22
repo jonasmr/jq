@@ -49,9 +49,7 @@ int main(int argc, char* argv[])
 {
 
 	MicroProfileOnThreadCreate("Main");
-#ifdef _WIN32
-	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
-#endif
+
 	JqAttributes Attr;
 	JqInitAttributes(&Attr);
 	// leave the Attributes default initialized.
