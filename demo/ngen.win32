@@ -12,16 +12,12 @@ cflags.debug 		/Od /RTC1 /MDd /Zi
 
 
 cflags.release		/D "NDEBUG"
-cflags.release		/O2 /Oi /MD /Gy ZI /JMC /sdl
+cflags.release		/O2 /Oi /MD /Gy /JMC /sdl
 cflags.release 		/GL
 
 cflags 				/GS /EHsc /Zi /W3 /fp:precise
 cflags 				/permissive- /Zc:wchar_t /Zc:forScope /Zc:inline
 cflags 				/D "_UNICODE" /D "UNICODE" /errorReport:prompt /WX- /Zc:forScope /Gd /std:c++17 /nologo
-
-cflags.debug 		/Fd:jq.debug.pdb
-cflags.release		/Fd:jq.release.pdb
-
 
 ldflags 			/manifest:embed /MANIFEST /SUBSYSTEM:CONSOLE /MACHINE:X64 /NXCOMPAT
 ldflags 			wsock32.lib 
@@ -29,8 +25,10 @@ ldflags 			kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.
 ldflags 			ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib Winmm.lib
 
 
-ldflags 			/DEBUG
+ldflags 				/DEBUG
 
-ldflags.debug 		/PDB:jq.debug.pdb /INCREMENTAL /DYNAMICBASE:NO
-ldflags.release 	/PDB:jq.release.pdb /INCREMENTAL:NO /DYNAMICBASE
-ldflags.release 	/OPT:REF /OPT:ICF /LTCG:incremental
+ldflags.debug 			/INCREMENTAL /DYNAMICBASE:NO
+ldflags.release 		/INCREMENTAL:NO /DYNAMICBASE
+ldflags.release 		/OPT:REF /OPT:ICF /LTCG:incremental
+
+ldflags.nomicroprofile  /INCREMENTAL:NO /DYNAMICBASE

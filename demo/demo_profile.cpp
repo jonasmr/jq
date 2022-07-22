@@ -228,9 +228,9 @@ int main(int argc, char* argv[])
 		}
 	}
 	MicroProfileOnThreadCreate("Main");
-#ifdef _WIN32
-	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
-#endif
+	// #ifdef _WIN32
+	// 	ShowWindow(GetConsoleWindow(), SW_MAXIMIZE);
+	// #endif
 
 	uint32_t MaxWorkers = JqGetNumCpus();
 

@@ -96,12 +96,6 @@ uint32_t JobSpinWork(uint32_t nUs)
 	} while((1000000ull * (JqGetTick() - nTick)) / nTicksPerSecond < nUs);
 	return result;
 }
-
-#ifdef _WIN32
-void uprintf(const char* fmt, ...);
-#else
-#define uprintf printf
-#endif
 extern uint32_t g_TESTID;
 
 void JqTestPrio(uint32_t NumWorkers)
@@ -225,7 +219,7 @@ void JqTestPrio(uint32_t NumWorkers)
 			JqWait(ReservedHandle);
 			if(2 != *pBar)
 			{
-				uprintf("Reserved wait failed!");
+				printf("Reserved wait failed!");
 				JQ_BREAK();
 			}
 		},
@@ -650,7 +644,7 @@ int main(int argc, char* argv[])
 	JqStart(&Attr);
 	JqQueueOrder MyQueueConfig = JqQueueOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
 	JqSetThreadQueueOrder(&MyQueueConfig);
-	uprintf("Started JQ with %d workers\n", Attr.NumWorkers);
+	printf("Started JQ with %d workers\n", Attr.NumWorkers);
 
 #ifdef _WIN32
 	std::atomic<int> keypressed;
