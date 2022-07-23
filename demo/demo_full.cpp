@@ -645,6 +645,7 @@ int main(int argc, char* argv[])
 	JqQueueOrder MyQueueConfig = JqQueueOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
 	JqSetThreadQueueOrder(&MyQueueConfig);
 	printf("Started JQ with %d workers\n", Attr.NumWorkers);
+	printf("press 'q' to quit\n");
 
 #ifdef _WIN32
 	std::atomic<int> keypressed;
@@ -673,25 +674,6 @@ int main(int argc, char* argv[])
 		{
 			switch(key)
 			{
-			case 'v':
-				g_Reset = 1;
-				break;
-			case 'x':
-				g_FewJobs = !g_FewJobs;
-				g_Reset	  = 1;
-				break;
-				break;
-			case 'c':
-				g_DontSleep = !g_DontSleep;
-				g_Reset		= 1;
-				break;
-				break;
-			case ' ':
-			{
-				g_nNumWorkers++;
-				g_Reset = 1;
-			}
-			break;
 			case 'q':
 				g_nQuit = 1;
 				break;
@@ -704,7 +686,7 @@ int main(int argc, char* argv[])
 			// to convert the graph run: dot -Tps graphdump.gv -o graphdump.ps
 			JqGraphDumpStart("graphdump.gv", 1024 * 1024);
 		}
-		if(Frames == 11)
+		if(Frames == 13)
 		{
 			JqGraphDumpEnd();
 		}
