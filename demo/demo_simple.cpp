@@ -77,7 +77,7 @@ int main(int argc, char* argv[])
 		// A single job, which is run 10 times
 		// The ten passed in is the no. of times we want this job to be run
 		JqHandle Handle = JqAdd(
-			"Hello 10 Worlds",
+			"Hello 10 World",
 			[](int JobIndex) {
 				printf("Hello 10 Worlds %d\n", JobIndex);
 			},
