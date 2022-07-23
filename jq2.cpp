@@ -25,8 +25,8 @@
 //
 //  TODO:
 //		new doc
-//		test win32
 //		test osx
+//		* test win32
 //		* comment / code pass
 // 		* run sanitizers
 // 		* colors
@@ -2393,7 +2393,7 @@ void JqGraphDumpEnd()
 	{
 #ifdef _WIN32
 		FILE* F;
-		if(fopen_s(&F, JqState.GraphFilename, "w"))
+		if(0 == fopen_s(&F, JqState.GraphFilename, "w"))
 #else
 		FILE* F = fopen(JqState.GraphFilename, "w");
 		if(F)

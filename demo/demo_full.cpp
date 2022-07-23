@@ -686,7 +686,7 @@ int main(int argc, char* argv[])
 			// to convert the graph run: dot -Tps graphdump.gv -o graphdump.ps
 			JqGraphDumpStart("graphdump.gv", 1024 * 1024);
 		}
-		if(Frames == 13)
+		if(Frames == 11)
 		{
 			JqGraphDumpEnd();
 		}
