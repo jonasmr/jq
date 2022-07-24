@@ -34,8 +34,7 @@
 
 #define WIDTH 1024
 #define HEIGHT 600
-uint32_t g_FewJobs	 = 1;
-uint32_t g_DontSleep = 1;
+uint32_t g_FewJobs = 1;
 
 uint32_t g_nNumWorkers = 1;
 uint32_t g_nQuit	   = 0;
@@ -80,10 +79,6 @@ uint32_t g_Reset = 0;
 
 uint32_t JobSpinWork(uint32_t nUs)
 {
-	if(g_DontSleep)
-	{
-		return 0;
-	}
 	uint32_t result			 = 0;
 	uint64_t nTick			 = JqGetTick();
 	uint64_t nTicksPerSecond = JqGetTicksPerSecond();
@@ -101,7 +96,6 @@ extern uint32_t g_TESTID;
 void JqTestPrio(uint32_t NumWorkers)
 {
 	MICROPROFILE_SCOPEI("JQ_TEST", "JqTestPrio", MP_AUTO);
-	g_DontSleep = 0;
 
 	// Note here, that there is nothing to indicate this is a barrier, it might as well be added as a job
 	// If its a job, we add it with JqAddReserved
@@ -645,7 +639,11 @@ int main(int argc, char* argv[])
 	JqQueueOrder MyQueueConfig = JqQueueOrder{ 2, { 0, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };
 	JqSetThreadQueueOrder(&MyQueueConfig);
 	printf("Started JQ with %d workers\n", Attr.NumWorkers);
+#ifdef _WIN32
 	printf("press 'q' to quit\n");
+#else
+	printf("press 'ctrl-c' to quit\n");
+#endif
 
 #ifdef _WIN32
 	std::atomic<int> keypressed;

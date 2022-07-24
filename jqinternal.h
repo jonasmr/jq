@@ -9,6 +9,7 @@
 #if defined(__APPLE__)
 #include <mach/mach_time.h>
 //#include <libkern/OSAtomic.h>
+#include <atomic>
 #include <os/lock.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -19,8 +20,8 @@ typedef uint64_t ThreadIdType;
 #define JQ_USLEEP(us) usleep(us);
 inline int64_t JqTicksPerSecond()
 {
-	static int64_t nTicksPerSecond = 0;
-	if(nTicksPerSecond == 0)
+	static std::atomic<int64_t> nTicksPerSecond = 0;
+	if(nTicksPerSecond.load() == 0)
 	{
 		mach_timebase_info_data_t sTimebaseInfo;
 		mach_timebase_info(&sTimebaseInfo);
@@ -52,7 +53,7 @@ typedef uint32_t ThreadIdType;
 #define JQ_USLEEP(us) JqUSleepImpl(us);
 #define JqCurrentThreadId() GetCurrentThreadId()
 #include <windows.h>
-inline int64_t	 JqTicksPerSecond()
+inline int64_t JqTicksPerSecond()
 {
 	static int64_t nTicksPerSecond = 0;
 	if(nTicksPerSecond == 0)
@@ -103,7 +104,7 @@ inline void JqUSleepImpl(uint64_t usec)
 typedef uint64_t ThreadIdType;
 #define JQ_USLEEP(us) usleep(us);
 #define JqCurrentThreadId() (uint64_t) pthread_self()
-inline int64_t	 JqTicksPerSecond()
+inline int64_t JqTicksPerSecond()
 {
 	return 1000000000ll;
 }
@@ -274,7 +275,7 @@ struct JqConditionVariable
 #ifdef _WIN32
 	CONDITION_VARIABLE Cond;
 #else
-	pthread_cond_t	Cond;
+	pthread_cond_t Cond;
 #endif
 };
 
@@ -301,8 +302,8 @@ struct JqSemaphore
 	std::atomic<uint32_t> nReleaseCount;
 	uint32_t			  nMaxCount;
 #elif defined(JQ_SEMAPHORE_WIN32)
-	HANDLE			Handle;
-	LONG			nMaxCount;
+	HANDLE Handle;
+	LONG   nMaxCount;
 #elif defined(JQ_SEMAPHORE_FUTEX)
 	std::atomic<uint32_t> Futex;
 	uint32_t			  MaxCount;

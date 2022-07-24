@@ -1,5 +1,6 @@
 #include "jqinternal.h"
 #include "jq.h"
+#include <inttypes.h>
 #include <stdint.h>
 
 #ifdef JQ_SEMAPHORE_FUTEX
@@ -8,9 +9,7 @@
 #include <unistd.h>
 #endif
 
-#ifdef _WIN32
-
-#else
+#ifndef _WIN32
 #include <sched.h>
 #endif
 
@@ -705,10 +704,10 @@ void JqLogStats()
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption ? nHandleConsumption : 1) * (1.0 / (365 * 60.0 * 60.0 * 60.0 * 24.0));
 		(void)WrapTime;
-		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %14d/%14d|%8I64d|%12.2fy|%6.2fs|%2d     ", bUseWrapping ? '\r' : ' ', Stats.nNumAdded / (float)fTime,
-			   Stats.nNumFinished / (float)fTime, Stats.nNumCancelled / (float)fTime, Stats.nNumAddedSub / (float)fTime, Stats.nNumFinishedSub / (float)fTime, Stats.nNumLocks / (float)fTime,
-			   Stats.nNumWaitCond / (float)fTime, Stats.nNumWaitKicks / (float)fTime, g_LogStats.nNumAdded, g_LogStats.nNumFinished, g_LogStats.nNumAddedSub, g_LogStats.nNumFinishedSub,
-			   nHandleConsumption, HandlesPerYear, fTime / 1000.f, JqGetNumWorkers());
+		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %14d/%14d|%8" PRId64 "|%12.2fy|%6.2fs|%2d     ", bUseWrapping ? '\r' : ' ',
+			   Stats.nNumAdded / (float)fTime, Stats.nNumFinished / (float)fTime, Stats.nNumCancelled / (float)fTime, Stats.nNumAddedSub / (float)fTime, Stats.nNumFinishedSub / (float)fTime,
+			   Stats.nNumLocks / (float)fTime, Stats.nNumWaitCond / (float)fTime, Stats.nNumWaitKicks / (float)fTime, g_LogStats.nNumAdded, g_LogStats.nNumFinished, g_LogStats.nNumAddedSub,
+			   g_LogStats.nNumFinishedSub, nHandleConsumption, HandlesPerYear, fTime / 1000.f, JqGetNumWorkers());
 		fflush(stdout);
 
 		Frames		  = 0;
@@ -728,7 +727,7 @@ void JqSetThreadAffinity(uint64_t Affinity)
 #ifdef _WIN32
 	// untested..
 	SetThreadAffinityMask(GetCurrentThread(), Affinity);
-#else
+#elif !defined(__APPLE__)
 	cpu_set_t set;
 	CPU_ZERO(&set);
 	for(uint32_t i = 0; i < 64; ++i)

@@ -25,38 +25,11 @@
 //
 //  TODO:
 //		new doc
-//		test osx
-//		* test win32
-//		* comment / code pass
-// 		* run sanitizers
-// 		* colors
-//		* fix manymutex lock (lockless take-job)
-//		* multidep
-//		* peeking
-//		* child-wait
-//		* pop any job
-//		* cancel job
-//		* wait all
-// 		* fix spawn to always take one
-//		* make handles
-//		* futex for semaphore
-//		* Added lockless queue
-//		* reverted child/parent relation ship to n-tree with locks. this makes adding take a lock
-//		* one more stab at lockless queue?
-// 		* reserve/close reserved without
-//
-// 		* cleanup demos
-//		* switch to ng
-//		* fix so there is only one queue impl.
-//		* test spawn
-//		* test wait for only children
-// 		* fix unlocking on the wrong mutex when doing full wait in JqWait
-//		* assert in ConditionVariable wait that the mutex passed in is actually locked
-//
 
 #define JQ_IMPL
 #include "jq.h"
 #include "jqinternal.h"
+#include <inttypes.h>
 
 #ifndef _WIN32
 #include <pthread.h>
@@ -215,7 +188,8 @@ enum JqGraphDataType : uint8_t
 struct JqGraphData
 {
 	JqGraphDataType Type;
-	union {
+	union
+	{
 		struct
 		{
 			uint64_t	AddHandle;
@@ -807,7 +781,7 @@ void JqStop()
 	uint64_t DependentLinkCounter = JqState.DependentJobLinkCounter.load();
 	if(DependentLinkCounter)
 	{
-		printf("Dependent links(%I64d) left over after finishing\n", DependentLinkCounter);
+		printf("Dependent links(%" PRId64 ") left over after finishing\n", DependentLinkCounter);
 	}
 	JQ_ASSERT(0 == DependentLinkCounter);
 
