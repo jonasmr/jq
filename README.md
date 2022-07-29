@@ -163,7 +163,7 @@ Attr.QueueOrder[1] = JqQueueOrder{ 2, { 1, 2, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 Attr.WorkerOrderIndex[0] = 0;
 Attr.WorkerOrderIndex[1] = 0;
 Attr.WorkerOrderIndex[2] = 0;
-Attr.WorkerOrderIndex[3] = `;
+Attr.WorkerOrderIndex[3] = 1;
 JqStart(&Attr);
 ```
 
@@ -239,148 +239,15 @@ Calling `JqGraphDumpStart` will make Jq start logging its state into a buffer of
 `JqDump` can be called to dump the full state of the job queue. This is meant for internal debugging, but can be used to show which jobs have pending block counts.
 
 
-
-# History
-The original implementation of Jq only uses a single mutex to protect all of Jq. While this might seem like a inferior choice, the code shipped in both Hitman(2016) and Hitman 2, and the single lock was never an issue.
-This can be found at the branch jq1-g2.
-The Jq2 branch has a more modern implementation: the job queues are lockless, and a lock is only take whenever a job is finalized - and those locks are unique to the job slot, meaning contention is much less likely to occur.
-
 # Implementation
+Jq allocates a buffer with space for `2^JQ_JOB_BUFFER_SIZE_BITS` active Jobs. While it might seem like a limiting factor, the fact that Jq supports running a job many times means that in practice you never run out of job slots.
+
+The Job handles returned directly indexes into a global job array, using the bottom `JQ_JOB_BUFFER_SIZE_BITS` bits. Each Job header stores the last Claimed/Started/Finished Index, so checking if a job is done can be trivially done by checking if the finish count exceeds the handle passed in.
+
+Composition is done by counting how many jobs needs to finish. When starting a child job this is incremented, and once the child(or a regular job) finishes, it decrements the counter. Last job to decrement finalizes the job, and decrements the counter of the parent job(if there is one).
+
+Adding a child job also adds itself to the parent's linked list of children - this is the only thing that requires locking. This linked list is only needed for when we want to execute only child jobs: We need some way of being able to find the child of a given parent. Locking here is a decent compromise, as its rarely a contended issue.
 
 
-# Functions
-
-* `JqStart`: Start Jq.
-* `JqStop`: Stop Jq.
-* `JqAdd`: Add a Job.
-* `JqWait`: Wait for a job.
-* `JqWaitAll`: Wait for all jobs to finish.
-
-# Usage
-
-
-
-Jq is initialized by Iinitializing a JqAttr struct and calling JqStart
-
-```
-	JqAttributes Attr;
-	JqInitAttributes(&Attr, NUMBER_OF_WORKER_THREADS);
-	JqStart(&Attr);
-```
-
-`JqAttributes` contain members that can be used to control how Jq operates
-
-```
-	Attr.Flags = ...;
-	Attr.ThreadConfig[0] = JqThreadConfig{ 7, {0, 1, 2, 3, 4, 5, 6, 0xff} };
-	Attr.ThreadConfig[1] = JqThreadConfig{ 3, {3, 2, 1, 0xff, 0xff, 0xff, 0xff, 0xff} };
-	Attr.ThreadConfig[2] = JqThreadConfig{ 2, {5, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
-	Attr.ThreadConfig[3] = JqThreadConfig{ 2, {1, 5, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
-	Attr.ThreadConfig[4] = JqThreadConfig{ 1, {7, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,} };
-```	
-
-`Flags` can be set to `JQ_INIT_USE_SEPERATE_STACK`, to make Jq use a separate stack. If it is not set, the calling stack will just be used.
-`ThreadConfig`: For each thread, contains a list of the pipes that thread will take jobs from
-
-
-Shutting down waits for all jobs to finish:
-
-```
-	JqStop();
-```
-
-
-Adding a job is done by calling `JqAdd`. `JqAdd` returns a uint64 handle, which can be passed to JqWait to wait for jobs to finish
-```
-	int PipeId = 0;
-	uint64_t JobHandle = JqAdd([]
-	{
-		printf("test\n");
-	}, PipeId);
-	JqWait(JobHandle);
-
-```
-
-`JqAdd` Optionally takes a number of times to invoke job, and a range to split between the jobs:
-
-```
-	int PipeId = 0;
-	JqAdd([](int begin, int end)
-	{
-		printf("range %d %d\n", begin, end);
-	}, PipeId, 2, 100);
-```
-This will invoke the printf job twice, passing in begin/end range such that the entire range (0-100) is covered
-IE it might print
-range 0 50
-range 50 100
-
-
-`JqWait` takes as argument some flags that controls two things
-* How to find jobs when the job we are waiting for is not finished
-	* `JQ_WAITFLAG_EXECUTE_SUCCESSORS`: Only execute jobs that are children of the current job
-	* `JQ_WAITFLAG_EXECUTE_PREFER_SUCCESSORS`: Prefer child jobs, but allow other jobs to run in case of no child jobs available
-	* `JQ_WAITFLAG_EXECUTE_ANY`: Execute any job
-* What to do when the jobs is not done, and there isnt an available candidate job to run instead
-	* `JQ_WAITFLAG_BLOCK`: Wait on a semaphore which is signalled by job when done
-	* `JQ_WAITFLAG_SLEEP`: Sleep for the amount specified when calling
-	* `JQ_WAITFLAG_SPIN`: Spin untill done.
-
-
-
-# Child Jobs
-
-By Default, a job added from another job is a child of that job. A parent job is not considered finished untill all children are finished.
-
-```
-	int PipeId = 0;
-	uint64_t H = JqAdd([=]
-	{
-		print("parent"\n");
-		JqAdd([],
-		{
-			printf("child\n");
-		}, PipeId);
-	}, PipeId);
-	JqWait(H);
-	print("done\n");
-```
-
-Is guaranteed to print
-```
-parent
-child
-done
-```
-
-A child job can be created with flag `JQ_JOBFLAG_DETACHED`, in which case the example above would not wait for the print of 'child'.
-
-# Job Groups
-
-Jq supports adding groups of jobs. This is effectively a job that is never run, but is only used to group child jobs so they can be waited for together.
-
-```
-	uint64_t H = JqGroupBegin();
-	JqAdd([] {printf("a\n"), 0);
-	JqAdd([] {printf("b\n"), 0);
-	JqGroupEnd();
-	JqWait(H); // will wait for print of a and b both
-```
-
-#Lockless Jq
-Jq contains two implementations, one in `jqlockless.cpp` and one in `jqlocked.cpp`. The lockeless one should be considered experimental. 
-
-#JqNode
-If you prefer adding your jobs as nodes declared via objects, you can use JqNode, which is a wrapper on top of Jq.
-
-
-#demo programs
-
-* `demo_cancel.cpp`: demonstrate and test JqCancel
-* `demo_priority.cpp`: demonstrate and test priority system
-* `demo_stress.cpp`: stress test of how many jobs can be added and executed.
-* `demo_node.cpp`: demostrate and test JqNode
-
-# demo
 # License
 Licensed using unlicense.org
