@@ -234,7 +234,7 @@ In `jq.h` there is a number of defines that can be changed how jq works
 
 # Debugging And Graph Dumps.
 
-Calling `JqGraphDumpStart` will make Jq start logging its state into a buffer of the specified size. Once `JqGraphDumpEnd` is called, a graphwiz file will be written to disk, showing a graph of the jobs added and executed and their dependencies. Use `dot` to convert the file to a graph: `dot -Tps filename.gv -o filename.ps`
+Calling `JqGraphDumpStart` will make Jq start logging its state into a buffer of the specified size. Once `JqGraphDumpEnd` is called, a graphwiz file will be written to disk, showing a graph of the jobs added and executed and their dependencies. Use `dot` [Graphviz](https://graphviz.org/) to convert the file to a graph: `dot -Tps filename.gv -o filename.ps`
 
 `JqDump` can be called to dump the full state of the job queue. This is meant for internal debugging, but can be used to show which jobs have pending block counts.
 
