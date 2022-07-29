@@ -243,7 +243,7 @@ class JqFunction
 
 // Job flags
 #define JQ_JOBFLAG_SMALL_STACK 0x1 // create with small stack
-#define JQ_JOBFLAG_DETACHED 0x2	   // dont create as child of current job
+#define JQ_JOBFLAG_DETACHED 0x2 // dont create as child of current job
 
 // Init flags
 #define JQ_INIT_USE_SEPERATE_STACK 0x1
@@ -283,7 +283,7 @@ struct JqStats
 // Specify order of which to take jobs
 struct JqQueueOrder
 {
-	uint8_t nNumPipes;
+	uint8_t NumQueues;
 	uint8_t Queues[JQ_MAX_QUEUES];
 };
 

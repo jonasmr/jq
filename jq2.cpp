@@ -656,7 +656,7 @@ void JqStart(JqAttributes* pAttr)
 		uint8_t		  nNumActivePipes = 0;
 		uint64_t	  PipeMask		  = 0;
 		static_assert(JQ_MAX_QUEUES < 64, "wont fit in 64bit mask");
-		for(uint32_t j = 0; j < C.nNumPipes; ++j)
+		for(uint32_t j = 0; j < C.NumQueues; ++j)
 		{
 			if(C.Queues[j] != 0xff)
 			{
@@ -793,8 +793,8 @@ void JqStop()
 void JqSetThreadQueueOrder(JqQueueOrder* pConfig)
 {
 	uint32_t nNumActiveQueues = 0;
-	JQ_ASSERT(pConfig->nNumPipes <= JQ_MAX_QUEUES);
-	for(uint32_t j = 0; j < pConfig->nNumPipes; ++j)
+	JQ_ASSERT(pConfig->NumQueues <= JQ_MAX_QUEUES);
+	for(uint32_t j = 0; j < pConfig->NumQueues; ++j)
 	{
 		if(pConfig->Queues[j] != 0xff)
 		{

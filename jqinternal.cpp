@@ -600,7 +600,7 @@ void JqInitAttributes(JqAttributes* Attributes, uint32_t NumQueueOrders, uint32_
 		{
 			C.Queues[j] = (uint8_t)j;
 		}
-		C.nNumPipes = JQ_MAX_QUEUES;
+		C.NumQueues = JQ_MAX_QUEUES;
 	}
 	for(uint32_t i = 0; i < NumWorkers; ++i)
 	{
