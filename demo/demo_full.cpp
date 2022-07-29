@@ -98,12 +98,12 @@ void JqTestPrio(uint32_t NumWorkers)
 	MICROPROFILE_SCOPEI("JQ_TEST", "JqTestPrio", MP_AUTO);
 
 	// Note here, that there is nothing to indicate this is a barrier, it might as well be added as a job
-	// If its a job, we add it with JqAddReserved
+	// If its a job, we add it with JqAddBlocked
 	// If its a Barrier we just close it with JqCloseReserved
 	// Note, that all Preconditions must be in place first.
 	// The argument for Reserve is the queue it ends up in
-	JqHandle Barrier = JqReserve("Barrier");
-	JqHandle Final	 = JqReserve("Final");
+	JqHandle Barrier = JqCreateBlocked("Barrier");
+	JqHandle Final	 = JqCreateBlocked("Final");
 
 	std::atomic<int> TwoStart;
 	std::atomic<int> TwoEnd;
@@ -115,11 +115,11 @@ void JqTestPrio(uint32_t NumWorkers)
 	// printf("Two two %d %d\n", pTwoStart->load(), pTwoEnd->load());
 	{
 		// different ways of adding dependent jobs
-		JqHandle PostBarrier0 = JqReserve("PostBarrier0");
+		JqHandle PostBarrier0 = JqCreateBlocked("PostBarrier0");
 		// PostBarrier0 now requires Barrier to be reached
 		JqAddPrecondition(PostBarrier0, Barrier);
 
-		JqAddReserved(
+		JqAddBlocked(
 			PostBarrier0,
 			[]() {
 				MICROPROFILE_SCOPEI("JQ_TEST", "First PostBarrier", MP_AUTO);
@@ -190,7 +190,7 @@ void JqTestPrio(uint32_t NumWorkers)
 	std::atomic<int>* pSuccessorDone		 = &SuccessorDone;
 	std::atomic<int>* pReservedSuccessorDone = &ReservedSuccessorDone;
 
-	JqHandle ReservedHandle = JqReserve("ReservedHandle");
+	JqHandle ReservedHandle = JqCreateBlocked("ReservedHandle");
 	Foo						= 0;
 	Bar						= 0;
 	SuccessorDone			= 0;
@@ -229,7 +229,7 @@ void JqTestPrio(uint32_t NumWorkers)
 			if(JobIndex == H.NumJobs - 1)
 			{
 				// printf("HERE HERE JOB INDEX IS %d\n", JobIndex);
-				JqAddReserved(
+				JqAddBlocked(
 					H.ReservedHandle,
 					[pBar] {
 						MICROPROFILE_SCOPEI("JQ_TEST", "RESERVED", MP_PINK);
@@ -274,7 +274,7 @@ void JqTestPrio(uint32_t NumWorkers)
 
 	JqRelease(Barrier);
 
-	JqAddReserved(
+	JqAddBlocked(
 		Final,
 		[]() {
 			MICROPROFILE_SCOPEI("JQ_TEST", "Final", MP_AUTO);

@@ -305,7 +305,7 @@ JQ_API JqHandle JqAdd(const char* Name, JqFunction JobFunc, uint8_t Queue, int N
 
 // Add a job which has previously been reserved with a call to JqReserve
 // This decrements the block counter by 1 once its added
-JQ_API JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
+JQ_API JqHandle JqAddBlocked(JqHandle BlockedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
 
 // add successor
 JQ_API JqHandle JqAddSuccessor(const char* Name, JqHandle Precondition, JqFunction JobFunc, uint8_t Queue, int NumJobs = 1, int Range = -1, uint32_t JobFlags = 0);
@@ -314,7 +314,7 @@ JQ_API JqHandle JqAddSuccessor(const char* Name, JqHandle Precondition, JqFuncti
 // Once done, it can be released with
 //  - JqRelease(): No job  will be executed, but it can be used as a barrier by making other jobs depend on this job
 //  - JqAddReserved(): The job will be added to the queue once the block counter reaches zero
-JQ_API JqHandle JqReserve(const char* Name);
+JQ_API JqHandle JqCreateBlocked(const char* Name);
 
 // Set Precondition to be required to be finished before Handle is started.
 // Increments the block counter of Handle, and decrements it once its finished

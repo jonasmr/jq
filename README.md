@@ -26,9 +26,9 @@ run `ng`(osx/linux) `ng.bat` (windows - run from native tools command prompt)
 # Basic Usage
 Jq is initialized by calling JqStart, passing in a `JqAttributes` object.
 ```
-	JqAttributes Attr;
-	JqInitAttributes(&Attr);
-	JqStart(&Attr);
+JqAttributes Attr;
+JqInitAttributes(&Attr);
+JqStart(&Attr);
 ```
 
 This sets up Jq, and starts a worker thread for each hardware thread.
@@ -39,25 +39,29 @@ This sets up Jq, and starts a worker thread for each hardware thread.
 ``` 
 
 
-Adding a job is done by calling `JqAdd`. `JqAdd` returns a `JqHandle` handle, which can be passed to JqWait to wait for jobs to finish. `JqHandle` is a thin wrapper containing a `uint64`
-```
-	int Queue = 0;
-	JqHandle JobHandle = JqAdd([]
-	{
-		printf("test\n");
-	}, Queue);
-	JqWait(JobHandle);
+Adding a job is done by calling `JqAdd`. `JqAdd` returns a `JqHandle` handle, which can be passed to JqWait to wait for jobs to finish. `JqHandle` is a thin wrapper containing a `uint64`.
 
+Note that the lambda captured is defined to be at most `JQ_FUNCTION_SIZE` bytes(default:64), and any captured values must not have destructors, as these will not be called. Violation of these constraints are reported at compile time.
+
+All functions adding jobs take a `const char*`, which can be used when debugging the state of the job system and when dumping the full job graph using `JqGraphDumpStart`/`JqGraphDumpEnd`
+
+```
+int Queue = 0;
+JqHandle JobHandle = JqAdd("simple", []
+{
+	printf("test\n");
+}, Queue);
+JqWait(JobHandle);
 ```
 
 `JqAdd` Optionally takes a number of times to invoke job, and a range to split between the jobs:
 
 ```
-	int Queue = 0;
-	JqAdd([](int begin, int end)
-	{
-		printf("range %d %d\n", begin, end);
-	}, PipeId, 2, 100);
+int Queue = 0;
+JqAdd("range", [](int begin, int end)
+{
+	printf("range %d %d\n", begin, end);
+}, PipeId, 2, 100);
 ```
 This will invoke the printf job twice, passing in begin/end range such that the entire range (0-100) is covered
 IE it might print
@@ -68,20 +72,19 @@ range 50 100
 By Default, a job added from another job is a child of that job. A parent job is not considered finished untill all children are finished.
 
 ```
-	int Queue = 0;
-	JqHandle H = JqAdd([=]
+int Queue = 0;
+JqHandle H = JqAdd("H",[=]
+{
+	print("parent"\n");
+	JqAdd("Child", [],
 	{
-		print("parent"\n");
-		JqAdd([],
-		{
-			printf("child\n");
-		}, queue);
-	}, PipeId);
-	JqWait(H);
-	print("done\n");
+		printf("child\n");
+	}, queue);
+}, PipeId);
+JqWait(H);
+print("done\n");
 ```
-
-Will print 
+prints 
 ```
 parent
 child
@@ -104,6 +107,9 @@ Its configurable what Jq should do when you tell it to wait for another job, usi
 ## Other useful functions
 * `JqCancel` Can be called to cancel a Job. It will still proceed through the queue, but the job will not execture
 * `JqSpawn` Starts a job and immediately waits for it. It is guaranteed that instance 0 will run on the calling thread
+* `JqExecuteOne`: can be called from any thread to execute a job. 
+* `JqExecuteChildren`: Execute one child job of job passed in.
+* `JqConsumeStats`: Consume various internal stats.
 
 
 ## Job Groups
@@ -111,11 +117,11 @@ Its configurable what Jq should do when you tell it to wait for another job, usi
 Jq supports adding groups of jobs. This is effectively a job that is never run, but is only used to group child jobs so they can be waited for together. This is useful when you have a large body of code adding a variable amount of work, to which you want to be able to wait for at a later point.
 
 ```
-	JqHandle H = JqGroupBegin();
-	JqAdd([] {printf("a\n"), 0);
-	JqAdd([] {printf("b\n"), 0);
-	JqGroupEnd();
-	JqWait(H); // will wait for print of a and b both
+JqHandle H = JqGroupBegin("JobGroup");
+JqAdd("a", [] {printf("a\n"), 0);
+JqAdd("b", [] {printf("b\n"), 0);
+JqGroupEnd();
+JqWait(H); // will wait for print of a and b both
 ```
 
 
@@ -149,17 +155,16 @@ This is entirely configurable, using `JqQueueOrder`. This object specifies a num
 
 Below is an example that starts Jq with 4 worker threads, with the three first taking work from queue 0 first, then 1, and the last queue taking work from 1, then 2. 
 ```
-		JqInitAttributes(&Attr);
-		Attr.NumWorkers = 4;
-		Attr.NumQueueOrders = 2;
-		Attr.QueueOrder[0] = JqQueueOrder{ 2, { 0, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
-		Attr.QueueOrder[1] = JqQueueOrder{ 2, { 1, 2, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
-		Attr.WorkerOrderIndex[0] = 0;
-		Attr.WorkerOrderIndex[1] = 0;
-		Attr.WorkerOrderIndex[2] = 0;
-		Attr.WorkerOrderIndex[3] = `;
-		JqStart(&Attr);
-
+JqInitAttributes(&Attr);
+Attr.NumWorkers = 4;
+Attr.NumQueueOrders = 2;
+Attr.QueueOrder[0] = JqQueueOrder{ 2, { 0, 1, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
+Attr.QueueOrder[1] = JqQueueOrder{ 2, { 1, 2, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
+Attr.WorkerOrderIndex[0] = 0;
+Attr.WorkerOrderIndex[1] = 0;
+Attr.WorkerOrderIndex[2] = 0;
+Attr.WorkerOrderIndex[3] = `;
+JqStart(&Attr);
 ```
 
 * `Flags`: can be set to `JQ_INIT_USE_SEPERATE_STACK`, to make Jq use a separate stack. This uses code from boost::context to seperately allocate a stack and use that. If it is not set, the calling stack will just be used.
@@ -176,11 +181,62 @@ When Non-Worker threads execute jobs, they use the default ordering of the queue
 `JqSetThreadQueueOrder` to override it. It needs to be called for each thread waiting/executing jobs.
 
 
-
-
 # Preconditions & Dependencies
 
+While the main idea of Jq is that jobs are added inline whenever its needed, it is sometimes useful to express more complicated dependencies.
+
+Jobs can be created with a block counter.
+* `JqCreateBlocked` Reserves a job with a block count of one. 
+
+The Block count can be manipulated manually with
+* `JqBlock` Increase the block count by one
+* `JqRelease` Decrease the block count by one
+
+Note that once the block count reaches zero, the job may start to execute, and thus it is no longer valid to increase the block count. Note that `JqCreateBlocked` is the _only_ way to create a job with non-zero block count, so all jobs using block count must start with `JqCreateBlocked`
+
+
+* `JqAddBlocked` Decrease the block count by one, and set the paramters of the job to execute when the counter reaches zero
+* `JqAddPrecondition(A, B)` Make B a precondition for `A`. `A` must have an non-zero block count. Internally this increases the block count of A by one, and makes B decrement it when finished
+* `JqAddSuccessor(Name, Precond, Job)` Run Job 
+
+
+Note that it is optional for a Blocked job to have an actual body: its fine to just Release all block counts, in which case the Job will finish without running and trigger its dependencies. This can be used to implement barriers:
+
+```
+JqHandle Barrier = JqCreateBlocked("Barrier");
+JqHandle Job0	 = JqCreateBlocked("Job0");
+JqHandle Job1	 = JqCreateBlocked("Job1");
+JqAddPrecondition(Barrier, Job0);
+JqAddPrecondition(Barrier, Job1);
+
+JqRelease(Barrier); // Release initial block count
+
+JqAddBlocked(Job0,[] { printf("Job0\n"); }, 0);
+JqAddBlocked(Job1,[] { printf("Job1\n"); }, 0);
+JqHandle Successor = JqAddSuccessor("Successor", Barrier,[] { printf("sucessor\n"); }, 0);
+JqWait(Successor);
+```
+
 # Configuration
+
+In `jq.h` there is a number of defines that can be changed how jq works
+
+* `JQ_JOB_BUFFER_SIZE_BITS`: No. of Job Headers to reserve. Max. no. of jobs will be 2^JQ_JOB_BUFFER_SIZE_BITS
+* `JQ_DEFAULT_WAIT_TIME_US`: Default argument passed into JqWait.
+* `JQ_CACHE_LINE_SIZE`: Used to a align variables, to help against false sharing. 
+* `JQ_API`: Empty by default. Use if you want to use Jq from a .dll/.so
+* `JQ_FUNCTION_SIZE`: Max size of JqFunction. Increase if you want to be able to capture more data in the lambdas
+* `JQ_MAX_THREADS`: Maximum number of threads using Jq, including worker threads
+* `JQ_DEFAULT_STACKSIZE_SMALL`: Small stack size when using separate stacks
+* `JQ_DEFAULT_STACKSIZE_LARGE`: Large stack size when using separate stacks
+* `JQ_CHILD_HANDLE_BUFFER_SIZE`: Size of internal buffer when searching for child jobs
+
+
+# Debugging And Graph Dumps.
+
+Calling `JqGraphDumpStart` will make Jq start logging its state into a buffer of the specified size. Once `JqGraphDumpEnd` is called, a graphwiz file will be written to disk, showing a graph of the jobs added and executed and their dependencies. Use `dot` to convert the file to a graph: `dot -Tps filename.gv -o filename.ps`
+
+`JqDump` can be called to dump the full state of the job queue. This is meant for internal debugging, but can be used to show which jobs have pending block counts.
 
 
 
@@ -190,6 +246,8 @@ This can be found at the branch jq1-g2.
 The Jq2 branch has a more modern implementation: the job queues are lockless, and a lock is only take whenever a job is finalized - and those locks are unique to the job slot, meaning contention is much less likely to occur.
 
 # Implementation
+
+
 # Functions
 
 * `JqStart`: Start Jq.
@@ -197,26 +255,9 @@ The Jq2 branch has a more modern implementation: the job queues are lockless, an
 * `JqAdd`: Add a Job.
 * `JqWait`: Wait for a job.
 * `JqWaitAll`: Wait for all jobs to finish.
-* `JqExecuteOne`: can be called from any thread to execute a job. 
-* `JqExecuteChildren`: Execute one child job of job passed in.
-* `JqSetThreadPipeConfig`: can be called to set how non worker threads select jobs, when fetching jobs through `JqExecuteOne` and `JqWait`
-* `JqSpawn`: Adds a job and immediately waits for it.
-* `JqCancel`: Attempt to cancel a job. Fails if started or finished. Note that the only way to find out if a job is cancelled is by the return value of this function.
-* `JqConsumeStats`: Consume various internal stats.
 
 # Usage
 
-In `jq.h` there is a number of defines that can be changed how jq works
-
-* `JQ_PIPE_BUFFER_SIZE`: Size of job array. should at least be 2x the number of maximum active jobs
-* `JQ_DEFAULT_WAIT_TIME_US`: Default argument passed into JqWait.
-* `JQ_CACHE_LINE_SIZE`: Used to a align variables, to help against false sharing. 
-* `JQ_API`: Empty by default. Use if you want to use Jq from a .dll/.so
-* `JQ_FUNCTION_SIZE`: Max size of JqFunction. Increase if you want to be able to capture more data in the lambdas
-* `JQ_NUM_PIPES`: Number of job pipes
-* `JQ_MAX_THREADS`: Maximum number of threads using Jq, including worker threads
-* `JQ_DEFAULT_STACKSIZE_SMALL`: Small stack size when using separate stacks
-* `JQ_DEFAULT_STACKSIZE_LARGE`: Large stack size when using separate stacks
 
 
 Jq is initialized by Iinitializing a JqAttr struct and calling JqStart

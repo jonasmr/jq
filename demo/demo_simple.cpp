@@ -170,17 +170,17 @@ int main(int argc, char* argv[])
 	}
 
 	{
-		// Reserved Job Handles.
-		// Reserved can be used to declare jobs, when multiple jobs want to interact with a job.
+		// Blocked Job Handles.
+		// JqCreateBlocked can be used to declare jobs, when multiple jobs want to interact with a job.
 		// It is reserved up front, and passed around
 		// this case shows a job C, To be started by A, and waited for by B
-		JqHandle C = JqReserve("C");
+		JqHandle C = JqCreateBlocked("C");
 
 		JqHandle A = JqAdd(
 			"A",
 			[C] {
 				JobSpinWork(50000); // spin for 50 ms, so we know the waiter is likely to hit before we add
-				JqAddReserved(
+				JqAddBlocked(
 					C,
 					[] {
 						printf("C\n");
@@ -203,12 +203,12 @@ int main(int argc, char* argv[])
 
 	{
 
-		// Reserved handles can also be used to create full job graphs
-		JqHandle Before0 = JqReserve("Before0");
-		JqHandle Before1 = JqReserve("Before1");
-		JqHandle Barrier = JqReserve("Barrier");
-		JqHandle After0	 = JqReserve("After0");
-		JqHandle After1	 = JqReserve("After1");
+		// Blocked handles can also be used to create full job graphs
+		JqHandle Before0 = JqCreateBlocked("Before0");
+		JqHandle Before1 = JqCreateBlocked("Before1");
+		JqHandle Barrier = JqCreateBlocked("Barrier");
+		JqHandle After0	 = JqCreateBlocked("After0");
+		JqHandle After1	 = JqCreateBlocked("After1");
 
 		// Add all the links
 		JqAddPrecondition(Barrier, Before0); // Barrier will not start before Before0
@@ -217,13 +217,13 @@ int main(int argc, char* argv[])
 		JqAddPrecondition(After0, Barrier); // After0 will not starte before Barrier
 		JqAddPrecondition(After1, Barrier); // After0 will not starte before Barrier
 
-		JqAddReserved(
+		JqAddBlocked(
 			After0,
 			[] {
 				printf("After0\n");
 			},
 			0);
-		JqAddReserved(
+		JqAddBlocked(
 			After1,
 			[] {
 				printf("After1\n");
@@ -233,13 +233,13 @@ int main(int argc, char* argv[])
 		// Barrier is released manually, which just means it has no job to execute - IE it is just a barrier
 		JqRelease(Barrier);
 
-		JqAddReserved(
+		JqAddBlocked(
 			Before0,
 			[] {
 				printf("Before0\n");
 			},
 			0);
-		JqAddReserved(
+		JqAddBlocked(
 			Before1,
 			[] {
 				printf("Before1\n");
@@ -253,13 +253,13 @@ int main(int argc, char* argv[])
 	{
 		// Manual Block & Release:
 		// JqBlock And JqRelease can be used to manually modify the block count of a job.
-		// JqReserve returns a job with a block count of 1
-		// JqAddReserved Decreases it by one and sets up the job
+		// JqCreateBlocked returns a job with a block count of 1
+		// JqAddBlocked Decreases it by one and sets up the job
 		// JqRelease decrements it by one
 		//
 		// This is intended for synchronization with external systems like a gpu
 
-		JqHandle ManualJob = JqReserve("Manual");
+		JqHandle ManualJob = JqCreateBlocked("Manual");
 
 		const int JobCount = 4;
 
@@ -283,6 +283,23 @@ int main(int argc, char* argv[])
 			0, JobCount);
 
 		JqWait(Successor);
+	}
+
+	{
+		// clang-format off
+		JqHandle Barrier = JqCreateBlocked("Barrier");
+		JqHandle Job0	 = JqCreateBlocked("Job0");
+		JqHandle Job1	 = JqCreateBlocked("Job1");
+		JqAddPrecondition(Barrier, Job0);
+		JqAddPrecondition(Barrier, Job1);
+
+		JqRelease(Barrier); // Release initial block count
+
+		JqAddBlocked(Job0,[] { printf("Job0\n"); }, 0);
+		JqAddBlocked(Job1,[] { printf("Job1\n"); }, 0);
+		JqHandle Successor = JqAddSuccessor("Successor", Barrier,[] { printf("sucessor\n"); }, 0);
+		JqWait(Successor);
+		// clang-format on
 	}
 
 	{

@@ -102,7 +102,6 @@ void				 JqRunInternal(uint32_t WorkIndex, int Begin, int End);
 bool				 JqTryPopJob(uint16_t JobIndex, uint16_t* OutSubJob, bool& OutIsDrained);
 const char*			 JqWorkerStateString(JqWorkerState State);
 const char*			 JqDebugStackStateString(JqDebugStackState State);
-void				 JqDumpState();
 static void			 JqGraphAdd(uint64_t Handle, const char* Name, uint16_t Count);
 static void			 JqGraphWait(uint64_t WaitTarget);
 static void			 JqGraphPrecondtion(uint64_t Handle, uint64_t Precondition);
@@ -391,7 +390,7 @@ struct JqLocklessQueue
 				PeekOut = Payload;
 				if(Payload == 0)
 				{
-					JqDumpState();
+					JqDump();
 				}
 				JQ_ASSERT(Payload != 0);
 				return true;
@@ -1867,7 +1866,7 @@ JqHandle JqAdd(const char* Name, JqFunction JobFunc, uint8_t Queue, int NumJobs,
 }
 
 // add reserved
-JqHandle JqAddReserved(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags)
+JqHandle JqAddBlocked(JqHandle ReservedHandle, JqFunction JobFunc, uint8_t Queue, int NumJobs, int Range, uint32_t JobFlags)
 {
 	return JqAddInternal(nullptr, ReservedHandle, JobFunc, Queue, NumJobs, Range, JQ_JOBFLAG_EXTERNAL_MASK & JobFlags, JqHandle{ 0 });
 }
@@ -1879,7 +1878,7 @@ JqHandle JqAddSuccessor(const char* Name, JqHandle PreconditionHandle, JqFunctio
 }
 
 // Reserve a Job slot. this allows you to wait on work added later
-JqHandle JqReserve(const char* Name)
+JqHandle JqCreateBlocked(const char* Name)
 {
 	JQ_ASSERT(JqState.Stop == 0);
 	uint64_t Handle = JqClaimHandle(Name);
@@ -2196,10 +2195,8 @@ void JqSplitHandle(uint64_t Handle, uint64_t& Index, uint64_t& Generation)
 	Index	   = Handle % JQ_JOB_BUFFER_SIZE;
 	Generation = Handle >> JQ_JOB_BUFFER_SIZE_BITS;
 }
+
 void JqDump()
-{
-}
-void JqDumpState()
 {
 	printf("\n\nThreads:\n");
 	{
