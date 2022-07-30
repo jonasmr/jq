@@ -251,6 +251,34 @@ int main(int argc, char* argv[])
 	}
 
 	{
+		JqHandle Before0 = JqCreateBlocked("Before0");
+		JqHandle Before1 = JqCreateBlocked("Before1");
+		// Barriers can be simplified by using initializer lists
+		JqHandle Barrier   = JqBarrier("Barrier", { Before0, Before1 });
+		JqHandle Successor = JqAddSuccessor(
+			"PostBarrier", Barrier,
+			[] {
+				printf("postbarrier-initializer-list\n");
+			},
+			0);
+		JqRelease(Barrier);
+		JqAddBlocked(
+			Before0,
+			[] {
+				printf("Before0-initializer-list\n");
+			},
+			0);
+		JqAddBlocked(
+			Before1,
+			[] {
+				printf("Before1-initializer-list\n");
+			},
+			0);
+
+		JqWait(Successor);
+	}
+
+	{
 		// Manual Block & Release:
 		// JqBlock And JqRelease can be used to manually modify the block count of a job.
 		// JqCreateBlocked returns a job with a block count of 1

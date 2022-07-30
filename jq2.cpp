@@ -1259,6 +1259,25 @@ bool JqExecuteOne(uint8_t* nQueues, uint8_t nNumQueues)
 	return true;
 }
 
+JqHandle JqBarrier(const char* Name, uint32_t NumJobs, JqHandle* Jobs)
+{
+	JqHandle Barrier = JqCreateBlocked(Name);
+	for(uint32_t i = 0; i < NumJobs; ++i)
+	{
+		JqAddPrecondition(Barrier, Jobs[i]);
+	}
+	return Barrier;
+}
+JqHandle JqBarrier(const char* Name, std::initializer_list<JqHandle> Handles)
+{
+	JqHandle Barrier = JqCreateBlocked(Name);
+	for(JqHandle H : Handles)
+	{
+		JqAddPrecondition(Barrier, H);
+	}
+	return Barrier;
+}
+
 void JqWorker(int nThreadId)
 {
 	JqSetThreadAffinity(JqState.Attributes.WorkerThreadAffinity[nThreadId]);

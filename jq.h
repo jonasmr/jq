@@ -99,6 +99,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <initializer_list>
 #include <type_traits>
 
 // template stuff to make the job function accept to 0-2 arguments
@@ -389,6 +391,11 @@ JQ_API bool JqExecuteOne(uint8_t Queue);
 
 // Execute a single job, using the Queue order passed in
 JQ_API bool JqExecuteOne(uint8_t* Queues, uint8_t NumQueues);
+
+// Helper function to create a barrier
+// Barrier returned has blocked handle, so JqRelease must be called after the dependencies on the barrier has been added
+JQ_API JqHandle JqBarrier(const char* Name, uint32_t NumJobs, JqHandle* Jobs);
+JQ_API JqHandle JqBarrier(const char* Name, std::initializer_list<JqHandle> Handles);
 
 // Dump Jq state to stdout.
 JQ_API void JqDump();
