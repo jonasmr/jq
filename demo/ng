@@ -1,2 +1,16 @@
 #!/bin/bash
-python3 ngen/ngen.py $@
+
+IF NOT EXIST build.ninja python ngen/ngen.py
+if [ ! -f build.ninja ]
+then
+	echo "hello1"
+	python3 ngen/ngen.py
+	echo "hello2"
+fi
+echo "hello3"
+ls -l
+which ninja
+ninja --version
+echo $@
+echo ninja $@
+ninja $@

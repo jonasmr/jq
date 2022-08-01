@@ -34,7 +34,9 @@
 #ifndef _WIN32
 #include <pthread.h>
 #endif
+
 #include <atomic>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #pragma warning(push)
