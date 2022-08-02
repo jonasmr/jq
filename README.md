@@ -1,6 +1,6 @@
 # Jq
 
-![jq-build](https://github.com/jonasmr/jq-private2/actions/workflows/ng-build.yml/badge.svg)
+![jq-build](https://github.com/jonasmr/jq/actions/workflows/ng-build.yml/badge.svg)
 
 Jq is a minimal job queue, that can be used to multithread work across multiple cpus. 
 
