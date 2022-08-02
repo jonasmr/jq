@@ -87,8 +87,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='debug|x64'">
-    <NMakeOutput>demo_full.exe</NMakeOutput>
+    <NMakeOutput>../_out/win32/demo_full_debug.exe</NMakeOutput>
     <NMakePreprocessorDefinitions>_DEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <NMakeBuildCommandLine>cd .. &amp;&amp; ng demo_full_debug</NMakeBuildCommandLine>
+    <NMakeCleanCommandLine>ninja -t clean</NMakeCleanCommandLine>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">
     <NMakeOutput>../_out/win32/demo_full_debug.exe</NMakeOutput>
@@ -109,12 +111,16 @@
     <NMakeCleanCommandLine>ninja -t clean</NMakeCleanCommandLine>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='release|x64'">
-    <NMakeOutput>demo_full.exe</NMakeOutput>
+    <NMakeOutput>../_out/win32/demo_full_release.exe</NMakeOutput>
     <NMakePreprocessorDefinitions>NDEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <NMakeBuildCommandLine>cd .. &amp;&amp; ng demo_full_release</NMakeBuildCommandLine>
+    <NMakeCleanCommandLine>ninja -t clean</NMakeCleanCommandLine>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='nomicroprofile|x64'">
-    <NMakeOutput>demo_full.exe</NMakeOutput>
+    <NMakeOutput>../_out/win32/demo_full_nomicroprofile.exe</NMakeOutput>
     <NMakePreprocessorDefinitions>NDEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <NMakeBuildCommandLine>cd .. &amp;&amp; ng demo_full_nomicroprofile</NMakeBuildCommandLine>
+    <NMakeCleanCommandLine>ninja -t clean</NMakeCleanCommandLine>
   </PropertyGroup>
   <ItemDefinitionGroup>
   </ItemDefinitionGroup>
