@@ -253,6 +253,11 @@ class JqFunction
 struct JqHandle
 {
 	uint64_t H = 0;
+
+	operator bool() const
+	{
+		return H != 0;
+	}
 };
 
 struct JqStats
