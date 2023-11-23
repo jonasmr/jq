@@ -348,6 +348,75 @@ int main(int argc, char* argv[])
 		JqWait(Cancel);
 		printf("Cancel ran %d times\n", Count.load());
 	}
+#define COUNT0 4000
+#define COUNT1 2000
+#define COUNT_GROUP 30
+
+	{
+		std::atomic<int> c0;
+		std::atomic<int> c1;
+		c0						 = 0;
+		c1						 = 0;
+		std::atomic<int>* pc0	 = &c0;
+		std::atomic<int>* pc1	 = &c1;
+		JqHandle		  group1 = JqGroupBegin("group1");
+		JqAdd(
+			"add0",
+			[pc0]() {
+				pc0->fetch_add(1);
+			},
+			0, COUNT0);
+		JqAdd(
+			"add1",
+			[pc1]() {
+				pc1->fetch_add(1);
+			},
+			0, COUNT1);
+		JqGroupEnd();
+
+		JqWait(group1);
+		printf("c0=%d, c1=%d\n", c0.load(), c1.load());
+		JQ_ASSERT(c0 == COUNT0);
+		JQ_ASSERT(c1 == COUNT1);
+	}
+	{
+		// test groups, and groups added from other jobs work.
+		std::atomic<int> c0;
+		std::atomic<int> c1;
+		c0					  = 0;
+		c1					  = 0;
+		std::atomic<int>* pc0 = &c0;
+		std::atomic<int>* pc1 = &c1;
+
+		// groups in groups.
+		JqHandle group1 = JqGroupBegin("group_in_group_l1");
+		JqAdd(
+			"job0",
+			[pc0, pc1]() {
+				JqHandle group_inner = JqGroupBegin("group_in_groupl_l2");
+				JqAdd(
+					"add0",
+					[pc0]() {
+						pc0->fetch_add(1);
+					},
+					0, COUNT0);
+				JqAdd(
+					"add1",
+					[pc1]() {
+						pc1->fetch_add(1);
+					},
+					0, COUNT1);
+				JqGroupEnd();
+			},
+			0, COUNT_GROUP);
+		JqGroupEnd();
+
+		JqWait(group1);
+
+		printf("c0=%d, c1=%d\n", c0.load(), c1.load());
+		JQ_ASSERT(c0.load() == COUNT0 * COUNT_GROUP);
+		JQ_ASSERT(c1.load() == COUNT1 * COUNT_GROUP);
+	}
 
 	// Stop Jq.
 	JqStop();

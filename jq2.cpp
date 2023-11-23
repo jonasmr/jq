@@ -732,7 +732,7 @@ void JqStart(JqAttributes* pAttr)
 	}
 
 	JqState.ActiveJobs = 0;
-	JqState.NextHandle = 1;
+	JqState.NextHandle = JQ_JOB_BUFFER_SIZE + 1;
 	JqState.Stats.Clear();
 
 	for(uint16_t i = 0; i < JQ_JOB_BUFFER_SIZE; ++i)
@@ -2109,7 +2109,7 @@ JqHandle JqGroupBegin(const char* Name)
 	{
 		JqAttachChild(Parent, H);
 	}
-	JQ_ASSERT(Job.Parent == Parent);
+	JQ_ASSERT(Job.Parent == (Parent % JQ_JOB_BUFFER_SIZE));
 	JQ_CLEAR_FUNCTION(Job.Function);
 	Job.Queue = 0xff;
 	JqSelfPush(H, 0);
