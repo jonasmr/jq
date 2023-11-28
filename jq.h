@@ -258,6 +258,10 @@ struct JqHandle
 	{
 		return H != 0;
 	}
+	operator uint64_t() const
+	{
+		return H;
+	}
 };
 
 struct JqStats
@@ -267,6 +271,7 @@ struct JqStats
 	uint32_t nNumAddedSub;
 	uint32_t nNumFinishedSub;
 	uint32_t nNumCancelled;
+	uint32_t nNumCancelledSub;
 	uint32_t nNumLocks;
 	uint32_t nNumSema;
 	uint32_t nNumWaitCond;
@@ -280,6 +285,7 @@ struct JqStats
 		nNumAddedSub += Other.nNumAddedSub;
 		nNumFinishedSub += Other.nNumFinishedSub;
 		nNumCancelled += Other.nNumCancelled;
+		nNumCancelledSub += Other.nNumCancelledSub;
 		nNumLocks += Other.nNumLocks;
 		nNumSema += Other.nNumSema;
 		nMemoryUsed += Other.nMemoryUsed;
@@ -349,7 +355,7 @@ JQ_API void JqWaitAll();
 JQ_API void JqWaitAll(JqHandle* Jobs, uint32_t NumJobs, uint32_t WaitFlag = JQ_DEFAULT_WAIT_FLAG, uint32_t UsWaitTime = JQ_DEFAULT_WAIT_TIME_US);
 
 // Cancel a job. Will not do anything to jobs already started
-JQ_API void JqCancel(JqHandle Handle);
+JQ_API int JqCancel(JqHandle Handle);
 
 // Call to execute a child job of Handle. May also execute instances of Handle, if any needs to be run
 JQ_API bool JqExecuteChild(JqHandle Handle); // execute 1 child job.

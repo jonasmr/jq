@@ -166,6 +166,7 @@ void JqMutex::Unlock()
 	{
 		nThreadId = 0;
 	}
+	//JQ_ASSERT(IsLocked());
 #endif
 	// printf("JqMutex::UNLOCK %p  tid: %llx\n", this, JqCurrentThreadId());
 
@@ -691,7 +692,7 @@ void JqLogStats()
 		{
 			bFirst		 = false;
 			bUseWrapping = false;
-			printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s|%8s %8s %8s|Total %8s/%8s, %14s/%14s|%8s|%13s|%7s|%7s\n", "JobAdd", "JobFin", "JobCancel", "SubAdd", "SubFin", "Locks", "Waits", "Kicks",
+			printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s/%10s|%8s %8s %8s|Total %8s/%8s, %14s/%14s|%8s|%13s|%7s|%7s\n", "JobAdd", "JobFin", "JobCancel", "SubAdd", "SubFin", "SubCancel", "Locks", "Waits", "Kicks",
 				   "JobAdd", "JobFin", "SubAdd", "SubFin", "Handles", "WrapTime", "Time", "Workers");
 		}
 
@@ -704,10 +705,10 @@ void JqLogStats()
 
 		double WrapTime = (uint64_t)0x8000000000000000 / (nHandleConsumption ? nHandleConsumption : 1) * (1.0 / (365 * 60.0 * 60.0 * 60.0 * 24.0));
 		(void)WrapTime;
-		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %14d/%14d|%8" PRId64 "|%12.2fy|%6.2fs|%2d     ", bUseWrapping ? '\r' : ' ',
+		printf("%c|        %10.2f/%10.2f/%10.2f, %10.2f/%10.2f/%10.2f|%8.2f %8.2f %8.2f|      %8d/%8d, %14d/%14d|%8" PRId64 "|%12.2fy|%6.2fs|%2d     ", bUseWrapping ? '\r' : ' ',
 			   Stats.nNumAdded / (float)fTime, Stats.nNumFinished / (float)fTime, Stats.nNumCancelled / (float)fTime, Stats.nNumAddedSub / (float)fTime, Stats.nNumFinishedSub / (float)fTime,
-			   Stats.nNumLocks / (float)fTime, Stats.nNumWaitCond / (float)fTime, Stats.nNumWaitKicks / (float)fTime, g_LogStats.nNumAdded, g_LogStats.nNumFinished, g_LogStats.nNumAddedSub,
-			   g_LogStats.nNumFinishedSub, nHandleConsumption, HandlesPerYear, fTime / 1000.f, JqGetNumWorkers());
+			   Stats.nNumCancelledSub / (float)fTime, Stats.nNumLocks / (float)fTime, Stats.nNumWaitCond / (float)fTime, Stats.nNumWaitKicks / (float)fTime, g_LogStats.nNumAdded, 
+			   g_LogStats.nNumFinished, g_LogStats.nNumAddedSub, g_LogStats.nNumFinishedSub, nHandleConsumption, HandlesPerYear, fTime / 1000.f, JqGetNumWorkers());
 		fflush(stdout);
 
 		Frames		  = 0;

@@ -67,7 +67,6 @@ MICROPROFILE_DEFINE(MAIN, "MAIN", "Main", 0xff0000);
 #endif
 
 #define JQ_STRESS_TEST 1
-#define JQ_CANCEL_TEST 0
 
 uint32_t g_Reset = 0;
 
@@ -459,7 +458,7 @@ struct SCancelJobState
 void JqTestCancel()
 {
 	std::atomic<int> CancelFinished;
-	const int		 FAN_OUT	 = 10;
+	const int		 CANCEL_FAN_OUT	 = 1000;
 	int				 nNumWorkers = JqGetNumWorkers();
 	int				 nNumJobs	 = nNumWorkers * 2;
 	if(g_LimitedMode)
@@ -484,16 +483,16 @@ void JqTestCancel()
 				 pState->Finished.fetch_add(1);
 				 CancelFinished.fetch_add(1);
 			 },
-			 0, 10);
+			 0, CANCEL_FAN_OUT);
 	}
 	JqGroupEnd();
 	int nNumCancelled = 0;
 	{
 		MICROPROFILE_SCOPEI("CANCEL", "CANCEL", MP_CYAN);
-		JobSpinWork(2000);
+		//JobSpinWork(2000);
 		if(1)
 		{
-			for(int i = 0; i < nNumJobs; ++i)
+			for(int i = 0; i < nNumJobs/2; ++i)
 			{
 				do
 				{
@@ -501,9 +500,7 @@ void JqTestCancel()
 					SCancelJobState* pState = &Cancel[idx];
 					if(!pState->CancelRequested)
 					{
-						uint32_t CancelGuaranteed = 0;
-						JqCancel(pState->Handle);
-						pState->Cancelled		= CancelGuaranteed;
+						pState->Cancelled		= JqCancel(pState->Handle);
 						pState->CancelRequested = 1;
 						break;
 					}
@@ -512,6 +509,16 @@ void JqTestCancel()
 		}
 	}
 	JqWait(nGroup);
+
+	int TotalCancelled = 0;
+	for(int i = 0; i < nNumJobs; ++i)
+	{
+		DEMO_ASSERT(Cancel[i].Cancelled + Cancel[i].Started == CANCEL_FAN_OUT);
+		DEMO_ASSERT(Cancel[i].Cancelled + Cancel[i].Finished == CANCEL_FAN_OUT);
+		TotalCancelled += Cancel[i].Cancelled;
+
+	}
+	DEMO_ASSERT(CancelFinished.load() + TotalCancelled == (CANCEL_FAN_OUT * nNumJobs));
 	delete[] Cancel;
 }
 
