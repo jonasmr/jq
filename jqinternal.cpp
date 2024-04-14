@@ -682,15 +682,15 @@ void JqLogStats()
 		JqStats Stats;
 		JqConsumeStats(&Stats);
 		g_LogStats.Add(Stats);
-		static bool		bFirst			   = true;
+		static bool		bFirst1			   = true;
 		static JqHandle H				   = g_LogStats.nNextHandle;
 		uint64_t		nHandleConsumption = g_LogStats.nNextHandle.H - H.H;
 		H								   = g_LogStats.nNextHandle;
 
 		bool bUseWrapping = true;
-		if(bFirst)
+		if(bFirst1)
 		{
-			bFirst		 = false;
+			bFirst1		 = false;
 			bUseWrapping = false;
 			printf("\n|Per ms  %10s/%10s/%10s, %10s/%10s/%10s|%8s %8s %8s|Total %8s/%8s, %14s/%14s|%8s|%13s|%7s|%7s\n", "JobAdd", "JobFin", "JobCancel", "SubAdd", "SubFin", "SubCancel", "Locks", "Waits", "Kicks",
 				   "JobAdd", "JobFin", "SubAdd", "SubFin", "Handles", "WrapTime", "Time", "Workers");

@@ -131,7 +131,7 @@ enum JqDebugStackState : uint8_t
 };
 enum JqPopJobFlags : uint8_t
 {
-	JPF_NONE = 0,
+	JPF_NONE  = 0,
 	JPF_DRAIN = 0x1,
 };
 
@@ -291,17 +291,17 @@ struct JqStatsInternal
 
 	void Clear()
 	{
-		nNumAdded		= 0;
-		nNumFinished	= 0;
-		nNumAddedSub	= 0;
-		nNumFinishedSub = 0;
-		nNumCancelled	= 0;
-		nNumCancelledSub= 0;
-		nNumLocks		= 0;
-		nNumSema		= 0;
-		nNumWaitCond	= 0;
-		nNumWaitKicks	= 0;
-		nMemoryUsed		= 0;
+		nNumAdded		 = 0;
+		nNumFinished	 = 0;
+		nNumAddedSub	 = 0;
+		nNumFinishedSub	 = 0;
+		nNumCancelled	 = 0;
+		nNumCancelledSub = 0;
+		nNumLocks		 = 0;
+		nNumSema		 = 0;
+		nNumWaitCond	 = 0;
+		nNumWaitKicks	 = 0;
+		nMemoryUsed		 = 0;
 	}
 };
 
@@ -356,9 +356,9 @@ struct JqLocklessQueue
 		Pop	 = (uint32_t)(Packed & 0xffffffff);
 	}
 
-	void Init(int Index)
+	void Init(int InitialIndex)
 	{
-		this->Index = Index;
+		Index = InitialIndex;
 		PushPop.store(0);
 		for(Entry& e : Entries)
 		{
@@ -383,7 +383,7 @@ struct JqLocklessQueue
 				return false;
 
 			uint32_t PopIndex	  = Pop & (BUFFER_SIZE - 1);
-			uint16_t Sequence	  = Pop >> SEQUENCE_SHIFT;
+			uint16_t Sequence	  = (uint16_t)(Pop >> SEQUENCE_SHIFT);
 			uint16_t PrevSequence = Sequence - 1;
 
 			Entry = Entries[PopIndex].Entry.load();
@@ -429,7 +429,7 @@ struct JqLocklessQueue
 				return false;
 
 			uint32_t PopIndex	  = Pop & (BUFFER_SIZE - 1);
-			uint16_t Sequence	  = Pop >> SEQUENCE_SHIFT;
+			uint16_t Sequence	  = uint16_t(Pop >> SEQUENCE_SHIFT);
 			uint16_t PrevSequence = Sequence - 1;
 			Entry				  = Entries[PopIndex].Entry.load();
 			UnpackEntry(Entry, PushSequence, PopSequence, Payload);
@@ -485,7 +485,7 @@ struct JqLocklessQueue
 
 		// now commit the value in the queue
 		uint32_t PushIndex	  = Push & (BUFFER_SIZE - 1);
-		uint16_t Sequence	  = Push >> SEQUENCE_SHIFT;
+		uint16_t Sequence	  = uint16_t(Push >> SEQUENCE_SHIFT);
 		uint16_t PrevSequence = Sequence - 1;
 		llqprintf("pushin %d [%d/%d]%8d :: %8d %8d  [%lld/%lld]\n", Index, Push, Pop, Value, PushIndex, Sequence, PushPop.load() >> 32, PushPop.load() & 0xffffffff);
 
@@ -521,7 +521,7 @@ struct JqLocklessQueue
 		while(Pop != Push)
 		{
 			uint32_t PopIndex = Pop & (BUFFER_SIZE - 1);
-			uint16_t Sequence = Pop >> SEQUENCE_SHIFT;
+			uint16_t Sequence = uint16_t(Pop >> SEQUENCE_SHIFT);
 
 			uint64_t Entry = Entries[PopIndex].Entry.load();
 			uint16_t EntryPushSequence, EntryPopSequence;
@@ -593,11 +593,11 @@ struct JQ_ALIGN_CACHELINE JqState_t
 #pragma warning(pop)
 #endif
 
-JQ_THREAD_LOCAL int		 JqSpinloop				   = 0; // prevent optimizer from removing spin loop
-JQ_THREAD_LOCAL uint32_t g_nJqNumQueues			   = 0;
-JQ_THREAD_LOCAL uint8_t	 g_JqQueues[JQ_MAX_QUEUES] = { 0 };
-JQ_THREAD_LOCAL JqJobStack*	  g_pJqJobStacks	   = 0;
-JQ_THREAD_LOCAL JqThreadState ThreadState;
+JQ_THREAD_LOCAL int			  g_JqSpinloop				= 0; // prevent optimizer from removing spin loop
+JQ_THREAD_LOCAL uint32_t	  g_nJqNumQueues			= 0;
+JQ_THREAD_LOCAL uint8_t		  g_JqQueues[JQ_MAX_QUEUES] = { 0 };
+JQ_THREAD_LOCAL JqJobStack*	  g_pJqJobStacks			= 0;
+JQ_THREAD_LOCAL JqThreadState g_JqThreadState;
 
 JqMutex		   ThreadStateLock;
 JqThreadState* FirstThreadState = nullptr;
@@ -814,17 +814,17 @@ void JqSetThreadQueueOrder(JqQueueOrder* pConfig)
 
 void JqConsumeStats(JqStats* pStats)
 {
-	pStats->nNumAdded		= JqState.Stats.nNumAdded.exchange(0);
-	pStats->nNumFinished	= JqState.Stats.nNumFinished.exchange(0);
-	pStats->nNumAddedSub	= JqState.Stats.nNumAddedSub.exchange(0);
-	pStats->nNumFinishedSub = JqState.Stats.nNumFinishedSub.exchange(0);
-	pStats->nNumCancelled	= JqState.Stats.nNumCancelled.exchange(0);
-	pStats->nNumCancelledSub	= JqState.Stats.nNumCancelledSub.exchange(0);
-	pStats->nNumLocks		= JqState.Stats.nNumLocks.exchange(0);
-	pStats->nNumSema		= JqState.Stats.nNumSema.exchange(0);
-	pStats->nNumWaitCond	= JqState.Stats.nNumWaitCond.exchange(0);
-	pStats->nNumWaitKicks	= JqState.Stats.nNumWaitKicks.exchange(0);
-	pStats->nMemoryUsed		= JqState.Stats.nMemoryUsed.load();
+	pStats->nNumAdded		 = JqState.Stats.nNumAdded.exchange(0);
+	pStats->nNumFinished	 = JqState.Stats.nNumFinished.exchange(0);
+	pStats->nNumAddedSub	 = JqState.Stats.nNumAddedSub.exchange(0);
+	pStats->nNumFinishedSub	 = JqState.Stats.nNumFinishedSub.exchange(0);
+	pStats->nNumCancelled	 = JqState.Stats.nNumCancelled.exchange(0);
+	pStats->nNumCancelledSub = JqState.Stats.nNumCancelledSub.exchange(0);
+	pStats->nNumLocks		 = JqState.Stats.nNumLocks.exchange(0);
+	pStats->nNumSema		 = JqState.Stats.nNumSema.exchange(0);
+	pStats->nNumWaitCond	 = JqState.Stats.nNumWaitCond.exchange(0);
+	pStats->nNumWaitKicks	 = JqState.Stats.nNumWaitKicks.exchange(0);
+	pStats->nMemoryUsed		 = JqState.Stats.nMemoryUsed.load();
 }
 
 void JqKickWaiters(uint16_t JobIndex)
@@ -894,7 +894,6 @@ void JqFinishInternal(uint16_t JobIndex)
 	{
 		JqSingleMutexLock L(JqGetJobMutex(JobIndex));
 
-
 		Parent	   = Job.Parent;
 		Job.Parent = 0;
 		JQ_ASSERT(Job.FirstChild == 0);
@@ -933,9 +932,9 @@ void JqFinishInternal(uint16_t JobIndex)
 		uint16_t Next = Dependent.Next;
 		while(Next)
 		{
-			uint64_t Job = JqState.DependentJobLinks[Next].Job;
-			Next		 = JqState.DependentJobLinks[Next].Next;
-			JqDecBlockCount(Job, 1, &QueueTriggerMask);
+			uint64_t JobHandle = JqState.DependentJobLinks[Next].Job;
+			Next			   = JqState.DependentJobLinks[Next].Next;
+			JqDecBlockCount(JobHandle, 1, &QueueTriggerMask);
 		}
 		// Trigger only once. the overhead for kicking all the queues can be substantial
 		JqTriggerQueues(QueueTriggerMask);
@@ -1141,7 +1140,7 @@ uint16_t JqTakeJob(uint16_t& SubIndex, uint32_t nNumQueues, uint8_t* pQueues)
 	const uint32_t nCount = nNumQueues ? nNumQueues : JQ_MAX_QUEUES;
 	for(uint32_t i = 0; i < nCount; i++)
 	{
-		uint8_t	 nQueue = nNumQueues ? pQueues[i] : i;
+		uint8_t	 nQueue = uint8_t(nNumQueues ? pQueues[i] : i);
 		uint16_t nIndex = JqQueuePop(nQueue, SubIndex);
 		JQ_ASSERT(JqState.Jobs[nIndex].StartedHandle.load() == JqState.Jobs[nIndex].ClaimedHandle.load());
 		if(nIndex)
@@ -1517,7 +1516,7 @@ void JqDecBlockCount(uint64_t Handle, int Count, uint64_t* QueueTriggerMask)
 		Job.StartedHandle = Handle;
 		if(NumJobs == 0) // Barrier type Jobs never have to enter an actual queue.
 		{
-			JQ_GRAPH(JqGraphAdd(Handle, Job.Name, NumJobs));
+			JQ_GRAPH(JqGraphAdd(Handle, Job.Name, (uint16_t)NumJobs));
 			JqFinishInternal(Index);
 		}
 		else
@@ -1607,7 +1606,7 @@ bool JqTryPopJob(uint16_t JobIndex, JqPopJobFlags Flags, uint16_t& OutSubJob, ui
 	JqJob& Job = JqState.Jobs[JobIndex];
 
 	uint64_t Old, New, Count;
-	bool Drain = (Flags & JPF_DRAIN) == JPF_DRAIN;
+	bool	 Drain = (Flags & JPF_DRAIN) == JPF_DRAIN;
 	do
 	{
 		Old = Job.PendingStart.load();
@@ -1617,11 +1616,11 @@ bool JqTryPopJob(uint16_t JobIndex, JqPopJobFlags Flags, uint16_t& OutSubJob, ui
 			return false;
 		}
 		Count = Drain ? Old : 1;
-		New = Old - Count;
+		New	  = Old - Count;
 	} while(!Job.PendingStart.compare_exchange_weak(Old, New));
 	OutIsDrained = New == 0;
 	OutSubJob	 = Job.NumJobs - 1 - (uint16_t)New;
-	OutNumJobs   = Count;
+	OutNumJobs	 = (uint16_t)Count;
 	return true;
 }
 uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t& OutSubIndex)
@@ -1639,11 +1638,11 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t& OutSubIndex)
 		}
 		JQ_ASSERT(Value != 0);
 		JQ_ASSERT(Value < JQ_JOB_BUFFER_SIZE);
-		uint16_t Count 	   = 0;
+		uint16_t Count	   = 0;
 		uint16_t SubIndex  = JQ_INVALID_SUBJOB;
 		bool	 IsDrained = false;
-		bool	 Success   = JqTryPopJob(Value, JPF_NONE, SubIndex, Count, IsDrained);
-		JQ_ASSERT(Count <= 1); 
+		bool	 Success   = JqTryPopJob((uint16_t)Value, JPF_NONE, SubIndex, Count, IsDrained);
+		JQ_ASSERT(Count <= 1);
 		if(!Success || IsDrained) // if we fail popping, or we're the last to be popped, try to remove
 		{
 			uint32_t OtherValue;
@@ -1657,7 +1656,7 @@ uint16_t JqQueuePop(uint8_t QueueIndex, uint16_t& OutSubIndex)
 		if(Success)
 		{
 			OutSubIndex = SubIndex;
-			return Value;
+			return (uint16_t)Value;
 		}
 	} while(1);
 }
@@ -1729,7 +1728,7 @@ void JqAddPreconditionInternal(uint64_t Handle, uint64_t Precondition)
 				LinkIndex = JqDependentJobLinkAlloc(Precondition);
 			}
 
-			JqSingleMutexLock L(JqGetJobMutex(Precondition));
+			JqSingleMutexLock AutoLock(JqGetJobMutex(Precondition));
 			if(PrecondJob.FinishedHandle == Precondition)
 			{
 				Finished = true;
@@ -1826,7 +1825,7 @@ JqHandle JqAddInternal(const char* Name, JqHandle ReservedHandle, JqFunction Job
 
 		uint16_t Index = Handle % JQ_JOB_BUFFER_SIZE;
 		JqJob&	 Job   = JqState.Jobs[Index];
-		JQ_GRAPH(JqGraphAdd(Handle, Job.Name, NumJobs));
+		JQ_GRAPH(JqGraphAdd(Handle, Job.Name, (uint16_t)NumJobs));
 
 		if(ReservedHandle.H)
 		{
@@ -1853,8 +1852,8 @@ JqHandle JqAddInternal(const char* Name, JqHandle ReservedHandle, JqFunction Job
 
 		JQ_ASSERT(NumJobs <= 0xffff);
 
-		Job.NumJobs		   = NumJobs;
-		Job.NumJobsToStart = (0 != (JobFlags & JQ_JOBFLAG_INTERNAL_SPAWN)) ? NumJobs - 1 : NumJobs;
+		Job.NumJobs		   = (uint16_t)NumJobs;
+		Job.NumJobsToStart = (uint16_t)((0 != (JobFlags & JQ_JOBFLAG_INTERNAL_SPAWN)) ? NumJobs - 1 : NumJobs);
 		Job.PendingStart   = Job.NumJobsToStart;
 		JQ_ASSERT(Job.PendingFinish.load() == 0);
 		Job.PendingFinish = NumJobs;
@@ -2034,7 +2033,7 @@ void JqWait(JqHandle Handle, uint32_t WaitFlagArg, uint32_t UsWaitTime)
 					{
 						result |= i << (i & 7); // do something.. whatever
 					}
-					JqSpinloop |= result; // write it somewhere so the optimizer can't remote it
+					g_JqSpinloop |= result; // write it somewhere so the optimizer can't remote it
 				} while((1000000ull * (JqTick() - nTick)) / nTicksPerSecond < UsWaitTime);
 			}
 			else if(WaitFlag & JQ_WAITFLAG_SLEEP)
@@ -2149,36 +2148,36 @@ void JqClearThreadState(JqThreadState& ThreadState)
 
 JqThreadState& JqGetThreadState()
 {
-	if(!ThreadState.Initialized)
+	if(!g_JqThreadState.Initialized)
 	{
 		JqMutexLock L(ThreadStateLock);
 		JQ_ASSERT(JqState.IsRunning); // if we hit this, Jq has not been initialized before we're starting running job. this is bad.
-		JQ_ASSERT(!ThreadState.Initialized);
+		JQ_ASSERT(!g_JqThreadState.Initialized);
 		{
 
-			ThreadState.SelfPos			= 0;
-			ThreadState.HasLock			= 0;
-			ThreadState.WorkerState		= JWS_NOT_WORKER;
-			ThreadState.DebugPos		= 0;
-			ThreadState.Initialized		= 1;
-			ThreadState.ThreadId		= JqGetCurrentThreadId();
-			ThreadState.NextThreadState = FirstThreadState;
-			ThreadState.SingleMutexPtr	= JqGetSingleMutexPtr();
-			ThreadState.pJqNumQueues	= &g_nJqNumQueues;
-			ThreadState.pJqQueues		= &g_JqQueues[0];
+			g_JqThreadState.SelfPos			= 0;
+			g_JqThreadState.HasLock			= 0;
+			g_JqThreadState.WorkerState		= JWS_NOT_WORKER;
+			g_JqThreadState.DebugPos		= 0;
+			g_JqThreadState.Initialized		= 1;
+			g_JqThreadState.ThreadId		= JqGetCurrentThreadId();
+			g_JqThreadState.NextThreadState = FirstThreadState;
+			g_JqThreadState.SingleMutexPtr	= JqGetSingleMutexPtr();
+			g_JqThreadState.pJqNumQueues	= &g_nJqNumQueues;
+			g_JqThreadState.pJqQueues		= &g_JqQueues[0];
 
-			FirstThreadState = &ThreadState;
+			FirstThreadState = &g_JqThreadState;
 		}
 	}
-	return ThreadState;
+	return g_JqThreadState;
 }
 
 void JqOnThreadExit()
 {
 	JqMutexLock L(ThreadStateLock);
-	if(ThreadState.Initialized)
+	if(g_JqThreadState.Initialized)
 	{
-		JqThreadState* State = &ThreadState;
+		JqThreadState* State = &g_JqThreadState;
 
 		JQ_ASSERT(JqState.IsRunning); // if we hit this, Jq has not been initialized before we're starting running job. this is bad.
 
@@ -2257,19 +2256,21 @@ void JqDump()
 		JqLocklessQueue& Queue = JqState.LocklessQueues[i];
 		printf("Queue %d: \n", i);
 
-		Queue.DebugCallbackAll([&](int Index, int WrappedIndex, uint16_t Seq, uint16_t PushSequence, uint16_t PopSequence, uint32_t Payload) {
-			JqJob&		Job	   = JqState.Jobs[Payload % JQ_JOB_BUFFER_SIZE];
-			uint64_t	Handle = Job.StartedHandle.load();
-			uint64_t	HandleIndex, HandleGeneration;
-			const char* Name = Job.Name != nullptr ? Job.Name : "<null>";
-			if(JQ_GT_WRAP(Job.ClaimedHandle, Handle))
+		Queue.DebugCallbackAll(
+			[&](int Index, int WrappedIndex, uint16_t Seq, uint16_t PushSequence, uint16_t PopSequence, uint32_t Payload)
 			{
-				Name = "<unknown>"; // someone else claimed the slot, so the name is useless
-			}
-			JqSplitHandle(Handle, HandleIndex, HandleGeneration);
-			printf("\tElement     %6d/%6d [%4x==%4x==%4x] :: %9d  Handle %8llx(%04llx/%08llx) | %s\n", WrappedIndex, Index, Seq, PushSequence, PopSequence, Payload, Handle, HandleIndex,
-				   HandleGeneration, Name);
-		});
+				JqJob&		Job	   = JqState.Jobs[Payload % JQ_JOB_BUFFER_SIZE];
+				uint64_t	Handle = Job.StartedHandle.load();
+				uint64_t	HandleIndex, HandleGeneration;
+				const char* Name = Job.Name != nullptr ? Job.Name : "<null>";
+				if(JQ_GT_WRAP(Job.ClaimedHandle, Handle))
+				{
+					Name = "<unknown>"; // someone else claimed the slot, so the name is useless
+				}
+				JqSplitHandle(Handle, HandleIndex, HandleGeneration);
+				printf("\tElement     %6d/%6d [%4x==%4x==%4x] :: %9d  Handle %8llx(%04llx/%08llx) | %s\n", WrappedIndex, Index, Seq, PushSequence, PopSequence, Payload, Handle, HandleIndex,
+					   HandleGeneration, Name);
+			});
 	}
 
 	printf("\nUnfinished Jobs\n");
