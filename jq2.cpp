@@ -1299,7 +1299,7 @@ void JqWorker(int nThreadId)
 	memcpy(g_JqQueues, pQueues, nNumQueues);
 	int nSemaphoreIndex = JqState.SemaphoreIndex[nThreadId];
 
-#if MICROPROFILE_ENABLED
+#ifdef JQ_MICROPROFILE
 	char sWorker[32];
 	snprintf(sWorker, sizeof(sWorker) - 1, "JqWorker %d %08llx", nThreadId, JqState.SemaphoreMask[nSemaphoreIndex]);
 	MicroProfileOnThreadCreate(&sWorker[0]);
